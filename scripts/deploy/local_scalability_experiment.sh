@@ -7,7 +7,7 @@
 set +e
 cd "$(dirname "$0")"
 
-PROTOCOLS=("HS" "HS-2" "HS-1" "HS-1-SLOT")
+PROTOCOLS=("HS" "HS-2" "HS-1" "HS-1-SLOT" "TD-HS")
 REPLICA_COUNTS=(5 10 15)
 
 mkdir -p plot_data_local/scalability_throughput

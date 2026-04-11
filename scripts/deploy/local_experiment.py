@@ -11,6 +11,7 @@ PROTOCOLS = {
     "HS-1":      {"script": "./performance_local/hs1_performance.sh",       "config": "./config/hs1.config",       "max_process_txn": 3},
     "HS-2":      {"script": "./performance_local/hs2_performance.sh",       "config": "./config/hs2.config",       "max_process_txn": 4},
     "HS-1-SLOT": {"script": "./performance_local/slot_hs1_performance.sh",  "config": "./config/slot_hs1.config",  "max_process_txn": 3},
+    "TD-HS":     {"script": "./performance_local/td_hotstuff_performance.sh","config": "./config/td_hotstuff.config","max_process_txn": 3},
     "PBFT":      {"script": "./performance_local/pbft_performance.sh",      "config": "./config/pbft.config",      "max_process_txn": 2048},
 }
 

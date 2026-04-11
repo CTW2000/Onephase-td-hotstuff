@@ -146,7 +146,7 @@ for ip in ${deploy_iplist[@]};
 do
   private_key="cert/node_"${idx}".key.pri"
   cert="cert/cert_"${idx}".cert"
-  cd ${home_path}/${main_folder}/$idx; nohup ./${server_bin} server.config ${private_key} ${cert} > ${server_bin}.log 2>&1 &
+  cd ${home_path}/${main_folder}/$idx; GLOG_logtostderr=1 nohup ./${server_bin} server.config ${private_key} ${cert} > ${server_bin}.log 2>&1 &
   ((count++))
   ((idx++))
   ((grafna_port++))
