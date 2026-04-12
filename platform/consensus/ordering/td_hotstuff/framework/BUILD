@@ -23,6 +23,7 @@ cc_library(
     srcs = ["performance_manager.cpp"],
     hdrs = ["performance_manager.h"],
     deps = [
+        "//common/crypto:hash",
         "//platform/consensus/ordering/common/framework:performance_manager",
     ],
 )

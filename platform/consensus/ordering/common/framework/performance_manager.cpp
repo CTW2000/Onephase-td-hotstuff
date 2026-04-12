@@ -312,7 +312,8 @@ int PerformanceManager::DoBatch(
   SendMessage(*new_request);
 
   global_stats_->BroadCastMsg();
-  send_num_++;
+  // Note: send_num_++ is now done inside SendMessage() to allow
+  // subclasses to make it atomic with GetPrimary() for VRF leader transitions.
   sum_ += batch_req.size();
   // LOG(ERROR)<<"send num:"<<send_num_<<" total num:"<<total_num_<<" sum:"<<sum_<<" to:"<<GetPrimary();
   if (total_num_++ == 1000000) {
@@ -331,7 +332,7 @@ void PerformanceManager::SendMessage(const Request& request){
   // LOG(ERROR) << "[X]send to: " <<  primary << " at " << GetCurrentTime() - last_send_time_ << " " << GetCurrentTime();
   last_send_time_ = GetCurrentTime();
   replica_communicator_->SendMessage(request, primary);
-  
+  send_num_++;
 }
 
 }  // namespace common

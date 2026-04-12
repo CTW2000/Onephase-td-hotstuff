@@ -1,7 +1,9 @@
 #include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.h"
 
 #include <glog/logging.h>
+#include <sstream>
 #include "common/utils/utils.h"
+#include "common/crypto/hash.h"
 
 
 namespace resdb {
@@ -9,6 +11,18 @@ namespace td_hotstuff {
 
 TdHotstuff::TdHotstuff(int id, int f, int total_num, SignatureVerifier * verifier, int non_responsive_num, int fork_tail_num, int rollback_num, uint64_t timer_length, const std::vector<int>& weights)
   : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), rollback_num_(rollback_num), timer_length_(timer_length), weights_(weights){
+
+    // Scale timer_length_ with replica count so every view has enough
+    // non-final slots for the commit chain to advance.
+    // With more replicas the per-slot consensus round-trip is longer;
+    // a timer that is too short makes slot 0 immediately final, leaving
+    // only one proposal per view and starving the commit pipeline.
+    uint64_t min_timer = (uint64_t)total_num_ * timer_length_;
+    if (timer_length_ < min_timer) {
+      LOG(ERROR) << "TD-HotStuff: scaling timer_length from " << timer_length_
+                 << " to " << min_timer << " for " << total_num_ << " replicas";
+      timer_length_ = min_timer;
+    }
 
     // Compute total weight W and threshold
     total_weight_ = 0;
@@ -28,6 +42,26 @@ TdHotstuff::TdHotstuff(int id, int f, int total_num, SignatureVerifier * verifie
       LOG(ERROR) << "  replica " << (i+1) << " weight=" << weights_[i];
     }
 
+    // Build prefix weight sums for VRF weighted leader election
+    // prefix_weights_[0] = 0, prefix_weights_[i] = sum(weights_[0..i-1])
+    prefix_weights_.resize(total_num_ + 1, 0);
+    for (int i = 0; i < total_num_; i++) {
+      prefix_weights_[i + 1] = prefix_weights_[i] + weights_[i];
+    }
+    LOG(ERROR) << "TD-HotStuff VRF leader election: epoch=" << epoch_
+               << " total_weight=" << total_weight_;
+    for (int i = 0; i < total_num_; i++) {
+      LOG(ERROR) << "  replica " << (i+1) << " weight_interval=["
+                 << prefix_weights_[i] << "/" << total_weight_ << ", "
+                 << prefix_weights_[i+1] << "/" << total_weight_ << ")";
+    }
+
+    // Pre-compute first few leaders to log
+    for (int v = 1; v <= std::min(5, total_num_); v++) {
+      int leader = VRFLeader(v);
+      LOG(ERROR) << "  VRF preview: view=" << v << " -> leader=" << leader;
+    }
+
   global_stats_ = Stats::GetGlobalStats();
   proposal_manager_ = std::make_unique<ProposalManager>(id, weight_threshold_, slot_num_, verifier, total_num_, fork_tail_num_, rollback_num, weights_);
   has_sent_ = false;
@@ -43,13 +77,53 @@ TdHotstuff::TdHotstuff(int id, int f, int total_num, SignatureVerifier * verifie
 TdHotstuff::~TdHotstuff() {
 }
 
+// VRF-based weighted leader election:
+// Computes SHA256(epoch || view) to get a deterministic pseudo-random value,
+// then maps it onto the [0, total_weight) interval partitioned by replica weights.
+// All nodes compute the same result for a given (epoch, view).
+int TdHotstuff::VRFLeader(int view) {
+  // Check cache first
+  auto it = leader_cache_.find(view);
+  if (it != leader_cache_.end()) {
+    return it->second;
+  }
+
+  // Build VRF input: "epoch:view"
+  std::string vrf_input = std::to_string(epoch_) + ":" + std::to_string(view);
+
+  // Compute deterministic SHA256 hash (returns raw 32 bytes)
+  std::string hash_raw = utils::CalculateSHA256Hash(vrf_input);
+
+  // Read first 4 bytes as uint32 (big-endian) for uniform distribution
+  uint32_t hash_val = 0;
+  for (int i = 0; i < 4 && i < (int)hash_raw.size(); i++) {
+    hash_val = (hash_val << 8) | (uint8_t)hash_raw[i];
+  }
+
+  // Map hash_val to [0, total_weight) range
+  // position = hash_val % total_weight
+  int position = (int)(hash_val % (uint32_t)total_weight_);
+
+  // Find which replica's interval [prefix_weights_[i], prefix_weights_[i+1]) contains position
+  int leader = 1;  // default
+  for (int i = 0; i < total_num_; i++) {
+    if (position >= prefix_weights_[i] && position < prefix_weights_[i + 1]) {
+      leader = i + 1;  // node IDs are 1-based
+      break;
+    }
+  }
+
+  // Cache and return
+  leader_cache_[view] = leader;
+  return leader;
+}
+
 int TdHotstuff::NextLeader(int view){
-  //LOG(ERROR)<<" view:"<<view<<" next leader:"<<(view+1)%total_num_ + 1;
-  return (view+1)%total_num_ + 1;
+  return VRFLeader(view + 1);
 }
 
 bool TdHotstuff::IsLeader(int view){
-  return (view % total_num_)+1 == id_;
+  return VRFLeader(view) == id_;
 }
 
 bool TdHotstuff::Ready() {
@@ -70,11 +144,9 @@ void TdHotstuff::AsyncSend() {
   bool popped = true;
   uint64_t start_time = GetCurrentTime();
   while (!IsStop()) {
-    auto txn = txns_.Pop();
-    if(txn == nullptr){
-      continue;
-    }
-
+    // First wait until we are the leader, THEN pop transactions.
+    // This prevents consuming transactions while not being the leader,
+    // which would block the client's backpressure mechanism.
     while(!IsStop()){
       std::unique_lock<std::mutex> lk(n_mutex_);
       vote_cv_.wait_for(lk, std::chrono::microseconds(1000),
@@ -94,21 +166,17 @@ void TdHotstuff::AsyncSend() {
       return;
     }
 
-    // if (slot == 0 && proposal_manager_->CurrentView() > total_num_) {
-    //   popped = false;
-    // }
-    // if (popped == false && !txns_.Empty()) {
-    //   txn = txns_.Pop();
-    //   popped = true;
-    // }
+    // Now we know we're the leader — pop a transaction
+    auto txn = txns_.Pop();
+    if(txn == nullptr){
+      continue;
+    }
 
+    // For views past the warmup phase, try to get the freshest transaction
     if (slot == 0 && proposal_manager_->CurrentView() > total_num_) {
-      while (true) {
-        txn = txns_.Pop();
-        if (txn != nullptr) {
-          break;
-        }
-        // count ++;
+      auto fresh = txns_.Pop();
+      if (fresh != nullptr) {
+        txn = std::move(fresh);
       }
     }
     
@@ -176,7 +244,6 @@ void TdHotstuff::AsyncCommit() {
 
 
 bool TdHotstuff::ReceiveTransaction(std::unique_ptr<Transaction> txn) {
-  //  std::unique_lock<std::mutex> lk(txn_mutex_);
   txn->set_reception_time(GetCurrentTime());
   txn->set_proposer(id_);
   txns_.Push(std::move(txn));
@@ -209,8 +276,10 @@ bool TdHotstuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     std::unique_ptr<Proposal> committed_p = proposal_manager_->AddProposal(std::move(proposal));
     if(committed_p != nullptr){
       if (is_final) {
+        // Use VRF to determine the next leader for the committed transactions
+        int next_leader = NextLeader(view);
         for(Transaction& txn : *committed_p->mutable_transactions()){
-          txn.set_next_primary(sender % total_num_ + 1);
+          txn.set_next_primary(next_leader);
         }
       }
       CommitProposal(std::move(committed_p));

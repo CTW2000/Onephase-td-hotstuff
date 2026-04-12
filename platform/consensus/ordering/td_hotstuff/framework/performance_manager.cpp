@@ -28,6 +28,7 @@
 #include <glog/logging.h>
 
 #include "common/utils/utils.h"
+#include "common/crypto/hash.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -39,10 +40,27 @@ TdHotstuffPerformanceManager::TdHotstuffPerformanceManager(
     SignatureVerifier* verifier)
     : PerformanceManager(config, replica_communicator, verifier){
   client_num_ = 1;
-  primary_ = 2;
   slot_num_ = config_.GetSlotNum();
   last_response_ = 2;
   inflight_limit_ = 20;
+
+  // Compute VRF leader for view=1 using the same algorithm as td_hotstuff.cpp
+  int total_replicas = config_.GetReplicaNum();
+  int total_weight = total_replicas;  // uniform weights, each = 1
+
+  uint64_t epoch = 1;
+  std::string vrf_input = std::to_string(epoch) + ":1";
+  std::string hash_raw = utils::CalculateSHA256Hash(vrf_input);
+
+  uint32_t hash_val = 0;
+  for (int i = 0; i < 4 && i < (int)hash_raw.size(); i++) {
+    hash_val = (hash_val << 8) | (uint8_t)hash_raw[i];
+  }
+  int position = (int)(hash_val % (uint32_t)total_weight);
+  primary_ = position + 1;  // 1-based node ID
+
+  LOG(ERROR) << "TD-HotStuff PerformanceManager: initial VRF leader for view=1 is node "
+             << primary_ << " (total_replicas=" << total_replicas << ")";
 }
 
 
@@ -103,16 +121,11 @@ CollectorResultCode TdHotstuffPerformanceManager::AddResponseMsg(
 int TdHotstuffPerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> context,
                                            std::unique_ptr<Request> request) {
   std::unique_ptr<Request> response;
-  // Add the response message, and use the call back to collect the received
-  // messages.
-  // The callback will be triggered if it received f+1 messages.
   if (request->ret() == -2) {
-    // LOG(INFO) << "get response fail:" << request->ret();
     send_num_--;
     return 0;
   }
 
-  //LOG(INFO) << "get response:" << request->seq() << " sender:"<<request->sender_id();
   std::unique_ptr<BatchUserResponse> batch_response = nullptr;
   CollectorResultCode ret =
       AddResponseMsg(std::move(request), [&](std::unique_ptr<BatchUserResponse> request) {
@@ -121,67 +134,56 @@ int TdHotstuffPerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> co
       });
 
   if (ret == CollectorResultCode::STATE_CHANGED) {
-    // LOG(ERROR) << "[X]STATE_CHANGED " << GetCurrentTime() - last_send_time_; 
     assert(batch_response);
     int next_primary = batch_response->next_primary();
-    if (next_primary) {
-      // One slot of the primary would get skipped.
-      bool update = false;
-      if (next_primary != primary_) {
-        if (primary_ % 3 == 1 && primary_ < 3 * config_.GetForkTailNum()) {
-          send_num_--;
-          inflight_[primary_]--;
+    int primary_id = batch_response->primary_id();
+
+    bool already_released = false;
+    {
+      std::unique_lock<std::mutex> lk(vrf_mutex_);
+      if (next_primary) {
+        if (next_primary != primary_) {
+          // VRF leader changed. Release in-flight slots for the old primary.
+          int old_inflight = inflight_[primary_];
+          if (old_inflight > 0) {
+            send_num_ -= old_inflight;
+            inflight_[primary_] = 0;
+          }
         }
-        update = true;
+        primary_ = next_primary;
       }
-      primary_ = next_primary;
-      if (update) {
-        send_num_--;
-        // first_slot_ = true;
+
+      if (inflight_[primary_id] > 0) {
+        inflight_[primary_id]--;
+      } else {
+        already_released = true;
       }
     }
-    int primary_id = batch_response->primary_id();
-    inflight_[primary_id]--;
-    // LOG(ERROR) << "primary_id: " << primary_;
-    SendResponseToClient(*batch_response);
+
+    if (!already_released) {
+      SendResponseToClient(*batch_response);
+    }
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
 
 
-// int TdHotstuffPerformanceManager::GetPrimary(){
-//   int view = counter_++ / slot_num_;
-//   if (counter_ % slot_num_ == 0) {
-//     counter_ += (client_num_ - 1) * slot_num_;
-//   }
-//   return view % replica_num_ + 1; 
-// }
-
-// int TdHotstuffPerformanceManager::GetPrimary() {
-//   while (true) {
-//     if (last_response_ != 0) {
-//       break;
-//     }
-//   }
-//   int value = last_response_;
-//   while (true) {
-//     if (inflight_[value] < inflight_limit_) {
-//       inflight_[value]++;
-//       break;
-//     }
-//     value = value % replica_num_ + 1;
-//   }
-//   return value;
-// }
-
 int TdHotstuffPerformanceManager::GetPrimary() {
-  // LOG(ERROR) << "send to: " << primary_ << " send_num_:" << send_num_;
-  // if (primary_ % 3 == 1 && primary_ < 3 * config_.GetRollBackNum() && first_slot_) {
-  //   send_num_--;
-  //   first_slot_ = false;
-  // }
-  //  LOG(ERROR) << "send to: " << primary_ << " send_num_:" << send_num_;
+  // Called only from SendMessage below, where mutex is already held.
   return primary_;
+}
+
+void TdHotstuffPerformanceManager::SendMessage(const Request& request) {
+  int primary;
+  {
+    std::unique_lock<std::mutex> lk(vrf_mutex_);
+    primary = primary_;
+    inflight_[primary]++;
+    // Increment send_num_ atomically with inflight_ to prevent
+    // race with leader-change pre-release in ProcessResponseMsg.
+    send_num_++;
+  }
+  replica_communicator_->SendMessage(request, primary);
 }
 
 void TdHotstuffPerformanceManager::SendResponseToClient(const BatchUserResponse& batch_response) {

@@ -31,6 +31,8 @@ class TdHotstuff: public common::ProtocolBase {
 
     std::unique_ptr<Certificate> GenerateCertificate(const Proposal& proposal);
 
+    // VRF-based weighted leader election
+    int VRFLeader(int view);
     int NextLeader(int view);
     bool IsLeader(int view);
 
@@ -75,6 +77,13 @@ class TdHotstuff: public common::ProtocolBase {
   int total_weight_;               // W = sum of all weights
   int weight_threshold_;           // threshold = floor(2*W/3) + 1, so accumulated > 2W/3
   int accumulated_weight_ = 0;     // running weight sum for early-exit check
+
+  // VRF-based weighted leader election
+  // Prefix sums of weights for interval mapping: prefix_weights_[i] = sum(weights_[0..i-1])
+  std::vector<int> prefix_weights_;
+  uint64_t epoch_ = 1;            // current epoch (fixed seed for VRF)
+  // Cache: view -> leader_id, to avoid recomputation
+  std::map<int, int> leader_cache_;
 };
 
 }  // namespace td_hotstuff

@@ -6,6 +6,7 @@ cc_library(
     hdrs = ["proposal_manager.h"],
     deps = [
         "//common:comm",
+        "//common/crypto:hash",
         "//common/crypto:signature_verifier",
         "//common/utils",
         "//platform/consensus/ordering/td_hotstuff/proto:proposal_cc_proto",
@@ -20,6 +21,7 @@ cc_library(
     deps = [
         ":proposal_manager",
         "//common:comm",
+        "//common/crypto:hash",
         "//platform/common/queue:lock_free_queue",
         "//platform/consensus/ordering/common/algorithm:protocol_base",
         "//platform/statistic:stats",

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <vector>
 
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
@@ -53,6 +54,13 @@ class ProposalManager {
 
   // Weighted QC: per-replica weights (indexed by node_id - 1)
   std::vector<int> weights_;
+
+  // VRF-based weighted leader election
+  std::vector<int> prefix_weights_;  // prefix sums for interval mapping
+  int total_weight_;
+  uint64_t epoch_ = 1;
+  std::map<int, int> leader_cache_;
+  int VRFLeader(int view);
 };
 
 }  // namespace td_hotstuff

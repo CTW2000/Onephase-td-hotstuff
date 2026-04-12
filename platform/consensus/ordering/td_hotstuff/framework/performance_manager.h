@@ -26,6 +26,7 @@
 #pragma once
 
 #include <future>
+#include <mutex>
 
 #include "platform/consensus/ordering/common/framework/performance_manager.h"
 
@@ -46,11 +47,13 @@ protected:
       std::function<void(std::unique_ptr<BatchUserResponse>)> call_back) override;
 
   int GetPrimary() override;
+  void SendMessage(const Request& request) override;
 
   void SendResponseToClient(const BatchUserResponse& batch_response) override;
 
   int last_primary_id_ = 2;
   bool first_slot_ = false;
+  std::mutex vrf_mutex_;  // protects primary_/inflight_/send_num_ during leader transitions
 };
 
 }  // namespace td_hotstuff

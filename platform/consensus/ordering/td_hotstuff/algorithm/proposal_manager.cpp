@@ -3,6 +3,7 @@
 #include <glog/logging.h>
 #include "common/utils/utils.h"
 #include "common/crypto/signature_verifier.h"
+#include "common/crypto/hash.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -12,7 +13,19 @@ ProposalManager::ProposalManager(int32_t id, int weight_threshold, int slot_num,
     round_ = 1;
     global_stats_ = Stats::GetGlobalStats();
     assert(verifier_ != nullptr);
-    LOG(ERROR) << "TD-HotStuff ProposalManager: weight_threshold=" << weight_threshold_;
+
+    // Build prefix weight sums for VRF leader election
+    total_weight_ = 0;
+    for (int w : weights_) {
+      total_weight_ += w;
+    }
+    prefix_weights_.resize(total_num_ + 1, 0);
+    for (int i = 0; i < total_num_; i++) {
+      prefix_weights_[i + 1] = prefix_weights_[i] + weights_[i];
+    }
+
+    LOG(ERROR) << "TD-HotStuff ProposalManager: weight_threshold=" << weight_threshold_
+               << " total_weight=" << total_weight_ << " (VRF leader election enabled)";
 }
 
 
@@ -231,9 +244,36 @@ std::unique_ptr<Proposal> ProposalManager::FetchProposal(const std::string& hash
   return ret;
 }
 
+// VRF-based weighted leader election (same algorithm as TdHotstuff::VRFLeader)
+int ProposalManager::VRFLeader(int view) {
+  auto it = leader_cache_.find(view);
+  if (it != leader_cache_.end()) {
+    return it->second;
+  }
+
+  std::string vrf_input = std::to_string(epoch_) + ":" + std::to_string(view);
+  std::string hash_raw = utils::CalculateSHA256Hash(vrf_input);
+
+  uint32_t hash_val = 0;
+  for (int i = 0; i < 4 && i < (int)hash_raw.size(); i++) {
+    hash_val = (hash_val << 8) | (uint8_t)hash_raw[i];
+  }
+
+  int position = (int)(hash_val % (uint32_t)total_weight_);
+  int leader = 1;
+  for (int i = 0; i < total_num_; i++) {
+    if (position >= prefix_weights_[i] && position < prefix_weights_[i + 1]) {
+      leader = i + 1;
+      break;
+    }
+  }
+
+  leader_cache_[view] = leader;
+  return leader;
+}
+
 int ProposalManager::GetLeader(int view){
-  //LOG(ERROR)<<" view:"<<view<<" next leader:"<<(view+1)%total_num_ + 1;
-  return view % total_num_ + 1;
+  return VRFLeader(view);
 }
 
 }  // namespace td_hotstuff
