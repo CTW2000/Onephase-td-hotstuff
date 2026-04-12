@@ -64,6 +64,32 @@ TdHotstuff::TdHotstuff(int id, int f, int total_num, SignatureVerifier * verifie
       LOG(ERROR) << "  VRF preview: view=" << v << " -> leader=" << leader;
     }
 
+    // ── Trust-aware dynamic timeout (Pacemaker) ──
+    // Δ(r) = Δ_base · (1 + κ · T̃(leader_r))
+    // T̃(v) = T(v) / max{T(v')} ∈ (0, 1]
+    // High-trust leader → longer timeout → fewer false view changes
+    // Low-trust leader  → shorter timeout → faster fault detection
+    kappa_ = 0.2;
+    max_weight_ = 1;
+    for (int w : weights_) {
+      if (w > max_weight_) max_weight_ = w;
+    }
+    LOG(ERROR) << "TD-HS Pacemaker: kappa=" << kappa_
+               << " max_weight=" << max_weight_
+               << " base_timer=" << timer_length_ << "us";
+    // Log dynamic timeouts for the first few views
+    for (int v = 1; v <= std::min(5, total_num_); v++) {
+      uint64_t dt = GetDynamicTimeout(v);
+      int leader = VRFLeader(v);
+      int lw = (leader >= 1 && leader <= (int)weights_.size()) ? weights_[leader-1] : 1;
+      double t_norm = (double)lw / max_weight_;
+      LOG(ERROR) << "  Pacemaker preview: view=" << v
+                 << " leader=" << leader << "(w=" << lw << ")"
+                 << " T_norm=" << t_norm
+                 << " timeout=" << dt << "us"
+                 << " (" << dt/1000.0 << "ms)";
+    }
+
   global_stats_ = Stats::GetGlobalStats();
   proposal_manager_ = std::make_unique<ProposalManager>(id, weight_threshold_, slot_num_, verifier, total_num_, fork_tail_num_, rollback_num, weights_);
   has_sent_ = false;
@@ -126,6 +152,30 @@ int TdHotstuff::NextLeader(int view){
 
 bool TdHotstuff::IsLeader(int view){
   return VRFLeader(view) == id_;
+}
+
+// Trust-aware dynamic timeout (Pacemaker)
+//
+// Δ(r) = Δ_base · (1 + κ · T̃(leader_r))
+//
+// T̃(v) = T(v) / max{T(v')} ∈ (0, 1]
+//
+// High-trust leader (T̃ close to 1) → Δ ≈ Δ_base · (1 + κ)
+//   → longer wait before declaring view-change → fewer false timeouts
+// Low-trust leader  (T̃ close to 0) → Δ ≈ Δ_base
+//   → shorter wait → fast detection of faulty/slow leader
+//
+uint64_t TdHotstuff::GetDynamicTimeout(int view) {
+  int leader = VRFLeader(view);
+  int leader_weight = 1;
+  if (leader >= 1 && leader <= (int)weights_.size()) {
+    leader_weight = weights_[leader - 1];
+  }
+  // Normalized trust: T̃ = T(leader) / max_weight ∈ (0, 1]
+  double t_norm = (double)leader_weight / max_weight_;
+  // Dynamic timeout: Δ = Δ_base * (1 + κ * T̃)
+  uint64_t dynamic_timeout = (uint64_t)(timer_length_ * (1.0 + kappa_ * t_norm));
+  return dynamic_timeout;
 }
 
 bool TdHotstuff::Ready() {
@@ -212,14 +262,27 @@ void TdHotstuff::AsyncSend() {
     std::unique_ptr<Proposal> proposal2 = nullptr;
     {
       std::unique_lock<std::mutex> lk(mutex_);
-      // LOG(ERROR) << "LOCK1" << GetCurrentTime();
-      bool is_final = GetCurrentTime() - start_time >= timer_length_ ? true : false;
-      // bool is_final = false;
+      // Trust-aware dynamic timeout: use GetDynamicTimeout(currentView)
+      // instead of fixed timer_length_.
+      int current_view = proposal_manager_->CurrentView();
+      uint64_t view_timeout = GetDynamicTimeout(current_view);
+      bool is_final = GetCurrentTime() - start_time >= view_timeout ? true : false;
+
+      // Log the first FINAL decision for debugging
+      if (is_final && slot > 0 && current_view <= 5) {
+        int leader = VRFLeader(current_view);
+        int lw = (leader >= 1 && leader <= (int)weights_.size()) ? weights_[leader-1] : 1;
+        LOG(ERROR) << "TD-HS Pacemaker: view=" << current_view
+                   << " FINAL at slot=" << slot
+                   << " leader=" << leader << "(w=" << lw << ")"
+                   << " timeout=" << view_timeout << "us"
+                   << " elapsed=" << (GetCurrentTime() - start_time) << "us";
+      }
+
       proposal = proposal_manager_ -> GenerateProposal(txns, slot, is_final);
       if(id_ < 3 * rollback_num_ && id_ % 3 ==1 && slot == 0) {
         proposal2 = proposal_manager_ -> GenerateFakeProposal(txns, slot, is_final);
-      } 
-      // LOG(ERROR)<<"[X]propose view:"<<proposal->header().view() << " slot: " << slot << " " <<GetCurrentTime();
+      }
       slot = is_final ? 0 : slot + 1;
     }
     
@@ -334,7 +397,14 @@ bool TdHotstuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
     if(view < min_view_ || (view == min_view_ && slot <= min_slot_)) {
       return false;
     }
+    // Fast-path: skip if QC already formed for this (view, slot).
+    // Uses rec_mutex2_ (lightweight) instead of rec_mutex_ (heavy).
+    int64_t key = (int64_t)view * 100000 + slot;
+    if (qc_done_.count(key)) {
+      return false;
+    }
   }
+
   bool valid = proposal_manager_->VerifyCert(*cert);
   if(!valid){
     LOG(ERROR) << "Verify message fail";
@@ -345,7 +415,7 @@ bool TdHotstuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
   uint64_t x = GetCurrentTime();
   std::unique_lock<std::mutex> lk(rec_mutex_);
 
-  // Early exit: QC already formed for this (view, hash)
+  // Re-check after VerifyCert (another thread may have formed the QC)
   if (received_weight_.count(view) && received_weight_[view].count(hash)
       && received_weight_[view][hash] >= weight_threshold_) {
     return false;
@@ -378,6 +448,17 @@ bool TdHotstuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
       min_view_ = view;
       min_slot_ = slot;
       accumulated_weight_ = 0;
+      // Mark this (view, slot) as QC-done for the fast-path
+      int64_t key = (int64_t)view * 100000 + slot;
+      qc_done_.insert(key);
+      // GC: remove entries older than view-2
+      if (view > 2) {
+        int64_t gc_bound = (int64_t)(view - 2) * 100000;
+        auto it = qc_done_.begin();
+        while (it != qc_done_.end() && *it < gc_bound) {
+          it = qc_done_.erase(it);
+        }
+      }
     }
 
     // Log QC formation: only FINAL QCs and view 1 for initial verification
@@ -409,6 +490,13 @@ bool TdHotstuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
 
     proposal_manager_->AddQC(std::move(qc));
     ready_ = true;
+
+    // Garbage-collect old view entries to prevent map bloat
+    if (view > 2) {
+      int gc_view = view - 2;
+      receive_.erase(gc_view);
+      received_weight_.erase(gc_view);
+    }
 
     StartNewRound();
   }

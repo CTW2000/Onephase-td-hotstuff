@@ -2,6 +2,7 @@
 
 #include <thread>
 #include <vector>
+#include <set>
 
 #include "platform/common/queue/lock_free_queue.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
@@ -35,6 +36,11 @@ class TdHotstuff: public common::ProtocolBase {
     int VRFLeader(int view);
     int NextLeader(int view);
     bool IsLeader(int view);
+
+    // Trust-aware dynamic timeout (Pacemaker)
+    // Δ(r) = Δ_base · (1 + κ · T̃(leader_r))
+    // where T̃(v) = T(v) / max{T(v')} ∈ (0, 1]
+    uint64_t GetDynamicTimeout(int view);
 
     void CommitProposal(std::unique_ptr<Proposal> p);
 
@@ -84,6 +90,13 @@ class TdHotstuff: public common::ProtocolBase {
   uint64_t epoch_ = 1;            // current epoch (fixed seed for VRF)
   // Cache: view -> leader_id, to avoid recomputation
   std::map<int, int> leader_cache_;
+
+  // Trust-aware dynamic timeout (Pacemaker)
+  int max_weight_;                 // max(weights_), used to normalize T̃
+  double kappa_;                   // κ coefficient (default 0.5)
+
+  // Fast-path: set of (view*10000+slot) keys for which QC is already done
+  std::set<int64_t> qc_done_;
 };
 
 }  // namespace td_hotstuff
