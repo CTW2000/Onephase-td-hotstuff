@@ -46,7 +46,9 @@ class Consensus : public common::Consensus{
   int CommitMsg(const google::protobuf::Message& msg) override;
   int CommitMsgInternal(const Transaction& txn);
 
-  std::unique_ptr<TdHotstuffPerformanceManager> GetPerformanceManager();
+  std::unique_ptr<TdHotstuffPerformanceManager> GetPerformanceManager(
+      const std::vector<int>& weights);
+  static std::vector<int> BuildWeights(int total_replicas);
 
   private:
     std::unique_ptr<TdHotstuff> td_hotstuff_;

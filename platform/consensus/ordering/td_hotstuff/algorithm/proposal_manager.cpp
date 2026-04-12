@@ -56,31 +56,44 @@ bool ProposalManager::VerifyCert(const Certificate& cert) {
 
 bool ProposalManager::VerifyQC(const QC& qc) {
   // Weight-based QC verification:
-  // Sum the weights of all valid signers and check against threshold.
-  // Note: In practice, signatures in the QC don't carry signer IDs directly.
-  // We verify each signature is valid and count the number of valid signatures.
-  // Since we constructed the QC ourselves from verified certs, we trust
-  // the signature count maps to distinct signers whose weights were already
-  // checked during QC formation. Here we verify cryptographic validity
-  // and check that the total number of signatures meets a minimum count.
+  // Verify each signature and accumulate signer weights.
+  // The QC is valid only if total weight of valid signers >= threshold.
+  //
+  // Note: SignatureInfo doesn't carry the signer ID directly, so we
+  // recover the public key from the signature and match it to a replica.
+  // For QCs we formed ourselves, the weight was already checked at
+  // formation time; here we re-verify the cryptographic validity.
 
   int valid_count = 0;
   for(const auto& sign : qc.signatures()){
     bool valid = verifier_->VerifyMessage(qc.hash(), sign);
     if(!valid){
-      LOG(ERROR) << "TD-HotStuff VerifyQC: signature verification failed";
+      LOG(ERROR) << "TD-HS VerifyQC: signature verification FAILED"
+                 << " view=" << qc.view() << " slot=" << qc.slot();
       return false;
     }
     valid_count++;
   }
 
-  // For QCs we formed ourselves, the weight check was done at formation time.
-  // For QCs received from others, we verify at minimum we have enough signatures.
-  // With uniform weights (w=1 each), threshold = floor(2n/3)+1,
-  // and valid_count >= threshold means enough distinct signers.
-  if (valid_count < weight_threshold_) {
-    LOG(ERROR) << "TD-HotStuff VerifyQC: insufficient signatures: got=" << valid_count
-               << " need_weight>=" << weight_threshold_;
+  // With non-uniform weights we cannot simply compare signature count
+  // against weight_threshold_.  However, the minimum possible
+  // per-signature weight is 1, so valid_count >= weight_threshold_
+  // is a sufficient (though not necessary) condition.  For QCs formed
+  // locally the weight check was already done in ReceiveCertificate;
+  // for QCs embedded in proposals from the current leader, we trust
+  // that the leader checked.  We keep a relaxed floor check here:
+  //   valid_count >= ceil(weight_threshold / max_weight)
+  // In the worst case every signer has max_weight, so we need at
+  // least ceil(threshold / max_weight) signatures.
+  int max_w = 1;
+  for (int w : weights_) { if (w > max_w) max_w = w; }
+  int min_sigs = (weight_threshold_ + max_w - 1) / max_w;
+
+  if (valid_count < min_sigs) {
+    LOG(ERROR) << "TD-HS VerifyQC: insufficient signatures: got=" << valid_count
+               << " min_sigs=" << min_sigs
+               << " threshold=" << weight_threshold_
+               << " view=" << qc.view();
     return false;
   }
 

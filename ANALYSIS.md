@@ -355,7 +355,6 @@ A separate LaTeX project [HotStuff-1-Plots](https://github.com/DakaiKang/HotStuf
 - Performance results stabilize after about **20 seconds**; the default measurement window is **40 seconds**.
 - Results are collected from replica log files via SCP and processed by `calculate_result.py`.
 
-
 ---
 
 ## Local Scalability Experiment Results
@@ -367,19 +366,23 @@ A separate LaTeX project [HotStuff-1-Plots](https://github.com/DakaiKang/HotStuf
 
 ### Throughput (txn/s)
 
+
 | Replicas | HS (3-phase) | HS-2 (2-phase) | HS-1 (1-phase) | HS-1-SLOT |
-|----------|-------------|----------------|----------------|-----------|
-| 4        | 144,931     | 178,821        | 166,432        | 181,793   |
-| 7        | 125,663     | 142,012        | 133,159        | 132,742   |
-| 10       | 112,782     | 119,862        | 109,014        | 106,606   |
+| -------- | ------------ | -------------- | -------------- | --------- |
+| 4        | 144,931      | 178,821        | 166,432        | 181,793   |
+| 7        | 125,663      | 142,012        | 133,159        | 132,742   |
+| 10       | 112,782      | 119,862        | 109,014        | 106,606   |
+
 
 ### Latency (ms)
 
+
 | Replicas | HS (3-phase) | HS-2 (2-phase) | HS-1 (1-phase) | HS-1-SLOT |
-|----------|-------------|----------------|----------------|-----------|
-| 4        | 3.07        | 1.95           | 1.53           | 1.39      |
-| 7        | 3.53        | 2.45           | 1.94           | 2.19      |
-| 10       | 3.95        | 2.93           | 2.33           | 3.18      |
+| -------- | ------------ | -------------- | -------------- | --------- |
+| 4        | 3.07         | 1.95           | 1.53           | 1.39      |
+| 7        | 3.53         | 2.45           | 1.94           | 2.19      |
+| 10       | 3.95         | 2.93           | 2.33           | 3.18      |
+
 
 ### Analysis
 
@@ -411,6 +414,7 @@ Latency ratio at n=10 (relative to HS):
 ```
 
 This matches the paper's theoretical prediction: fewer consensus phases = proportionally lower latency. On real AWS hardware (where replicas don't share CPU), the paper reports:
+
 - HS: 8.7ms at 32 replicas
 - HS-1: 5.2ms at 32 replicas (40% reduction — very close to our local 41%)
 
@@ -418,12 +422,14 @@ The **relative improvement ratio** is consistent between local and distributed e
 
 #### 4. Scalability Degradation Rate
 
-| Protocol   | n=4 → n=10 throughput drop | n=4 → n=10 latency increase |
-|-----------|---------------------------|----------------------------|
+
+| Protocol  | n=4 → n=10 throughput drop | n=4 → n=10 latency increase |
+| --------- | -------------------------- | --------------------------- |
 | HS        | -22%                       | +29%                        |
 | HS-2      | -33%                       | +50%                        |
 | HS-1      | -35%                       | +52%                        |
 | HS-1-SLOT | -41%                       | +129%                       |
+
 
 HS degrades least in absolute terms because its 3-phase overhead is already CPU-bound at n=4. HS-1-SLOT shows the steepest degradation because slot pipelining depends on CPU availability that disappears when 10 replicas share 8 cores.
 
@@ -445,34 +451,41 @@ HS degrades least in absolute terms because its 3-phase overhead is already CPU-
 
 ### Throughput (txn/s)
 
+
 | Replicas | HS (3-phase) | HS-2 (2-phase) | HS-1 (1-phase) | HS-1-SLOT |
-|----------|-------------|----------------|----------------|-----------|
-| 5        | 152,954     | 146,268        | 165,186        | 172,035   |
-| 10       | 102,213     | 104,299        | 105,956        | 103,175   |
-| 15       | 41,551      | 44,653         | 43,854         | 41,442    |
+| -------- | ------------ | -------------- | -------------- | --------- |
+| 5        | 152,954      | 146,268        | 165,186        | 172,035   |
+| 10       | 102,213      | 104,299        | 105,956        | 103,175   |
+| 15       | 41,551       | 44,653         | 43,854         | 41,442    |
+
 
 ### Latency (ms)
 
+
 | Replicas | HS (3-phase) | HS-2 (2-phase) | HS-1 (1-phase) | HS-1-SLOT |
-|----------|-------------|----------------|----------------|-----------|
-| 5        | 2.87        | 2.34           | 1.53           | 1.57      |
-| 10       | 4.30        | 3.40           | 2.40           | 3.53      |
-| 15       | 5.93        | 4.68           | 3.25           | 10.60     |
+| -------- | ------------ | -------------- | -------------- | --------- |
+| 5        | 2.87         | 2.34           | 1.53           | 1.57      |
+| 10       | 4.30         | 3.40           | 2.40           | 3.53      |
+| 15       | 5.93         | 4.68           | 3.25           | 10.60     |
+
 
 ### Comparative Analysis
 
 #### 1. Throughput Comparison
 
 At **n=5** (low contention, ample CPU):
+
 - **HS-1-SLOT leads**: 172K txn/s — slot pipelining keeps the leader busy proposing multiple slots without waiting.
 - **HS-1 is close behind**: 165K txn/s — 1-phase commit is fast, but single-slot mode can't saturate as well.
 - **HS and HS-2 are comparable**: ~146-153K txn/s — the extra message phases don't hurt throughput much when CPU is abundant.
 
 At **n=10** (moderate contention, 10 replicas on 8 cores):
+
 - All protocols converge to **~102-106K txn/s** — CPU saturation becomes the bottleneck, equalizing throughput regardless of phase count.
 - The ~3% spread between protocols is within noise.
 
 At **n=15** (heavy contention, 15 replicas on 8 cores):
+
 - Massive drop to **~41-45K txn/s** for all protocols — 15 processes sharing 8 cores + quadratic message count (15*15=225 connections) crushes throughput.
 - All protocols converge further. The bottleneck is pure resource contention, not protocol design.
 
@@ -491,41 +504,45 @@ At n=5:                           At n=10:                          At n=15:
 **Key observations**:
 
 - **HS-1 consistently achieves ~45% lower latency than HS** across all scales (n=5: -47%, n=10: -44%, n=15: -45%). This is the paper's central claim validated: removing 2 consensus phases cuts latency nearly in half.
-
 - **HS-2 achieves ~20% lower latency than HS** — removing 1 phase gives roughly half the improvement of removing 2 phases, which is mathematically consistent.
-
 - **HS-1-SLOT degrades sharply at n=15** (10.60ms vs HS-1's 3.25ms). The slot pipelining mechanism adds overhead when CPU-starved — each leader must manage multiple proposal slots, consuming more CPU cycles that aren't available.
 
 #### 3. Protocol Ranking Summary
 
-| Metric          | Best at n=5     | Best at n=10    | Best at n=15    |
-|-----------------|-----------------|-----------------|-----------------|
-| Throughput      | HS-1-SLOT (172K)| HS-1 (106K)     | HS-2 (45K)      |
-| Latency         | HS-1 (1.53ms)   | HS-1 (2.40ms)   | HS-1 (3.25ms)   |
-| Overall winner  | HS-1-SLOT       | HS-1            | HS-1            |
+
+| Metric         | Best at n=5      | Best at n=10  | Best at n=15  |
+| -------------- | ---------------- | ------------- | ------------- |
+| Throughput     | HS-1-SLOT (172K) | HS-1 (106K)   | HS-2 (45K)    |
+| Latency        | HS-1 (1.53ms)    | HS-1 (2.40ms) | HS-1 (3.25ms) |
+| Overall winner | HS-1-SLOT        | HS-1          | HS-1          |
+
 
 **HS-1 (HotStuff-1) is the most consistent performer** — it wins on latency at every scale and remains competitive on throughput. This validates the paper's core contribution.
 
 #### 4. Scalability Degradation (n=5 to n=15)
 
-| Protocol   | Throughput drop | Latency increase |
-|-----------|----------------|------------------|
-| HS        | -73%            | +107% (2.87 → 5.93ms) |
-| HS-2      | -69%            | +100% (2.34 → 4.68ms) |
-| HS-1      | -73%            | +112% (1.53 → 3.25ms) |
-| HS-1-SLOT | -76%            | +575% (1.57 → 10.60ms)|
+
+| Protocol  | Throughput drop | Latency increase       |
+| --------- | --------------- | ---------------------- |
+| HS        | -73%            | +107% (2.87 → 5.93ms)  |
+| HS-2      | -69%            | +100% (2.34 → 4.68ms)  |
+| HS-1      | -73%            | +112% (1.53 → 3.25ms)  |
+| HS-1-SLOT | -76%            | +575% (1.57 → 10.60ms) |
+
 
 All protocols lose ~70-76% throughput going from 5 to 15 replicas on 8 cores — this is purely CPU contention, not protocol-dependent. HS-1-SLOT's latency explosion at n=15 is the standout finding: slot pipelining is a liability when resources are scarce.
 
 #### 5. Comparison with Paper Results
 
-| Metric | Paper (32 replicas, AWS) | Local (10 replicas, localhost) |
-|--------|-------------------------|-------------------------------|
-| HS throughput | ~59K txn/s | ~102K txn/s |
-| HS-1 throughput | ~59K txn/s | ~106K txn/s |
-| HS latency | ~8.7ms | ~4.3ms |
-| HS-1 latency | ~5.2ms | ~2.4ms |
-| **HS-1 latency improvement** | **-40%** | **-44%** |
+
+| Metric                       | Paper (32 replicas, AWS) | Local (10 replicas, localhost) |
+| ---------------------------- | ------------------------ | ------------------------------ |
+| HS throughput                | ~59K txn/s               | ~102K txn/s                    |
+| HS-1 throughput              | ~59K txn/s               | ~106K txn/s                    |
+| HS latency                   | ~8.7ms                   | ~4.3ms                         |
+| HS-1 latency                 | ~5.2ms                   | ~2.4ms                         |
+| **HS-1 latency improvement** | **-40%**                 | **-44%**                       |
+
 
 The **relative latency improvement of HS-1 over HS (~40-45%) is consistent** between local and distributed environments. This confirms that local benchmarks, while not suitable for absolute performance claims, produce valid relative protocol comparisons.
 
@@ -543,31 +560,37 @@ HotStuff-1's one-phase commit design delivers a consistent **~45% latency reduct
 
 ### Throughput (txn/s)
 
-| Replicas | HS (3-phase) | HS-2 (2-phase) | HS-1 (1-phase) | HS-1-SLOT | **TD-HS** |
-|----------|-------------|----------------|----------------|-----------|-----------|
-| 5        | 144,536     | 166,844        | 166,854        | 189,763   | **174,743** |
-| 10       | 94,361      | 120,468        | 109,998        | 114,956   | **114,083** |
-| 15       | 57,451      | 68,518         | 60,769         | 69,283    | **94** (!)  |
+
+| Replicas | HS (3-phase) | HS-2 (2-phase) | HS-1 (1-phase) | HS-1-SLOT | **TD-HS**   |
+| -------- | ------------ | -------------- | -------------- | --------- | ----------- |
+| 5        | 144,536      | 166,844        | 166,854        | 189,763   | **174,743** |
+| 10       | 94,361       | 120,468        | 109,998        | 114,956   | **114,083** |
+| 15       | 57,451       | 68,518         | 60,769         | 69,283    | **94** (!)  |
+
 
 ### Latency (ms)
 
-| Replicas | HS (3-phase) | HS-2 (2-phase) | HS-1 (1-phase) | HS-1-SLOT | **TD-HS** |
-|----------|-------------|----------------|----------------|-----------|-----------|
-| 5        | 2.97        | 2.01           | 1.47           | 1.37      | **1.54**  |
-| 10       | 4.57        | 2.85           | 2.29           | 2.83      | **2.73**  |
-| 15       | 6.33        | 3.71           | 3.09           | 5.18      | **15.90** (!) |
+
+| Replicas | HS (3-phase) | HS-2 (2-phase) | HS-1 (1-phase) | HS-1-SLOT | **TD-HS**     |
+| -------- | ------------ | -------------- | -------------- | --------- | ------------- |
+| 5        | 2.97         | 2.01           | 1.47           | 1.37      | **1.54**      |
+| 10       | 4.57         | 2.85           | 2.29           | 2.83      | **2.73**      |
+| 15       | 6.33         | 3.71           | 3.09           | 5.18      | **15.90** (!) |
+
 
 ### Analysis
 
 #### TD-HS at n=5 and n=10: Performs as Expected
 
 At **n=5**: TD-HS achieves **174K txn/s** and **1.54ms** latency — very close to HS-1-SLOT (189K, 1.37ms). The small difference is within run-to-run variance. The weighted QC threshold is `floor(2*5/3)+1 = 4`, identical to the classic `2f+1 = 2*1+1 = 3` ... wait, actually:
+
 - Classic: n=5, f=1, threshold = 2f+1 = 3
 - Weighted: W=5, threshold = floor(10/3)+1 = 3+1 = 4
 
 The weighted threshold is **4 vs classic 3** — TD-HS needs one more vote, but still performs well because 4 out of 5 replicas easily respond on localhost.
 
 At **n=10**: TD-HS achieves **114K txn/s** and **2.73ms** — matching HS-1-SLOT (115K, 2.83ms).
+
 - Classic: n=10, f=3, threshold = 2f+1 = 7
 - Weighted: W=10, threshold = floor(20/3)+1 = 6+1 = 7
 
@@ -576,6 +599,7 @@ Here the thresholds are **equal** (both 7), so performance matches exactly.
 #### TD-HS at n=15: Weighted Threshold is Stricter
 
 At **n=15**: TD-HS collapses to **94 txn/s** — essentially stalled.
+
 - Classic: n=15, f=4, threshold = 2f+1 = 9 (60% of replicas)
 - Weighted: W=15, threshold = floor(30/3)+1 = 10+1 = 11 (73% of replicas)
 
@@ -595,10 +619,12 @@ The weighted QC threshold `floor(2W/3)+1` is the **correct** threshold for safet
 
 #### Protocol Ranking (n=5 and n=10 only — valid comparisons)
 
-| Metric | n=5 Winner | n=10 Winner |
-|--------|-----------|-------------|
-| Throughput | HS-1-SLOT (190K) | HS-2 (120K) |
-| Latency | HS-1-SLOT (1.37ms) | HS-1 (2.29ms) |
+
+| Metric     | n=5 Winner                  | n=10 Winner                 |
+| ---------- | --------------------------- | --------------------------- |
+| Throughput | HS-1-SLOT (190K)            | HS-2 (120K)                 |
+| Latency    | HS-1-SLOT (1.37ms)          | HS-1 (2.29ms)               |
 | TD-HS rank | 2nd throughput, 3rd latency | 3rd throughput, 3rd latency |
+
 
 TD-HotStuff performs comparably to HS-1-SLOT (its parent protocol) at n=5 and n=10, confirming the weighted QC change is functionally correct with minimal performance impact when threshold differences are small.

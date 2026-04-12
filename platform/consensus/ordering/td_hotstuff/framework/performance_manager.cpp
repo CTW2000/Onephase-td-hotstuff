@@ -37,16 +37,23 @@ using comm::CollectorResultCode;
 
 TdHotstuffPerformanceManager::TdHotstuffPerformanceManager(
     const ResDBConfig& config, ReplicaCommunicator* replica_communicator,
-    SignatureVerifier* verifier)
+    SignatureVerifier* verifier, const std::vector<int>& weights)
     : PerformanceManager(config, replica_communicator, verifier){
   client_num_ = 1;
   slot_num_ = config_.GetSlotNum();
   last_response_ = 2;
   inflight_limit_ = 20;
 
-  // Compute VRF leader for view=1 using the same algorithm as td_hotstuff.cpp
+  // Compute VRF leader for view=1 using the actual trust weights
   int total_replicas = config_.GetReplicaNum();
-  int total_weight = total_replicas;  // uniform weights, each = 1
+  int total_weight = 0;
+  for (int w : weights) total_weight += w;
+
+  // Build prefix sums for weighted interval mapping
+  std::vector<int> prefix(total_replicas + 1, 0);
+  for (int i = 0; i < total_replicas; i++) {
+    prefix[i + 1] = prefix[i] + weights[i];
+  }
 
   uint64_t epoch = 1;
   std::string vrf_input = std::to_string(epoch) + ":1";
@@ -57,10 +64,20 @@ TdHotstuffPerformanceManager::TdHotstuffPerformanceManager(
     hash_val = (hash_val << 8) | (uint8_t)hash_raw[i];
   }
   int position = (int)(hash_val % (uint32_t)total_weight);
-  primary_ = position + 1;  // 1-based node ID
 
-  LOG(ERROR) << "TD-HotStuff PerformanceManager: initial VRF leader for view=1 is node "
-             << primary_ << " (total_replicas=" << total_replicas << ")";
+  // Find which replica's interval contains position
+  primary_ = 1;
+  for (int i = 0; i < total_replicas; i++) {
+    if (position >= prefix[i] && position < prefix[i + 1]) {
+      primary_ = i + 1;
+      break;
+    }
+  }
+
+  LOG(ERROR) << "TD-HS PM: initial VRF leader for view=1 is node "
+             << primary_ << " (n=" << total_replicas
+             << " W=" << total_weight
+             << " hash_pos=" << position << ")";
 }
 
 

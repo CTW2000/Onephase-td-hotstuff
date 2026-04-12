@@ -37,7 +37,8 @@ class TdHotstuffPerformanceManager : public common::PerformanceManager {
  public:
   TdHotstuffPerformanceManager(const ResDBConfig& config,
                      ReplicaCommunicator* replica_communicator,
-                     SignatureVerifier* verifier);
+                     SignatureVerifier* verifier,
+                     const std::vector<int>& weights);
 
 protected:
   int ProcessResponseMsg(std::unique_ptr<Context> context,

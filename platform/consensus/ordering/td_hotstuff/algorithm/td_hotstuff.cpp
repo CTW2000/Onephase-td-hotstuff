@@ -17,7 +17,9 @@ TdHotstuff::TdHotstuff(int id, int f, int total_num, SignatureVerifier * verifie
     // With more replicas the per-slot consensus round-trip is longer;
     // a timer that is too short makes slot 0 immediately final, leaving
     // only one proposal per view and starving the commit pipeline.
-    uint64_t min_timer = (uint64_t)total_num_ * timer_length_;
+    // Formula: ensure at least 3 full consensus round-trips fit in the
+    // timer window.  Each round-trip ≈ total_num * 500µs on localhost.
+    uint64_t min_timer = (uint64_t)total_num_ * 1500;  // ~1.5ms per replica
     if (timer_length_ < min_timer) {
       LOG(ERROR) << "TD-HotStuff: scaling timer_length from " << timer_length_
                  << " to " << min_timer << " for " << total_num_ << " replicas";
@@ -169,6 +171,11 @@ void TdHotstuff::AsyncSend() {
     // Now we know we're the leader — pop a transaction
     auto txn = txns_.Pop();
     if(txn == nullptr){
+      // No transaction available yet — reset start_time so the timer
+      // doesn't expire while we were waiting for a transaction.
+      if (slot == 0) {
+        start_time = GetCurrentTime();
+      }
       continue;
     }
 
@@ -183,6 +190,14 @@ void TdHotstuff::AsyncSend() {
 
     std::vector<std::unique_ptr<Transaction> > txns;
     txns.push_back(std::move(txn));
+
+    // Reset start_time when the first transaction of a new view arrives.
+    // The Pop() call above may have blocked waiting for a transaction,
+    // so the timer must start from when work actually begins, not from
+    // when Ready() was detected.
+    if (slot == 0) {
+      start_time = GetCurrentTime();
+    }
 
     for(int i = 1; i < batch_size_; ++i){
       auto txn = txns_.Pop();
@@ -316,11 +331,9 @@ bool TdHotstuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
 
   {
     std::unique_lock<std::mutex> lk(rec_mutex2_);
-    // Early exit: if we've already accumulated enough weight, or this is a stale view/slot
-    if(accumulated_weight_ >= weight_threshold_ || view < min_view_ || (view == min_view_ && slot <= min_slot_)) {
+    if(view < min_view_ || (view == min_view_ && slot <= min_slot_)) {
       return false;
     }
-    accumulated_weight_ += signer_weight;
   }
   bool valid = proposal_manager_->VerifyCert(*cert);
   if(!valid){
@@ -331,6 +344,12 @@ bool TdHotstuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
 
   uint64_t x = GetCurrentTime();
   std::unique_lock<std::mutex> lk(rec_mutex_);
+
+  // Early exit: QC already formed for this (view, hash)
+  if (received_weight_.count(view) && received_weight_[view].count(hash)
+      && received_weight_[view][hash] >= weight_threshold_) {
+    return false;
+  }
 
   // Deduplicate: only count each signer once
   if (receive_[view][hash].count(signer)) {
@@ -343,9 +362,14 @@ bool TdHotstuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
   received_weight_[view][hash] += signer_weight;
   int current_weight = received_weight_[view][hash];
 
-  // LOG(ERROR) << "TD-HotStuff cert: view=" << view << " signer=" << signer
-  //            << " weight=" << signer_weight << " accumulated=" << current_weight
-  //            << "/" << weight_threshold_ << " (count=" << receive_[view][hash].size() << ")";
+  // Per-cert logging only during the first view for initial verification.
+  if (view == 1 && slot == 0) {
+    LOG(ERROR) << "TD-HS cert: view=" << view << " slot=" << slot
+               << " signer=" << signer << " w=" << signer_weight
+               << " acc=" << current_weight << "/" << weight_threshold_
+               << " (n_sigs=" << receive_[view][hash].size() << ")"
+               << (is_final ? " [FINAL]" : "");
+  }
 
   // Check if weighted quorum is reached: accumulated weight > 2/3 * W
   if(current_weight >= weight_threshold_){
@@ -356,10 +380,22 @@ bool TdHotstuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
       accumulated_weight_ = 0;
     }
 
-    LOG(ERROR) << "TD-HotStuff: weighted QC formed! view=" << view << " slot=" << slot
-               << " weight=" << current_weight << "/" << total_weight_
-               << " threshold=" << weight_threshold_
-               << " signers=" << receive_[view][hash].size();
+    // Log QC formation: only FINAL QCs and view 1 for initial verification
+    if (view == 1 || is_final) {
+      std::string signer_str;
+      for (auto & it : receive_[view][hash]) {
+        if (!signer_str.empty()) signer_str += ",";
+        int sid = it.first;
+        int sw = (sid >= 1 && sid <= (int)weights_.size()) ? weights_[sid-1] : 0;
+        signer_str += std::to_string(sid) + "(w" + std::to_string(sw) + ")";
+      }
+
+      LOG(ERROR) << "TD-HS QC formed! view=" << view << " slot=" << slot
+                 << " weight=" << current_weight << "/" << total_weight_
+                 << " threshold=" << weight_threshold_
+                 << " signers=[" << signer_str << "]"
+                 << (is_final ? " [FINAL->nextL=" + std::to_string(NextLeader(view)) + "]" : "");
+    }
 
     std::unique_ptr<QC> qc = std::make_unique<QC>();
     qc->set_hash(hash);
