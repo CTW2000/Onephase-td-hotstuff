@@ -27,6 +27,8 @@
 
 #include <glog/logging.h>
 #include <unistd.h>
+#include <cstdlib>
+#include <sstream>
 #include <vector>
 
 #include "common/utils/utils.h"
@@ -52,12 +54,29 @@ Consensus::Consensus(const ResDBConfig& config,
   int total_replicas = config_.GetReplicaNum();
   int f = (total_replicas - 1) / 3;
 
-  // Build weight vector: default all replicas have weight = 1
-  // With uniform weight=1, total_weight = n, threshold = floor(2n/3)+1
-  // This is numerically equivalent to the classic 2f+1 for n=3f+1
+  // Build weight vector from TD_HS_WEIGHTS env var (comma-separated ints),
+  // or fall back to uniform weight=1 for all replicas.
   std::vector<int> weights(total_replicas, 1);
-  LOG(ERROR) << "TD-HotStuff: creating with " << total_replicas
-             << " replicas, default weight=1 each";
+  const char* env_weights = std::getenv("TD_HS_WEIGHTS");
+  if (env_weights != nullptr && std::string(env_weights).size() > 0) {
+    std::istringstream ss(env_weights);
+    std::string token;
+    int idx = 0;
+    while (std::getline(ss, token, ',') && idx < total_replicas) {
+      weights[idx++] = std::stoi(token);
+    }
+  }
+  {
+    std::ostringstream wlog;
+    wlog << "TD-HotStuff weights: [";
+    for (int i = 0; i < total_replicas; i++) {
+      if (i > 0) wlog << ",";
+      wlog << weights[i];
+    }
+    int W = 0; for (int w : weights) W += w;
+    wlog << "] W=" << W << " threshold=" << ((2*W)/3+1);
+    LOG(ERROR) << wlog.str();
+  }
 
   if (config_.GetPublicKeyCertificateInfo()
           .public_key()

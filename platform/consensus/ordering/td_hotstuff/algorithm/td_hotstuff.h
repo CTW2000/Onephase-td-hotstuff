@@ -22,6 +22,9 @@ class TdHotstuff: public common::ProtocolBase {
   bool ReceiveProposal(std::unique_ptr<Proposal> proposal);
   bool ReceiveCertificate(std::unique_ptr<Certificate> cert);
 
+  int CurrentView();
+  int GetLeaderForView(int view);
+
 
   private:
     bool Ready();

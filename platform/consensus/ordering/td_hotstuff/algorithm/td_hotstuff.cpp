@@ -52,6 +52,14 @@ bool TdHotstuff::IsLeader(int view){
   return (view % total_num_)+1 == id_;
 }
 
+int TdHotstuff::CurrentView() {
+  return proposal_manager_->CurrentView();
+}
+
+int TdHotstuff::GetLeaderForView(int view) {
+  return (view % total_num_) + 1;
+}
+
 bool TdHotstuff::Ready() {
   int view = proposal_manager_->CurrentView();
   // return IsLeader(view) && !has_sent_ && ready_;
@@ -247,11 +255,12 @@ bool TdHotstuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
 
   {
     std::unique_lock<std::mutex> lk(rec_mutex2_);
-    // Early exit: if we've already accumulated enough weight, or this is a stale view/slot
-    if(accumulated_weight_ >= weight_threshold_ || view < min_view_ || (view == min_view_ && slot <= min_slot_)) {
+    // Reject stale views/slots only (the global accumulated_weight_ check was
+    // buggy with non-uniform weights: it could drop valid certs when weights
+    // from different views accumulated faster than QCs formed).
+    if(view < (int)min_view_ || (view == (int)min_view_ && slot <= (int)min_slot_)) {
       return false;
     }
-    accumulated_weight_ += signer_weight;
   }
   bool valid = proposal_manager_->VerifyCert(*cert);
   if(!valid){
@@ -268,29 +277,30 @@ bool TdHotstuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
     return false;
   }
 
-  receive_[view][hash].insert(std::make_pair(cert->signer(), std::move(cert)));
+  // Check BEFORE adding: was the threshold already reached (QC already formed)?
+  int prev_weight = received_weight_[view][hash];
+  bool already_formed = (prev_weight >= weight_threshold_);
 
-  // Accumulate weight for this (view, hash) pair
+  receive_[view][hash].insert(std::make_pair(cert->signer(), std::move(cert)));
   received_weight_[view][hash] += signer_weight;
   int current_weight = received_weight_[view][hash];
 
-  // LOG(ERROR) << "TD-HotStuff cert: view=" << view << " signer=" << signer
-  //            << " weight=" << signer_weight << " accumulated=" << current_weight
-  //            << "/" << weight_threshold_ << " (count=" << receive_[view][hash].size() << ")";
-
-  // Check if weighted quorum is reached: accumulated weight > 2/3 * W
-  if(current_weight >= weight_threshold_){
+  // Only form a QC once per (view, hash) — on the cert that pushes weight over the threshold
+  if(!already_formed && current_weight >= weight_threshold_){
     {
       std::unique_lock<std::mutex> lk(rec_mutex2_);
       min_view_ = view;
       min_slot_ = slot;
-      accumulated_weight_ = 0;
     }
 
-    LOG(ERROR) << "TD-HotStuff: weighted QC formed! view=" << view << " slot=" << slot
-               << " weight=" << current_weight << "/" << total_weight_
-               << " threshold=" << weight_threshold_
-               << " signers=" << receive_[view][hash].size();
+    // Throttled QC log — every 500th formation only, to keep log files small.
+    cert_count_++;
+    if (cert_count_ % 500 == 1) {
+      LOG(ERROR) << "[QC #" << cert_count_ << "] view=" << view << " slot=" << slot
+                 << " is_final=" << is_final
+                 << " weight=" << current_weight << "/" << total_weight_
+                 << " signers=" << receive_[view][hash].size();
+    }
 
     std::unique_ptr<QC> qc = std::make_unique<QC>();
     qc->set_hash(hash);

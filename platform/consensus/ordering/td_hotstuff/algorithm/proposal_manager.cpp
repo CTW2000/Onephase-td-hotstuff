@@ -43,31 +43,26 @@ bool ProposalManager::VerifyCert(const Certificate& cert) {
 
 bool ProposalManager::VerifyQC(const QC& qc) {
   // Weight-based QC verification:
-  // Sum the weights of all valid signers and check against threshold.
-  // Note: In practice, signatures in the QC don't carry signer IDs directly.
-  // We verify each signature is valid and count the number of valid signatures.
-  // Since we constructed the QC ourselves from verified certs, we trust
-  // the signature count maps to distinct signers whose weights were already
-  // checked during QC formation. Here we verify cryptographic validity
-  // and check that the total number of signatures meets a minimum count.
-
-  int valid_count = 0;
+  // Verify each signature and sum the signer's trust weight.
+  int total_weight = 0;
   for(const auto& sign : qc.signatures()){
     bool valid = verifier_->VerifyMessage(qc.hash(), sign);
     if(!valid){
       LOG(ERROR) << "TD-HotStuff VerifyQC: signature verification failed";
       return false;
     }
-    valid_count++;
+    int signer = sign.node_id();
+    if (signer >= 1 && signer <= (int)weights_.size()) {
+      total_weight += weights_[signer - 1];
+    } else {
+      total_weight += 1;  // fallback for unknown signer
+    }
   }
 
-  // For QCs we formed ourselves, the weight check was done at formation time.
-  // For QCs received from others, we verify at minimum we have enough signatures.
-  // With uniform weights (w=1 each), threshold = floor(2n/3)+1,
-  // and valid_count >= threshold means enough distinct signers.
-  if (valid_count < weight_threshold_) {
-    LOG(ERROR) << "TD-HotStuff VerifyQC: insufficient signatures: got=" << valid_count
-               << " need_weight>=" << weight_threshold_;
+  if (total_weight < weight_threshold_) {
+    LOG(ERROR) << "TD-HotStuff VerifyQC: insufficient weight: got=" << total_weight
+               << " need>=" << weight_threshold_
+               << " signatures=" << qc.signatures_size();
     return false;
   }
 

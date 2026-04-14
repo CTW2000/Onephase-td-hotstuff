@@ -1,0 +1,6 @@
+n=10
+weights=1,1,3,2,2,1,1,2,3,2
+total_weight=18
+threshold=13
+source=random seed=18 range=[1,3]
+duration_seconds=20

@@ -107,7 +107,6 @@ int TdHotstuffPerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> co
   // messages.
   // The callback will be triggered if it received f+1 messages.
   if (request->ret() == -2) {
-    // LOG(INFO) << "get response fail:" << request->ret();
     send_num_--;
     return 0;
   }
@@ -121,28 +120,20 @@ int TdHotstuffPerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> co
       });
 
   if (ret == CollectorResultCode::STATE_CHANGED) {
-    // LOG(ERROR) << "[X]STATE_CHANGED " << GetCurrentTime() - last_send_time_; 
     assert(batch_response);
     int next_primary = batch_response->next_primary();
     if (next_primary) {
-      // One slot of the primary would get skipped.
       bool update = false;
       if (next_primary != primary_) {
-        if (primary_ % 3 == 1 && primary_ < 3 * config_.GetForkTailNum()) {
-          send_num_--;
-          inflight_[primary_]--;
-        }
         update = true;
       }
       primary_ = next_primary;
       if (update) {
         send_num_--;
-        // first_slot_ = true;
       }
     }
     int primary_id = batch_response->primary_id();
     inflight_[primary_id]--;
-    // LOG(ERROR) << "primary_id: " << primary_;
     SendResponseToClient(*batch_response);
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
@@ -175,12 +166,6 @@ int TdHotstuffPerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> co
 // }
 
 int TdHotstuffPerformanceManager::GetPrimary() {
-  // LOG(ERROR) << "send to: " << primary_ << " send_num_:" << send_num_;
-  // if (primary_ % 3 == 1 && primary_ < 3 * config_.GetRollBackNum() && first_slot_) {
-  //   send_num_--;
-  //   first_slot_ = false;
-  // }
-  //  LOG(ERROR) << "send to: " << primary_ << " send_num_:" << send_num_;
   return primary_;
 }
 
