@@ -1,0 +1,1963 @@
+use bazel path:/usr/ctw/Onephase-td-hotstuff
+=== Building all protocol binaries ===
+INFO: Found 5 targets...
+[0 / 3] [Prepa] BazelWorkspaceStatusAction stable-status.txt
+INFO: Elapsed time: 0.187s, Critical Path: 0.01s
+INFO: 1 process: 1 internal.
+INFO: Build completed successfully, 1 total action
+
+######################################################################
+# EXPERIMENT 1: SCALABILITY
+######################################################################
+
+======================================================================
+  EXPERIMENT: Scalability n=4 | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 3@10.10.131.224 ready
+  Node 1@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 5@10.10.131.247 ready
+=== All 5 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 187718.66666666666 txn/s | Latency: 0.001514302 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=4 | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 5@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+=== All 5 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 838000.0 txn/s | Latency: 0.04392666666666667 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=4 | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 5@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 1@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+=== All 5 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 834285.7142857143 txn/s | Latency: 0.06113173333333333 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=4 | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 5@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+=== All 5 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 495333.3333333333 txn/s | Latency: 0.038000225 s
+
+======================================================================
+  EXPERIMENT: Scalability n=10 | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 1@10.10.131.224 ready
+  Node 6@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 5@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 11@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 4@10.10.131.224 ready
+  Node 9@10.10.131.86 ready
+=== All 11 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 159857.94871794872 txn/s | Latency: 0.0017729540000000002 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=10 | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 3@10.10.131.224 ready
+  Node 1@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 6@10.10.131.247 ready
+  Node 11@10.10.131.86 ready
+  Node 2@10.10.131.224 ready
+  Node 7@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 9@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+=== All 11 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 564137.9310344828 txn/s | Latency: 0.05834995 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=10 | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 9@10.10.131.86 ready
+  Node 11@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 8@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 1@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+=== All 11 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 446512.8205128205 txn/s | Latency: 0.08748231999999999 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=10 | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 4@10.10.131.224 ready
+  Node 10@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 9@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 8@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 11@10.10.131.86 ready
+  Node 7@10.10.131.247 ready
+  Node 3@10.10.131.224 ready
+=== All 11 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 464000.0 txn/s | Latency: 0.045240375 s
+
+======================================================================
+  EXPERIMENT: Scalability n=16 | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 17@10.10.131.83 ready
+  Node 1@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 11@10.10.131.86 ready
+  Node 9@10.10.131.86 ready
+  Node 4@10.10.131.224 ready
+  Node 7@10.10.131.247 ready
+  Node 3@10.10.131.224 ready
+  Node 10@10.10.131.86 ready
+  Node 12@10.10.131.86 ready
+  Node 15@10.10.131.125 ready
+  Node 13@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 8@10.10.131.247 ready
+  Node 16@10.10.131.125 ready
+  Node 5@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+=== All 17 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 103022.22222222222 txn/s | Latency: 0.00280538 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=16 | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 17@10.10.131.83 ready
+  Node 3@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 1@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 11@10.10.131.86 ready
+  Node 4@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+  Node 8@10.10.131.247 ready
+  Node 15@10.10.131.125 ready
+  Node 9@10.10.131.86 ready
+  Node 10@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 12@10.10.131.86 ready
+  Node 7@10.10.131.247 ready
+  Node 6@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+=== All 17 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 493142.85714285716 txn/s | Latency: 0.06467528 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=16 | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 1@10.10.131.224 ready
+  Node 11@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 9@10.10.131.86 ready
+  Node 12@10.10.131.86 ready
+  Node 4@10.10.131.224 ready
+  Node 14@10.10.131.125 ready
+  Node 16@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+  Node 10@10.10.131.86 ready
+  Node 8@10.10.131.247 ready
+  Node 17@10.10.131.83 ready
+  Node 7@10.10.131.247 ready
+  Node 13@10.10.131.125 ready
+  Node 5@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 6@10.10.131.247 ready
+=== All 17 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 496539.68253968254 txn/s | Latency: 0.08325696 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=16 | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 5@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 9@10.10.131.86 ready
+  Node 4@10.10.131.224 ready
+  Node 11@10.10.131.86 ready
+  Node 12@10.10.131.86 ready
+  Node 10@10.10.131.86 ready
+  Node 1@10.10.131.224 ready
+  Node 6@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 3@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 16@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+  Node 17@10.10.131.83 ready
+  Node 14@10.10.131.125 ready
+  Node 13@10.10.131.125 ready
+=== All 17 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 418500.0 txn/s | Latency: 0.0524713 s
+
+======================================================================
+  EXPERIMENT: Scalability n=19 | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 11@10.10.131.86 ready
+  Node 4@10.10.131.224 ready
+  Node 15@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 17@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+  Node 5@10.10.131.247 ready
+  Node 16@10.10.131.125 ready
+  Node 13@10.10.131.125 ready
+  Node 12@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 7@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 8@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 20@10.10.131.83 ready
+  Node 2@10.10.131.224 ready
+  Node 14@10.10.131.125 ready
+  Node 10@10.10.131.86 ready
+  Node 18@10.10.131.83 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 89816.0 txn/s | Latency: 0.003249618 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=19 | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 8@10.10.131.247 ready
+  Node 5@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 20@10.10.131.83 ready
+  Node 1@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 6@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 15@10.10.131.125 ready
+  Node 11@10.10.131.86 ready
+  Node 7@10.10.131.247 ready
+  Node 18@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+  Node 17@10.10.131.83 ready
+  Node 10@10.10.131.86 ready
+  Node 12@10.10.131.86 ready
+  Node 14@10.10.131.125 ready
+  Node 13@10.10.131.125 ready
+  Node 16@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 430506.6666666667 txn/s | Latency: 0.07059282 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=19 | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 11@10.10.131.86 ready
+  Node 9@10.10.131.86 ready
+  Node 17@10.10.131.83 ready
+  Node 20@10.10.131.83 ready
+  Node 10@10.10.131.86 ready
+  Node 8@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 18@10.10.131.83 ready
+  Node 12@10.10.131.86 ready
+  Node 13@10.10.131.125 ready
+  Node 2@10.10.131.224 ready
+  Node 19@10.10.131.83 ready
+  Node 1@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+  Node 5@10.10.131.247 ready
+  Node 15@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 454453.3333333333 txn/s | Latency: 0.08875758 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/scalability_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: Scalability n=19 | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 1@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 9@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 11@10.10.131.86 ready
+  Node 19@10.10.131.83 ready
+  Node 8@10.10.131.247 ready
+  Node 17@10.10.131.83 ready
+  Node 12@10.10.131.86 ready
+  Node 18@10.10.131.83 ready
+  Node 5@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 13@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+  Node 7@10.10.131.247 ready
+  Node 6@10.10.131.247 ready
+  Node 16@10.10.131.125 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 373052.63157894736 txn/s | Latency: 0.055528259999999996 s
+
+######################################################################
+# EXPERIMENT 2: LEADER SLOWNESS (100ms)
+######################################################################
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=0 timer=100ms | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 17@10.10.131.83 ready
+  Node 10@10.10.131.86 ready
+  Node 1@10.10.131.224 ready
+  Node 11@10.10.131.86 ready
+  Node 8@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 12@10.10.131.86 ready
+  Node 19@10.10.131.83 ready
+  Node 5@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 18@10.10.131.83 ready
+  Node 6@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 3@10.10.131.224 ready
+  Node 7@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 14@10.10.131.125 ready
+  Node 13@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 88582.93333333333 txn/s | Latency: 0.003272256 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=0 timer=100ms | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 18@10.10.131.83 ready
+  Node 11@10.10.131.86 ready
+  Node 1@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 7@10.10.131.247 ready
+  Node 12@10.10.131.86 ready
+  Node 17@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 10@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+  Node 2@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 14@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 13@10.10.131.125 ready
+  Node 9@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 16@10.10.131.125 ready
+  Node 8@10.10.131.247 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 446533.3333333333 txn/s | Latency: 0.0755323 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=0 timer=100ms | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 11@10.10.131.86 ready
+  Node 16@10.10.131.125 ready
+  Node 2@10.10.131.224 ready
+  Node 12@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 4@10.10.131.224 ready
+  Node 5@10.10.131.247 ready
+  Node 8@10.10.131.247 ready
+  Node 3@10.10.131.224 ready
+  Node 10@10.10.131.86 ready
+  Node 17@10.10.131.83 ready
+  Node 1@10.10.131.224 ready
+  Node 9@10.10.131.86 ready
+  Node 19@10.10.131.83 ready
+  Node 18@10.10.131.83 ready
+  Node 13@10.10.131.125 ready
+  Node 7@10.10.131.247 ready
+  Node 15@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 431040.0 txn/s | Latency: 0.0969013 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=0 timer=100ms | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 15@10.10.131.125 ready
+  Node 18@10.10.131.83 ready
+  Node 2@10.10.131.224 ready
+  Node 9@10.10.131.86 ready
+  Node 11@10.10.131.86 ready
+  Node 17@10.10.131.83 ready
+  Node 1@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+  Node 10@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 16@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 12@10.10.131.86 ready
+  Node 19@10.10.131.83 ready
+  Node 3@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 5@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 397842.1052631579 txn/s | Latency: 0.05453764 s
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=1 timer=100ms | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 10@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 12@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 18@10.10.131.83 ready
+  Node 11@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 17@10.10.131.83 ready
+  Node 8@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 19@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 16@10.10.131.125 ready
+  Node 1@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 15377.866666666667 txn/s | Latency: 0.019467779999999997 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=1 timer=100ms | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 9@10.10.131.86 ready
+  Node 12@10.10.131.86 ready
+  Node 11@10.10.131.86 ready
+  Node 15@10.10.131.125 ready
+  Node 10@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 14@10.10.131.125 ready
+  Node 13@10.10.131.125 ready
+  Node 7@10.10.131.247 ready
+  Node 5@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 1@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 8@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 20@10.10.131.83 ready
+  Node 18@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 442186.6666666667 txn/s | Latency: 0.06724802 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=1 timer=100ms | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 17@10.10.131.83 ready
+  Node 10@10.10.131.86 ready
+  Node 2@10.10.131.224 ready
+  Node 9@10.10.131.86 ready
+  Node 13@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 11@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 12@10.10.131.86 ready
+  Node 14@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+  Node 1@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 5@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 18@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 429680.0 txn/s | Latency: 0.09536335999999998 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=1 timer=100ms | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 9@10.10.131.86 ready
+  Node 10@10.10.131.86 ready
+  Node 19@10.10.131.83 ready
+  Node 12@10.10.131.86 ready
+  Node 8@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 2@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 16@10.10.131.125 ready
+  Node 5@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+  Node 4@10.10.131.224 ready
+  Node 1@10.10.131.224 ready
+  Node 11@10.10.131.86 ready
+  Node 18@10.10.131.83 ready
+  Node 17@10.10.131.83 ready
+  Node 3@10.10.131.224 ready
+  Node 15@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 400921.05263157893 txn/s | Latency: 0.054041019999999995 s
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=4 timer=100ms | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 11@10.10.131.86 ready
+  Node 4@10.10.131.224 ready
+  Node 19@10.10.131.83 ready
+  Node 2@10.10.131.224 ready
+  Node 12@10.10.131.86 ready
+  Node 9@10.10.131.86 ready
+  Node 16@10.10.131.125 ready
+  Node 7@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 14@10.10.131.125 ready
+  Node 18@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 13@10.10.131.125 ready
+  Node 3@10.10.131.224 ready
+  Node 6@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 17@10.10.131.83 ready
+  Node 20@10.10.131.83 ready
+  Node 8@10.10.131.247 ready
+  Node 5@10.10.131.247 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 4480.8 txn/s | Latency: 0.06719686 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=4 timer=100ms | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 1@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 6@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 18@10.10.131.83 ready
+  Node 16@10.10.131.125 ready
+  Node 7@10.10.131.247 ready
+  Node 17@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 8@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 14@10.10.131.125 ready
+  Node 4@10.10.131.224 ready
+  Node 5@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 19@10.10.131.83 ready
+  Node 13@10.10.131.125 ready
+  Node 12@10.10.131.86 ready
+  Node 11@10.10.131.86 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 432853.3333333333 txn/s | Latency: 0.07060036 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=4 timer=100ms | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 11@10.10.131.86 ready
+  Node 2@10.10.131.224 ready
+  Node 10@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 19@10.10.131.83 ready
+  Node 17@10.10.131.83 ready
+  Node 6@10.10.131.247 ready
+  Node 16@10.10.131.125 ready
+  Node 4@10.10.131.224 ready
+  Node 7@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 1@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 15@10.10.131.125 ready
+  Node 12@10.10.131.86 ready
+  Node 18@10.10.131.83 ready
+  Node 14@10.10.131.125 ready
+  Node 3@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 440133.3333333333 txn/s | Latency: 0.10420576000000001 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=4 timer=100ms | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 5@10.10.131.247 ready
+  Node 19@10.10.131.83 ready
+  Node 18@10.10.131.83 ready
+  Node 9@10.10.131.86 ready
+  Node 17@10.10.131.83 ready
+  Node 10@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 11@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 12@10.10.131.86 ready
+  Node 4@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 7@10.10.131.247 ready
+  Node 8@10.10.131.247 ready
+  Node 13@10.10.131.125 ready
+  Node 14@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 378000.0 txn/s | Latency: 0.05469971999999999 s
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=6 timer=100ms | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 3@10.10.131.224 ready
+  Node 12@10.10.131.86 ready
+  Node 9@10.10.131.86 ready
+  Node 16@10.10.131.125 ready
+  Node 17@10.10.131.83 ready
+  Node 10@10.10.131.86 ready
+  Node 1@10.10.131.224 ready
+  Node 18@10.10.131.83 ready
+  Node 4@10.10.131.224 ready
+  Node 20@10.10.131.83 ready
+  Node 11@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 13@10.10.131.125 ready
+  Node 7@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 15@10.10.131.125 ready
+  Node 19@10.10.131.83 ready
+  Node 5@10.10.131.247 ready
+  Node 8@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 3040.8 txn/s | Latency: 0.09908266 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=6 timer=100ms | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 10@10.10.131.86 ready
+  Node 11@10.10.131.86 ready
+  Node 2@10.10.131.224 ready
+  Node 18@10.10.131.83 ready
+  Node 14@10.10.131.125 ready
+  Node 5@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 7@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 12@10.10.131.86 ready
+  Node 13@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+  Node 3@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 6@10.10.131.247 ready
+  Node 19@10.10.131.83 ready
+  Node 9@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 16@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 457760.0 txn/s | Latency: 0.06548868 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=6 timer=100ms | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 11@10.10.131.86 ready
+  Node 18@10.10.131.83 ready
+  Node 10@10.10.131.86 ready
+  Node 13@10.10.131.125 ready
+  Node 8@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+  Node 5@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 15@10.10.131.125 ready
+  Node 3@10.10.131.224 ready
+  Node 12@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 1@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 9@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 430746.6666666667 txn/s | Latency: 0.09162990000000001 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/leader_slowness_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: LeaderSlowness slow=6 timer=100ms | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 1@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 8@10.10.131.247 ready
+  Node 12@10.10.131.86 ready
+  Node 7@10.10.131.247 ready
+  Node 11@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 14@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 13@10.10.131.125 ready
+  Node 19@10.10.131.83 ready
+  Node 9@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 18@10.10.131.83 ready
+  Node 16@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 359500.0 txn/s | Latency: 0.062221519999999995 s
+
+######################################################################
+# EXPERIMENT 3: TAIL FORKING (100ms)
+######################################################################
+
+======================================================================
+  EXPERIMENT: TailForking fork=0 timer=100ms | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 17@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+  Node 12@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 18@10.10.131.83 ready
+  Node 11@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 3@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 10@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 13@10.10.131.125 ready
+  Node 14@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 88640.8 txn/s | Latency: 0.0032830819999999997 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/tail_forking_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: TailForking fork=0 timer=100ms | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 11@10.10.131.86 ready
+  Node 2@10.10.131.224 ready
+  Node 9@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 10@10.10.131.86 ready
+  Node 13@10.10.131.125 ready
+  Node 1@10.10.131.224 ready
+  Node 18@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 12@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 16@10.10.131.125 ready
+  Node 7@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+  Node 5@10.10.131.247 ready
+  Node 8@10.10.131.247 ready
+  Node 6@10.10.131.247 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 427813.3333333333 txn/s | Latency: 0.07182008 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/tail_forking_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: TailForking fork=0 timer=100ms | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 12@10.10.131.86 ready
+  Node 2@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 10@10.10.131.86 ready
+  Node 1@10.10.131.224 ready
+  Node 9@10.10.131.86 ready
+  Node 18@10.10.131.83 ready
+  Node 6@10.10.131.247 ready
+  Node 15@10.10.131.125 ready
+  Node 11@10.10.131.86 ready
+  Node 7@10.10.131.247 ready
+  Node 19@10.10.131.83 ready
+  Node 13@10.10.131.125 ready
+  Node 20@10.10.131.83 ready
+  Node 17@10.10.131.83 ready
+  Node 8@10.10.131.247 ready
+  Node 5@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+  Node 16@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 438533.3333333333 txn/s | Latency: 0.10268923999999999 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/tail_forking_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: TailForking fork=0 timer=100ms | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 10@10.10.131.86 ready
+  Node 17@10.10.131.83 ready
+  Node 6@10.10.131.247 ready
+  Node 3@10.10.131.224 ready
+  Node 20@10.10.131.83 ready
+  Node 7@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 12@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 18@10.10.131.83 ready
+  Node 13@10.10.131.125 ready
+  Node 11@10.10.131.86 ready
+  Node 9@10.10.131.86 ready
+  Node 19@10.10.131.83 ready
+  Node 8@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 14@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 376000.0 txn/s | Latency: 0.060420039999999994 s
+
+======================================================================
+  EXPERIMENT: TailForking fork=1 timer=100ms | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 16@10.10.131.125 ready
+  Node 7@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 14@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 18@10.10.131.83 ready
+  Node 9@10.10.131.86 ready
+  Node 11@10.10.131.86 ready
+  Node 1@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 19@10.10.131.83 ready
+  Node 2@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 13@10.10.131.125 ready
+  Node 12@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 15@10.10.131.125 ready
+  Node 3@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 83714.13333333333 txn/s | Latency: 0.0034629560000000005 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/tail_forking_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: TailForking fork=1 timer=100ms | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 11@10.10.131.86 ready
+  Node 9@10.10.131.86 ready
+  Node 12@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 18@10.10.131.83 ready
+  Node 8@10.10.131.247 ready
+  Node 17@10.10.131.83 ready
+  Node 4@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+  Node 1@10.10.131.224 ready
+  Node 10@10.10.131.86 ready
+  Node 7@10.10.131.247 ready
+  Node 19@10.10.131.83 ready
+  Node 16@10.10.131.125 ready
+  Node 3@10.10.131.224 ready
+  Node 5@10.10.131.247 ready
+  Node 15@10.10.131.125 ready
+  Node 2@10.10.131.224 ready
+  Node 20@10.10.131.83 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 446160.0 txn/s | Latency: 0.07992246 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/tail_forking_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: TailForking fork=1 timer=100ms | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 17@10.10.131.83 ready
+  Node 9@10.10.131.86 ready
+  Node 15@10.10.131.125 ready
+  Node 10@10.10.131.86 ready
+  Node 1@10.10.131.224 ready
+  Node 2@10.10.131.224 ready
+  Node 18@10.10.131.83 ready
+  Node 11@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 12@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 4@10.10.131.224 ready
+  Node 19@10.10.131.83 ready
+  Node 6@10.10.131.247 ready
+  Node 3@10.10.131.224 ready
+  Node 14@10.10.131.125 ready
+  Node 8@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 16@10.10.131.125 ready
+  Node 13@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 426346.6666666667 txn/s | Latency: 0.0930438 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/tail_forking_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: TailForking fork=1 timer=100ms | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 8@10.10.131.247 ready
+  Node 13@10.10.131.125 ready
+  Node 20@10.10.131.83 ready
+  Node 4@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 10@10.10.131.86 ready
+  Node 16@10.10.131.125 ready
+  Node 5@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 15@10.10.131.125 ready
+  Node 19@10.10.131.83 ready
+  Node 12@10.10.131.86 ready
+  Node 14@10.10.131.125 ready
+  Node 11@10.10.131.86 ready
+  Node 1@10.10.131.224 ready
+  Node 18@10.10.131.83 ready
+  Node 6@10.10.131.247 ready
+  Node 3@10.10.131.224 ready
+  Node 7@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 357052.63157894736 txn/s | Latency: 0.055753960000000005 s
+
+======================================================================
+  EXPERIMENT: TailForking fork=4 timer=100ms | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 2@10.10.131.224 ready
+  Node 1@10.10.131.224 ready
+  Node 18@10.10.131.83 ready
+  Node 14@10.10.131.125 ready
+  Node 11@10.10.131.86 ready
+  Node 12@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+  Node 5@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 13@10.10.131.125 ready
+  Node 4@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 7@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 8@10.10.131.247 ready
+  Node 15@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 70524.53333333334 txn/s | Latency: 0.004067094 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/tail_forking_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs2.config'
+
+======================================================================
+  EXPERIMENT: TailForking fork=4 timer=100ms | Protocol: HS-2
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 7@10.10.131.247 ready
+  Node 19@10.10.131.83 ready
+  Node 20@10.10.131.83 ready
+  Node 5@10.10.131.247 ready
+  Node 18@10.10.131.83 ready
+  Node 10@10.10.131.86 ready
+  Node 9@10.10.131.86 ready
+  Node 11@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 17@10.10.131.83 ready
+  Node 12@10.10.131.86 ready
+  Node 4@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 8@10.10.131.247 ready
+  Node 13@10.10.131.125 ready
+  Node 2@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 14@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+  Node 1@10.10.131.224 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 424293.3333333333 txn/s | Latency: 0.07024322 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/tail_forking_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/hs.config'
+
+======================================================================
+  EXPERIMENT: TailForking fork=4 timer=100ms | Protocol: HS
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 17@10.10.131.83 ready
+  Node 16@10.10.131.125 ready
+  Node 12@10.10.131.86 ready
+  Node 20@10.10.131.83 ready
+  Node 4@10.10.131.224 ready
+  Node 5@10.10.131.247 ready
+  Node 2@10.10.131.224 ready
+  Node 10@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 8@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 7@10.10.131.247 ready
+  Node 18@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+  Node 13@10.10.131.125 ready
+  Node 11@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 15@10.10.131.125 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 433093.3333333333 txn/s | Latency: 0.09156496 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/tail_forking_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: TailForking fork=4 timer=100ms | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 17@10.10.131.83 ready
+  Node 1@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 12@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 7@10.10.131.247 ready
+  Node 18@10.10.131.83 ready
+  Node 2@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+  Node 10@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 5@10.10.131.247 ready
+  Node 19@10.10.131.83 ready
+  Node 11@10.10.131.86 ready
+  Node 14@10.10.131.125 ready
+  Node 16@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 379000.0 txn/s | Latency: 0.059818380000000004 s
+
+######################################################################
+# EXPERIMENT 4: ROLLBACK (100ms)
+######################################################################
+
+======================================================================
+  EXPERIMENT: Rollback rb=0 timer=100ms | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 9@10.10.131.86 ready
+  Node 2@10.10.131.224 ready
+  Node 10@10.10.131.86 ready
+  Node 3@10.10.131.224 ready
+  Node 11@10.10.131.86 ready
+  Node 1@10.10.131.224 ready
+  Node 7@10.10.131.247 ready
+  Node 12@10.10.131.86 ready
+  Node 18@10.10.131.83 ready
+  Node 4@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 17@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+  Node 5@10.10.131.247 ready
+  Node 16@10.10.131.125 ready
+  Node 13@10.10.131.125 ready
+  Node 6@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 87916.26666666666 txn/s | Latency: 0.0033188760000000006 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/rollback_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: Rollback rb=0 timer=100ms | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 5@10.10.131.247 ready
+  Node 17@10.10.131.83 ready
+  Node 9@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 7@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 11@10.10.131.86 ready
+  Node 8@10.10.131.247 ready
+  Node 18@10.10.131.83 ready
+  Node 14@10.10.131.125 ready
+  Node 1@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 12@10.10.131.86 ready
+  Node 19@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 20@10.10.131.83 ready
+  Node 2@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+  Node 4@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 370684.2105263158 txn/s | Latency: 0.05416314 s
+
+======================================================================
+  EXPERIMENT: Rollback rb=1 timer=100ms | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 10@10.10.131.86 ready
+  Node 9@10.10.131.86 ready
+  Node 12@10.10.131.86 ready
+  Node 11@10.10.131.86 ready
+  Node 13@10.10.131.125 ready
+  Node 2@10.10.131.224 ready
+  Node 20@10.10.131.83 ready
+  Node 7@10.10.131.247 ready
+  Node 19@10.10.131.83 ready
+  Node 3@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 5@10.10.131.247 ready
+  Node 18@10.10.131.83 ready
+  Node 6@10.10.131.247 ready
+  Node 4@10.10.131.224 ready
+  Node 8@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 81745.06666666667 txn/s | Latency: 0.003497626 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/rollback_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: Rollback rb=1 timer=100ms | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 4@10.10.131.224 ready
+  Node 6@10.10.131.247 ready
+  Node 8@10.10.131.247 ready
+  Node 10@10.10.131.86 ready
+  Node 19@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 1@10.10.131.224 ready
+  Node 16@10.10.131.125 ready
+  Node 12@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+  Node 7@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 9@10.10.131.86 ready
+  Node 2@10.10.131.224 ready
+  Node 3@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+  Node 17@10.10.131.83 ready
+  Node 11@10.10.131.86 ready
+  Node 18@10.10.131.83 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 398710.5263157895 txn/s | Latency: 0.052104300000000006 s
+
+======================================================================
+  EXPERIMENT: Rollback rb=4 timer=100ms | Protocol: HS-1
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 9@10.10.131.86 ready
+  Node 10@10.10.131.86 ready
+  Node 1@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 19@10.10.131.83 ready
+  Node 2@10.10.131.224 ready
+  Node 4@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+  Node 11@10.10.131.86 ready
+  Node 18@10.10.131.83 ready
+  Node 12@10.10.131.86 ready
+  Node 5@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 7@10.10.131.247 ready
+  Node 3@10.10.131.224 ready
+  Node 6@10.10.131.247 ready
+  Node 8@10.10.131.247 ready
+  Node 14@10.10.131.125 ready
+  Node 16@10.10.131.125 ready
+  Node 15@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 61886.666666666664 txn/s | Latency: 0.004002856000000001 s
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/rollback_experiment.py", line 44, in generate_config
+    with open(config_path, "w") as f:
+PermissionError: [Errno 13] Permission denied: './config/slot_hs1.config'
+
+======================================================================
+  EXPERIMENT: Rollback rb=4 timer=100ms | Protocol: HS-1-SLOT
+======================================================================
+=== Multi-Node Deploy ===
+Phase 1: Kill old processes...
+Phase 2: Deploy files...
+Files deployed.
+Phase 3: Start nodes...
+Nodes started.
+Phase 4: Readiness check...
+  Node 12@10.10.131.86 ready
+  Node 11@10.10.131.86 ready
+  Node 7@10.10.131.247 ready
+  Node 9@10.10.131.86 ready
+  Node 10@10.10.131.86 ready
+  Node 6@10.10.131.247 ready
+  Node 20@10.10.131.83 ready
+  Node 4@10.10.131.224 ready
+  Node 19@10.10.131.83 ready
+  Node 15@10.10.131.125 ready
+  Node 16@10.10.131.125 ready
+  Node 3@10.10.131.224 ready
+  Node 17@10.10.131.83 ready
+  Node 5@10.10.131.247 ready
+  Node 1@10.10.131.224 ready
+  Node 13@10.10.131.125 ready
+  Node 8@10.10.131.247 ready
+  Node 18@10.10.131.83 ready
+  Node 2@10.10.131.224 ready
+  Node 14@10.10.131.125 ready
+=== All 20 nodes running ===
+  Running benchmark...
+start benchmark
+  Sleeping 25s...
+  >> Throughput: 426078.94736842107 txn/s | Latency: 0.05288468 s
+
+======================================================================
+  ALL EXPERIMENTS COMPLETE
+  Results saved in: /usr/ctw/Onephase-td-hotstuff/scripts/deploy/experiment_results/
+======================================================================
+/usr/ctw/Onephase-td-hotstuff/scripts/deploy/experiment_results/:
+leader_slowness
+rollback
+scalability
+tail_forking
+
+/usr/ctw/Onephase-td-hotstuff/scripts/deploy/experiment_results/leader_slowness:
+HS-1-SLOT_slow0.txt
+HS-1-SLOT_slow1.txt
+HS-1-SLOT_slow4.txt
+HS-1-SLOT_slow6.txt
+HS-1_slow0.txt
+HS-1_slow1.txt
+HS-1_slow4.txt
+HS-1_slow6.txt
+HS-2_slow0.txt
+HS-2_slow1.txt
+HS-2_slow4.txt
+HS-2_slow6.txt
+HS_slow0.txt
+HS_slow1.txt
+HS_slow4.txt
+HS_slow6.txt
+
+/usr/ctw/Onephase-td-hotstuff/scripts/deploy/experiment_results/rollback:
+HS-1-SLOT_rb0.txt
+HS-1-SLOT_rb1.txt
+HS-1-SLOT_rb4.txt
+HS-1_rb0.txt
+HS-1_rb1.txt
+HS-1_rb4.txt
+
+/usr/ctw/Onephase-td-hotstuff/scripts/deploy/experiment_results/scalability:
+HS-1-SLOT_n10.txt
+HS-1-SLOT_n16.txt
+HS-1-SLOT_n19.txt
+HS-1-SLOT_n4.txt
+HS-1_n10.txt
+HS-1_n16.txt
+HS-1_n19.txt
+HS-1_n4.txt
+HS-2_n10.txt
+HS-2_n16.txt
+HS-2_n19.txt
+HS-2_n4.txt
+HS_n10.txt
+HS_n16.txt
+HS_n19.txt
+HS_n4.txt
+
+/usr/ctw/Onephase-td-hotstuff/scripts/deploy/experiment_results/tail_forking:
+HS-1-SLOT_fork0.txt
+HS-1-SLOT_fork1.txt
+HS-1-SLOT_fork4.txt
+HS-1_fork0.txt
+HS-1_fork1.txt
+HS-1_fork4.txt
+HS-2_fork0.txt
+HS-2_fork1.txt
+HS-2_fork4.txt
+HS_fork0.txt
+HS_fork1.txt
+HS_fork4.txt

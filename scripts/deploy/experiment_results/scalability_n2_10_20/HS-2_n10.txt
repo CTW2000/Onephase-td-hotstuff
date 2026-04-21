@@ -1,0 +1,116 @@
+calculate results, number of nodes: 11
+get consensus latency: :-nan
+get propose latency: :2.36254e+09
+get consensus latency: :-nan
+get propose latency: :2.30268e+09
+get consensus latency: :-nan
+get propose latency: :2.37227e+09
+get consensus latency: :-nan
+get propose latency: :2.33592e+09
+get consensus latency: :-nan
+get propose latency: :2.39382e+09
+get lat: ['E20260418', '22:23:54.905115', '213317', 'stats.cpp:436]', 'req', 'client', 'latency:0.00242864']
+get reply latency: latency:2.36285e+09
+get lat: ['E20260418', '22:23:59.905257', '213317', 'stats.cpp:436]', 'req', 'client', 'latency:0.00237956']
+get reply latency: latency:2.30239e+09
+get lat: ['E20260418', '22:24:04.905774', '213317', 'stats.cpp:436]', 'req', 'client', 'latency:0.00245707']
+get reply latency: latency:2.37227e+09
+get lat: ['E20260418', '22:24:09.905920', '213317', 'stats.cpp:436]', 'req', 'client', 'latency:0.00241884']
+get reply latency: latency:2.33592e+09
+get lat: ['E20260418', '22:24:14.906534', '213317', 'stats.cpp:436]', 'req', 'client', 'latency:0.00248199']
+get reply latency: latency:2.39413e+09
+get consensus latency: :-nan
+get propose latency: :0.0103055
+get consensus latency: :-nan
+get propose latency: :0.0103159
+get consensus latency: :-nan
+get propose latency: :0.01038
+get consensus latency: :-nan
+get propose latency: :0.0103851
+get consensus latency: :-nan
+get propose latency: :0.0104411
+get consensus latency: :-nan
+get propose latency: :0.0103301
+get consensus latency: :-nan
+get propose latency: :0.0103326
+get consensus latency: :-nan
+get propose latency: :0.0104032
+get consensus latency: :-nan
+get propose latency: :0.0104108
+get consensus latency: :-nan
+get propose latency: :0.0104562
+get consensus latency: :-nan
+get propose latency: :0.0103247
+get consensus latency: :-nan
+get propose latency: :0.0103469
+get consensus latency: :-nan
+get propose latency: :0.0104021
+get consensus latency: :-nan
+get propose latency: :0.0104172
+get consensus latency: :-nan
+get propose latency: :0.0104665
+get consensus latency: :-nan
+get propose latency: :0.0103552
+get consensus latency: :-nan
+get propose latency: :0.0103717
+get consensus latency: :-nan
+get propose latency: :0.010428
+get consensus latency: :-nan
+get propose latency: :0.0104398
+get consensus latency: :-nan
+get propose latency: :0.0104902
+get consensus latency: :-nan
+get propose latency: :2.36224e+09
+get consensus latency: :-nan
+get propose latency: :2.3021e+09
+get consensus latency: :-nan
+get propose latency: :2.37257e+09
+get consensus latency: :-nan
+get propose latency: :2.33562e+09
+get consensus latency: :-nan
+get propose latency: :2.39413e+09
+get consensus latency: :-nan
+get propose latency: :2.36224e+09
+get consensus latency: :-nan
+get propose latency: :2.3021e+09
+get consensus latency: :-nan
+get propose latency: :2.37257e+09
+get consensus latency: :-nan
+get propose latency: :2.33562e+09
+get consensus latency: :-nan
+get propose latency: :2.39413e+09
+get consensus latency: :-nan
+get propose latency: :2.3544e+09
+get consensus latency: :-nan
+get propose latency: :2.30296e+09
+get consensus latency: :-nan
+get propose latency: :2.37257e+09
+get consensus latency: :-nan
+get propose latency: :2.33474e+09
+get consensus latency: :-nan
+get propose latency: :2.39506e+09
+get consensus latency: :-nan
+get propose latency: :2.36224e+09
+get consensus latency: :-nan
+get propose latency: :2.3021e+09
+get consensus latency: :-nan
+get propose latency: :2.37257e+09
+get consensus latency: :-nan
+get propose latency: :2.33562e+09
+get consensus latency: :-nan
+get propose latency: :2.39413e+09
+get consensus latency: :-nan
+get propose latency: :2.36254e+09
+get consensus latency: :-nan
+get propose latency: :2.30268e+09
+get consensus latency: :-nan
+get propose latency: :2.37227e+09
+get consensus latency: :-nan
+get propose latency: :2.33592e+09
+get consensus latency: :-nan
+get propose latency: :2.39413e+09
+tsp: [155480, 155500, 155500, 155500, 155500, 155500, 155520, 155520, 155520, 156140, 156140, 156180, 156180, 156180, 156300, 156300, 156300, 156300, 156680, 157940, 157940, 157940, 157960, 157960, 157960, 157960, 157980, 157980, 158040, 160220, 160240, 160240, 160240, 160240, 160260, 160260, 160260, 160260, 160260]
+average throughput: 157548.20512820513
+average latency: 0.0024332200000000003
+157548.20512820513
+0.0024332200000000003

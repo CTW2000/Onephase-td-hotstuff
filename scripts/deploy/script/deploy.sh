@@ -6,7 +6,7 @@ set -e
 # load ip list
 . ./script/load_config.sh $1
 
-USER_NAME="ubuntu"
+USER_NAME="hyperchain"
 
 script_path=${BAZEL_WORKSPACE_PATH}/scripts
 

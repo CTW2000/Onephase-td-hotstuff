@@ -1,0 +1,12 @@
+calculate results, number of nodes: 3
+get consensus latency: :-nan
+get propose latency: :0.003395
+get consensus latency: :-nan
+get propose latency: :0.003382
+tsp: []
+Traceback (most recent call last):
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/performance/calculate_result.py", line 154, in <module>
+    max_tps, avg_tps = cal_tps(tps, len(files))
+  File "/usr/ctw/Onephase-td-hotstuff/scripts/deploy/performance/calculate_result.py", line 66, in cal_tps
+    print("average throughput:",sum(tps_sum)/len(tps_sum))
+ZeroDivisionError: division by zero

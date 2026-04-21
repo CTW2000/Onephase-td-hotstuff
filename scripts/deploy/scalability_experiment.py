@@ -3,7 +3,7 @@ import subprocess
 import os
 import sys
 
-ssh_key = "~/hs1-ari.pem"
+ssh_key = "~/.ssh/id_rsa"
 
 def generate_config(
     config_path, 

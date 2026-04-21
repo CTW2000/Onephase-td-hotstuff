@@ -3,7 +3,7 @@
 # Load the configuration
 source ./config/performance.conf
 
-USER_NAME="ubuntu"
+USER_NAME="hyperchain"
 
 # File paths on the remote machine
 SOURCE_FILE="~/resilientdb_tpcc.db"

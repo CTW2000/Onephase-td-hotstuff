@@ -33,7 +33,7 @@ ADMIN_PUBLIC_KEY=${admin_key_path}/admin.key.pub
 CERT_TOOLS_BIN=${base_path}/bazel-bin/tools/certificate_tools
 CONFIG_TOOLS_BIN=${base_path}/bazel-bin/tools/generate_region_config
 
-USERNAME=ubuntu
+USERNAME=hyperchain
 BASE_PORT=17000
 CLIENT_NUM=${client_num}
 
