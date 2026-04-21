@@ -18,17 +18,28 @@
 #
 
 
+. ./script/env.sh
+
+# Apply protocol config template if set
+if [ ! -z "$TEMPLATE_PATH" ]; then
+  echo "Applying config template: $TEMPLATE_PATH"
+  cp "$TEMPLATE_PATH" ./config/template_active.config
+fi
+
 ./script/deploy_local.sh $1
 . ./script/load_config.sh $1
-. ./script/env.sh
 
 home_path="./"
 server_name=`echo "$server" | awk -F':' '{print $NF}'`
 server_bin=${server_name}
 
-bazel run //benchmark/protocols/pbft:kv_service_tools -- $PWD/config_out/client.config 
+# Use the pbft kv_service_tools as the generic client (compatible with all protocols)
+bazel build //benchmark/protocols/pbft:kv_service_tools
+${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools $PWD/config_out/client.config &
 
-sleep 60
+BENCH_DURATION=${BENCH_DURATION:-40}
+echo "Running benchmark for ${BENCH_DURATION} seconds..."
+sleep ${BENCH_DURATION}
 
 echo "benchmark done"
 count=1
@@ -38,6 +49,9 @@ do
 killall -9 ${server_bin}
 ((count++))
 done
+
+# Kill the client tool
+killall -9 kv_service_tools 2>/dev/null
 
 while [ $count -gt 0 ]; do
         wait $pids
@@ -53,7 +67,7 @@ do
   ((idx++))
 done
 
-python3 performance/calculate_result.py `ls result_*_log` > results.log
+python3 performance_local/calculate_result.py `ls result_*_log` > results.log
 
 rm -rf result_*_log
 echo "save result to results.log"

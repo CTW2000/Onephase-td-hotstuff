@@ -242,7 +242,6 @@ int PerformanceManager::BatchProposeMsg() {
   bool start = false;
   while (!stop_) {
     if (send_num_ > 0 && send_num_ >= config_.GetMaxProcessTxn()) {
-      // LOG(ERROR)<<"wait send num:"<<send_num_ << " and " << config_.GetMaxProcessTxn();
       usleep(100);
       continue;
     }
