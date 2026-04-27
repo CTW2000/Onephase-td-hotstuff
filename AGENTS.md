@@ -3,14 +3,20 @@
 > Maintained for Codex sessions. Keep it short, factual, and current.
 > **Rule:** update this file in place whenever project layout, protocols, experiment set, or baseline numbers change. Prune stale facts — do not accrete.
 
+## Required pre-action read
+
+Every new Codex session should read this file first, then read [`.codex/TD_HOTSTUFF_DEVELOPMENT_MEMORY.md`](.codex/TD_HOTSTUFF_DEVELOPMENT_MEMORY.md) before changing protocol code, experiment logic, or validation workflow.
+
+Use [`.codex/BASELINE_REPORT.md`](.codex/BASELINE_REPORT.md) when judging experiment metrics or regressions.
+
 ## What this project is
 
 Apache ResilientDB fork implementing **HotStuff-1** (one-phase Byzantine consensus, [ACM TODS 10.1145/3725308](https://dl.acm.org/doi/10.1145/3725308)) plus baselines and our own **TD-HotStuff** protocol (HS-1-SLOT + weighted QC). Evaluation harness covers scalability, batching, and four Byzantine fault scenarios.
 
 - Language / build: **C++ / Bazel** (`MODULE.bazel`, `WORKSPACE`)
 - Repo root on server: `/usr/ctw/Onephase-td-hotstuff` (host `10.10.131.205`, user `hyperchain`)
-- Current branch: **`origin`** — contains the n=20 baseline work merged with weighted-QC. Tip: `c46ab36 Merge weighted-QC into origin`. Upstream: `origin/origin` on GitHub (`https://github.com/CTW2000/Onephase-td-hotstuff.git`).
-- Other branches: `main`, `dynamicTimeout`, `epochManager`, `weighted-QC`.
+- Current branch: **`origin`** — contains the n=20 baseline work, weighted-QC merge, TD-HS validation fixes, and experiment-manager updates. Tip: `21a5f62 Validate TD-HS merge experiments`. Upstream: `origin/origin` on GitHub (`https://github.com/CTW2000/Onephase-td-hotstuff.git`).
+- Other local branches: `main`. Side branches `weighted-QC`, `dynamicTimeout`, and `epochManager` were deleted after maintainer confirmation.
 - Commit identity: git `user.name` is unset; all previous commits authored as `Ubuntu <1043386498@qq.com>`. Use `git -c user.name=Ubuntu commit …` when committing through scripts.
 
 ## Cluster
