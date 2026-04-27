@@ -12,10 +12,10 @@ class LeaderSlownessExperiment(Experiment):
     category = ExperimentCategory.BYZANTINE
     description = "Performance under artificially slow leaders"
 
-    DEFAULT_PROTOCOLS = ["HS", "HS-2", "HS-1", "HS-1-SLOT"]
+    DEFAULT_PROTOCOLS = ["HS", "HS-2", "HS-1", "HS-1-SLOT", "TD-HS"]
     DEFAULT_SLOW_COUNTS = [0, 1]
     DEFAULT_DELAYS = [10, 100]
-    DEFAULT_REPLICAS = 4
+    DEFAULT_REPLICAS = 20
 
     def __init__(
         self,

@@ -69,18 +69,25 @@ def generate_remote_conf(
 ) -> str:
     """Write a remote IP-list conf file from a machines list.
 
-    Reads IPs from machines_file and selects the first replica_count + client_num.
+    The shared six-server machine file lists replica slots first and the
+    controller/client host last. Keep clients pinned to the final entries so
+    smaller scalability runs do not accidentally move the client onto a
+    replica host.
     """
-    ips = Path(machines_file).read_text().strip().splitlines()
+    ips = [ip.strip() for ip in Path(machines_file).read_text().strip().splitlines()]
     needed = replica_count + client_num
     if len(ips) < needed:
         raise ValueError(
             f"Need {needed} machines but {machines_file} only has {len(ips)}"
         )
 
+    selected_ips = ips[:replica_count]
+    if client_num:
+        selected_ips.extend(ips[-client_num:])
+
     with open(output_file, "w") as f:
         f.write("iplist=(\n")
-        for ip in ips[:needed]:
-            f.write(f"{ip.strip()}\n")
+        for ip in selected_ips:
+            f.write(f"{ip}\n")
         f.write(f")\n\nclient_num={client_num}\n")
     return output_file

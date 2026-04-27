@@ -13,7 +13,7 @@ class ScalabilityExperiment(Experiment):
     description = "Throughput/latency vs. replica count"
 
     DEFAULT_PROTOCOLS = ["HS", "HS-2", "HS-1", "HS-1-SLOT", "TD-HS"]
-    DEFAULT_REPLICA_COUNTS = [5, 10, 15]
+    DEFAULT_REPLICA_COUNTS = [5, 15, 20]
 
     def __init__(self, replica_counts: Optional[List[int]] = None):
         self.replica_counts = replica_counts or self.DEFAULT_REPLICA_COUNTS

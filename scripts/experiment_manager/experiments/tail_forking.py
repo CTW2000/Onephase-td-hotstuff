@@ -1,4 +1,4 @@
-"""Tail-forking attack experiment — HS-1 and HS-1-SLOT only."""
+"""Tail-forking attack experiment for one-phase protocols."""
 
 from typing import List, Optional
 
@@ -12,10 +12,10 @@ class TailForkingExperiment(Experiment):
     category = ExperimentCategory.BYZANTINE
     description = "Performance under tail-forking attack"
 
-    DEFAULT_PROTOCOLS = ["HS-1", "HS-1-SLOT"]
+    DEFAULT_PROTOCOLS = ["HS-1", "HS-1-SLOT", "TD-HS"]
     DEFAULT_FAULTY_COUNTS = [0, 1]
     DEFAULT_DELAYS = [10, 100]
-    DEFAULT_REPLICAS = 4
+    DEFAULT_REPLICAS = 20
 
     def __init__(
         self,

@@ -13,7 +13,7 @@ class ProtocolComparisonExperiment(Experiment):
     category = ExperimentCategory.WEIGHTED
     description = "TD-HotStuff random weight seeds vs. baseline protocols"
 
-    DEFAULT_REPLICAS = 10
+    DEFAULT_REPLICAS = 20
     DEFAULT_SEEDS = list(range(1, 21))  # 20 random seeds
     DEFAULT_BASELINES = ["HS", "HS-1", "HS-2", "HS-1-SLOT", "PBFT"]
     DEFAULT_MIN_WEIGHT = 1

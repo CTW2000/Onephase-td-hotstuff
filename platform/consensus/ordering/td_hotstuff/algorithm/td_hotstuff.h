@@ -12,6 +12,8 @@
 namespace resdb {
 namespace td_hotstuff {
 
+int ComputeWeightThreshold(int f, const std::vector<int>& weights);
+
 class TdHotstuff: public common::ProtocolBase {
  public:
   TdHotstuff(int id, int f, int total_num, SignatureVerifier* verifier, int non_responsive_num, int fork_tail_num, int rollback_num, uint64_t timer_length, const std::vector<int>& weights);
@@ -76,7 +78,7 @@ class TdHotstuff: public common::ProtocolBase {
   // Weighted QC members
   std::vector<int> weights_;       // weight for each replica, indexed by (node_id - 1)
   int total_weight_;               // W = sum of all weights
-  int weight_threshold_;           // threshold = floor(2*W/3) + 1, so accumulated > 2W/3
+  int weight_threshold_;           // weighted form of the HS-1-SLOT quorum, 2*f+1
   int accumulated_weight_ = 0;     // running weight sum for early-exit check
 };
 

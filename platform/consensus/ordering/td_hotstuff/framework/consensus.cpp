@@ -74,7 +74,7 @@ Consensus::Consensus(const ResDBConfig& config,
       wlog << weights[i];
     }
     int W = 0; for (int w : weights) W += w;
-    wlog << "] W=" << W << " threshold=" << ((2*W)/3+1);
+    wlog << "] W=" << W << " threshold=" << ComputeWeightThreshold(f, weights);
     LOG(ERROR) << wlog.str();
   }
 

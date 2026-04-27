@@ -7,6 +7,30 @@
 namespace resdb {
 namespace td_hotstuff {
 
+int ComputeWeightThreshold(int f, const std::vector<int>& weights) {
+  if (weights.empty()) {
+    return 0;
+  }
+
+  int total_weight = 0;
+  for (int weight : weights) {
+    total_weight += weight;
+  }
+
+  int quorum_size = 2 * f + 1;
+  if (quorum_size < 1) {
+    quorum_size = 1;
+  }
+  if (quorum_size > static_cast<int>(weights.size())) {
+    quorum_size = weights.size();
+  }
+
+  // Preserve HS-1-SLOT behavior for uniform weights: n=20,f=6 -> 13.
+  // Non-uniform deployments scale that same quorum fraction by total weight.
+  return (total_weight * quorum_size + static_cast<int>(weights.size()) - 1) /
+         static_cast<int>(weights.size());
+}
+
 TdHotstuff::TdHotstuff(int id, int f, int total_num, SignatureVerifier * verifier, int non_responsive_num, int fork_tail_num, int rollback_num, uint64_t timer_length, const std::vector<int>& weights)
   : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), rollback_num_(rollback_num), timer_length_(timer_length), weights_(weights){
 
@@ -15,9 +39,10 @@ TdHotstuff::TdHotstuff(int id, int f, int total_num, SignatureVerifier * verifie
     for (int w : weights_) {
       total_weight_ += w;
     }
-    // Threshold: strictly greater than 2/3 of total weight
-    // weight_threshold_ = floor(2*W/3) + 1, so accumulated >= threshold means accumulated > 2W/3
-    weight_threshold_ = (2 * total_weight_) / 3 + 1;
+    // Weighted equivalent of HS-1-SLOT's 2*f+1 quorum. This keeps
+    // uniform-weight TD-HS behavior identical to the base protocol while
+    // still allowing non-uniform weights to affect QC formation.
+    weight_threshold_ = ComputeWeightThreshold(f_, weights_);
 
     LOG(ERROR) << "TD-HotStuff init: id=" << id << " f=" << f << " total=" << total_num_
                << " total_weight=" << total_weight_ << " weight_threshold=" << weight_threshold_

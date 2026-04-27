@@ -12,7 +12,7 @@ class WeightedExperiment(Experiment):
     category = ExperimentCategory.WEIGHTED
     description = "TD-HotStuff with non-uniform per-replica weights"
 
-    DEFAULT_REPLICAS = 10
+    DEFAULT_REPLICAS = 20
     DEFAULT_SEEDS = [1, 2, 3, 4, 5]
     DEFAULT_MIN_WEIGHT = 1
     DEFAULT_MAX_WEIGHT = 3

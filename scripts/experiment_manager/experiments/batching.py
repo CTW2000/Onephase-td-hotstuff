@@ -12,9 +12,9 @@ class BatchingExperiment(Experiment):
     category = ExperimentCategory.SIMPLE
     description = "Effect of client batch size on throughput/latency"
 
-    DEFAULT_PROTOCOLS = ["HS", "HS-2", "HS-1", "HS-1-SLOT"]
+    DEFAULT_PROTOCOLS = ["HS", "HS-2", "HS-1", "HS-1-SLOT", "TD-HS"]
     DEFAULT_BATCH_SIZES = [100, 500, 1000, 2000]
-    DEFAULT_REPLICAS = 4
+    DEFAULT_REPLICAS = 20
 
     def __init__(
         self,

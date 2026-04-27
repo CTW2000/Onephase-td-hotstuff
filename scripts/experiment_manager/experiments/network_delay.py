@@ -12,10 +12,10 @@ class NetworkDelayExperiment(Experiment):
     category = ExperimentCategory.BYZANTINE
     description = "Tolerance to artificial network delay on replicas"
 
-    DEFAULT_PROTOCOLS = ["HS", "HS-2", "HS-1", "HS-1-SLOT"]
+    DEFAULT_PROTOCOLS = ["HS", "HS-2", "HS-1", "HS-1-SLOT", "TD-HS"]
     DEFAULT_DELAYS = [1, 50]
     DEFAULT_IMPACTED_COUNTS = [0, 1, 2]
-    DEFAULT_REPLICAS = 4
+    DEFAULT_REPLICAS = 20
 
     def __init__(
         self,

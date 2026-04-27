@@ -125,6 +125,10 @@ int TdHotstuffPerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> co
     if (next_primary) {
       bool update = false;
       if (next_primary != primary_) {
+        if (primary_ % 3 == 1 && primary_ < 3 * config_.GetForkTailNum()) {
+          send_num_--;
+          inflight_[primary_]--;
+        }
         update = true;
       }
       primary_ = next_primary;

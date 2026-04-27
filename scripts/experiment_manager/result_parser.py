@@ -18,21 +18,25 @@ def parse_results_log(results_log_path: str) -> RunResult:
     """
     text = Path(results_log_path).read_text()
 
-    max_tput_m = re.search(r"max throughput:\s*([\d.]+)", text)
-    avg_tput_m = re.search(r"average throughput:\s*([\d.]+)", text)
-    max_lat_m = re.search(r"max latency:\s*([\d.]+)", text)
-    avg_lat_m = re.search(r"average latency:\s*([\d.]+)", text)
+    number = r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)"
+    max_tput_m = re.search(r"max throughput:\s*" + number, text, re.IGNORECASE)
+    avg_tput_m = re.search(r"average throughput:\s*" + number, text, re.IGNORECASE)
+    max_lat_m = re.search(r"max latency:\s*" + number, text, re.IGNORECASE)
+    avg_lat_m = re.search(r"average latency:\s*" + number, text, re.IGNORECASE)
 
-    if not all([max_tput_m, avg_tput_m, max_lat_m, avg_lat_m]):
+    if not all([avg_tput_m, avg_lat_m]):
         raise ValueError(
-            f"Could not parse all metrics from {results_log_path}. "
+            f"Could not parse average metrics from {results_log_path}. "
             f"Content:\n{text[:500]}"
         )
 
+    avg_throughput = float(avg_tput_m.group(1))
+    avg_latency = float(avg_lat_m.group(1))
+
     return RunResult(
-        max_throughput=float(max_tput_m.group(1)),
-        avg_throughput=float(avg_tput_m.group(1)),
-        max_latency=float(max_lat_m.group(1)),
-        avg_latency=float(avg_lat_m.group(1)),
+        max_throughput=float(max_tput_m.group(1)) if max_tput_m else avg_throughput,
+        avg_throughput=avg_throughput,
+        max_latency=float(max_lat_m.group(1)) if max_lat_m else avg_latency,
+        avg_latency=avg_latency,
         raw_log_path=str(results_log_path),
     )

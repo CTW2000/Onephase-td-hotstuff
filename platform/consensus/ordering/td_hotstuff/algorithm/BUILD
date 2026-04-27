@@ -26,3 +26,9 @@ cc_library(
     ],
 )
 
+
+cc_binary(
+    name = "td_hotstuff_weight_threshold_check",
+    srcs = ["td_hotstuff_weight_threshold_check.cpp"],
+    deps = [":td_hotstuff"],
+)

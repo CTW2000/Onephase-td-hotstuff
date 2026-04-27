@@ -1,6 +1,6 @@
 # Onephase-td-hotstuff — Project Memory
 
-> Maintained for Claude Code sessions. Keep it short, factual, and current.
+> Maintained for Codex sessions. Keep it short, factual, and current.
 > **Rule:** update this file in place whenever project layout, protocols, experiment set, or baseline numbers change. Prune stale facts — do not accrete.
 
 ## What this project is
@@ -94,7 +94,7 @@ As of 2026-04-21 the `local` mode of `experiment_manager run scalability` report
 
 ### Reference baseline (distributed, 5-server × 4-node)
 
-Kept at [`.claude/BASELINE_REPORT.md`](.claude/BASELINE_REPORT.md). That file holds the n=20 reference numbers produced before this merge; they still stand for HS-1, HS-1-SLOT, HS-2, HS under the six experiment types we ran at n=20. Future distributed experiments via `experiment_manager run ... --mode remote` must match or beat those numbers — the regression gates there are the acceptance bar.
+Kept at [`.codex/BASELINE_REPORT.md`](.codex/BASELINE_REPORT.md). That file holds the n=20 reference numbers produced before this merge; they still stand for HS-1, HS-1-SLOT, HS-2, HS under the six experiment types we ran at n=20. Future distributed experiments via `experiment_manager run ... --mode remote` must match or beat those numbers — the regression gates there are the acceptance bar.
 
 ## Repo layout changes landed by the merge
 
@@ -105,12 +105,12 @@ New on this branch (`c46ab36`):
 - `scripts/deploy/run_protocol_comparison.sh` — TD-HS random-weight vs. baseline sweep
 
 Removed on this branch (from the n=20 ad-hoc work):
-- `scripts/deploy/experiment_results/` (raw data); baseline numbers migrated to `.claude/BASELINE_REPORT.md`
+- `scripts/deploy/experiment_results/` (raw data); baseline numbers migrated to `.codex/BASELINE_REPORT.md`
 - `scripts/deploy/experiment_full_log.txt`
 
 ## Update protocol for this file
 
 1. Change code → re-run the affected experiments via `experiment_manager` (preferred) or the `local_*` shortcut scripts.
-2. Update `.claude/BASELINE_REPORT.md` in place with new tables; do not append old and new side-by-side.
+2. Update `.codex/BASELINE_REPORT.md` in place with new tables; do not append old and new side-by-side.
 3. If protocol roster, experiment registry, or cluster layout changed, update the tables above **in place**.
-4. Keep this file under ~200 lines. If it grows, move detail into `.claude/` sub-docs and link.
+4. Keep this file under ~200 lines. If it grows, move detail into `.codex/` sub-docs and link.

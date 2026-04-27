@@ -60,11 +60,20 @@ def cal_tps(tps, tot):
         tps_sum.append(v) 
 
     tps_sum.sort()
-    tps_sum = tps_sum[tot:]
-    print("tsp:",tps_sum)
+    trimmed_tps = tps_sum[tot:]
+    if len(trimmed_tps) == 0 and len(tps_sum) > 0:
+        # Tail-forking can produce only one positive sample per replica. In
+        # that case, dropping one warmup sample per log deletes all evidence
+        # and turns a low-throughput run into a parser crash.
+        trimmed_tps = tps_sum
+    print("tsp:", trimmed_tps)
+    if len(trimmed_tps) == 0:
+        print("average throughput:", 0)
+        return tps_max, 0
     # print("max throughput:",tps_max)
-    print("average throughput:",sum(tps_sum)/len(tps_sum))
-    return tps_max, sum(tps_sum)/len(tps_sum)
+    avg_tps = sum(trimmed_tps) / len(trimmed_tps)
+    print("average throughput:", avg_tps)
+    return tps_max, avg_tps
 
 def cal_lat(lat, tot):
     lat_sum = []
