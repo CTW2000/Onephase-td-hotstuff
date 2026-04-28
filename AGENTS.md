@@ -86,6 +86,8 @@ Experiments / suites (from `scripts/experiment_manager/experiments/registry.py`)
 
 Suites: `simple` (scalability + batching), `byzantine` (the four Byzantine experiments), `all`, `full` (all + weighted experiments).
 
+TD-HS weighting policy: every Byzantine experiment keeps a TD-HS uniform control run and also expands TD-HS into deterministic non-uniform profiles `weights=seed1`, `weights=seed2`, and `weights=seed3`. Baseline protocols keep uniform/default behavior and must not receive `TD_HS_WEIGHTS`. Remote runs forward `TD_HS_WEIGHTS` into replica processes through `scripts/deploy/script/deploy_multi.sh`.
+
 Results → `<results-dir>/<experiment>/<run_id>.log`. Checkpoint JSON records status, throughput/latency, and baseline snapshots.
 
 ### ⚠️ Known bug — local runner reuses stale `results.log`

@@ -24,6 +24,14 @@ server_path=${server_path:1}
 server_name=`echo "$server" | awk -F':' '{print $NF}'`
 server_bin=${server_name}
 
+local_server_env=()
+remote_server_env=""
+if [ -n "${TD_HS_WEIGHTS:-}" ]; then
+  local_server_env=(env "TD_HS_WEIGHTS=${TD_HS_WEIGHTS}")
+  td_hs_weights_escaped=$(printf "%q" "${TD_HS_WEIGHTS}")
+  remote_server_env="env TD_HS_WEIGHTS=${td_hs_weights_escaped} "
+fi
+
 bin_path=${BAZEL_WORKSPACE_PATH}/bazel-bin/${server_path}
 output_path=${script_path}/deploy/config_out
 output_key_path=${output_path}/cert
@@ -116,14 +124,14 @@ echo "Phase 3: Start nodes..."
       for n in "${nodes[@]}"; do
         node_dir="${script_path}/deploy/resilientdb_app/${n}"
         # setsid -f: new session + fork → fully detached from shell job control
-        (cd "${node_dir}" && setsid -f ./${server_bin} server.config cert/node_${n}.key.pri cert/cert_${n}.cert 0.0.0.0:${grafana_port} > ${server_bin}.log 2>&1 < /dev/null)
+        (cd "${node_dir}" && "${local_server_env[@]}" setsid -f ./${server_bin} server.config cert/node_${n}.key.pri cert/cert_${n}.cert 0.0.0.0:${grafana_port} > ${server_bin}.log 2>&1 < /dev/null)
         ((grafana_port++))
       done
     else
       # Build startup script content
       start_cmds=""
       for n in "${nodes[@]}"; do
-        start_cmds="${start_cmds}cd ~/resilientdb_app/${n} && nohup ./${server_bin} server.config cert/node_${n}.key.pri cert/cert_${n}.cert 0.0.0.0:${grafana_port} > ${server_bin}.log 2>&1 & "
+        start_cmds="${start_cmds}cd ~/resilientdb_app/${n} && ${remote_server_env}nohup ./${server_bin} server.config cert/node_${n}.key.pri cert/cert_${n}.cert 0.0.0.0:${grafana_port} > ${server_bin}.log 2>&1 & "
         ((grafana_port++))
       done
       # Use timeout to prevent SSH from hanging forever

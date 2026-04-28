@@ -4,8 +4,10 @@ from .scalability import ScalabilityExperiment
 from .batching import BatchingExperiment
 from .leader_slowness import LeaderSlownessExperiment
 from .network_delay import NetworkDelayExperiment
+from .slow_vote import SlowVoteExperiment
 from .rollback import RollbackExperiment
 from .tail_forking import TailForkingExperiment
+from .two_attacker import TwoAttackerExperiment
 from .weighted import WeightedExperiment
 from .protocol_comparison import ProtocolComparisonExperiment
 from .base import Experiment
@@ -15,22 +17,24 @@ EXPERIMENT_CLASSES = {
     "batching": BatchingExperiment,
     "leader_slowness": LeaderSlownessExperiment,
     "network_delay": NetworkDelayExperiment,
+    "slow_vote": SlowVoteExperiment,
     "rollback": RollbackExperiment,
     "tail_forking": TailForkingExperiment,
+    "two_attacker": TwoAttackerExperiment,
     "weighted": WeightedExperiment,
     "protocol_comparison": ProtocolComparisonExperiment,
 }
 
 SUITES = {
     "simple": ["scalability", "batching"],
-    "byzantine": ["leader_slowness", "network_delay", "rollback", "tail_forking"],
+    "byzantine": ["leader_slowness", "network_delay", "slow_vote", "rollback", "tail_forking", "two_attacker"],
     "all": [
         "scalability", "batching",
-        "leader_slowness", "network_delay", "rollback", "tail_forking",
+        "leader_slowness", "network_delay", "slow_vote", "rollback", "tail_forking", "two_attacker",
     ],
     "full": [
         "scalability", "batching",
-        "leader_slowness", "network_delay", "rollback", "tail_forking",
+        "leader_slowness", "network_delay", "slow_vote", "rollback", "tail_forking", "two_attacker",
         "weighted", "protocol_comparison",
     ],
 }

@@ -13,6 +13,8 @@ namespace resdb {
 namespace td_hotstuff {
 
 int ComputeWeightThreshold(int f, const std::vector<int>& weights);
+bool ShouldProposeFinalSlotWithoutTransaction(int slot, uint64_t elapsed_time,
+                                             uint64_t timer_length, bool ready);
 
 class TdHotstuff: public common::ProtocolBase {
  public:

@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from ..models import ExperimentCategory, RunConfig
 from ..protocols import get_protocol
+from ..weight_profiles import expand_weight_profiles_for_protocol
 from .base import Experiment
 
 
@@ -37,7 +38,7 @@ class RollbackExperiment(Experiment):
             for protocol in valid:
                 info = get_protocol(protocol)
                 for num_faulty in self.faulty_counts:
-                    runs.append(RunConfig(
+                    runs.extend(expand_weight_profiles_for_protocol(
                         protocol=protocol,
                         replicas=self.replicas,
                         config_overrides={

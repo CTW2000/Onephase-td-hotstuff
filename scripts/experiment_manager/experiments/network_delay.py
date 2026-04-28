@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from ..models import ExperimentCategory, RunConfig
 from ..protocols import get_protocol
+from ..weight_profiles import expand_weight_profiles_for_protocol
 from .base import Experiment
 
 
@@ -34,7 +35,7 @@ class NetworkDelayExperiment(Experiment):
             for protocol in protocols:
                 info = get_protocol(protocol)
                 for num_impacted in self.impacted_counts:
-                    runs.append(RunConfig(
+                    runs.extend(expand_weight_profiles_for_protocol(
                         protocol=protocol,
                         replicas=self.replicas,
                         config_overrides={

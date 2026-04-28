@@ -31,6 +31,11 @@ int ComputeWeightThreshold(int f, const std::vector<int>& weights) {
          static_cast<int>(weights.size());
 }
 
+bool ShouldProposeFinalSlotWithoutTransaction(int slot, uint64_t elapsed_time,
+                                             uint64_t timer_length, bool ready) {
+  return ready && slot > 0 && elapsed_time >= timer_length;
+}
+
 TdHotstuff::TdHotstuff(int id, int f, int total_num, SignatureVerifier * verifier, int non_responsive_num, int fork_tail_num, int rollback_num, uint64_t timer_length, const std::vector<int>& weights)
   : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), rollback_num_(rollback_num), timer_length_(timer_length), weights_(weights){
 
@@ -104,8 +109,18 @@ void TdHotstuff::AsyncSend() {
   uint64_t start_time = GetCurrentTime();
   while (!IsStop()) {
     auto txn = txns_.Pop();
+    bool force_final_without_txn = false;
     if(txn == nullptr){
-      continue;
+      std::unique_lock<std::mutex> lk(n_mutex_);
+      vote_cv_.wait_for(lk, std::chrono::microseconds(1000), [&] {
+        return ShouldProposeFinalSlotWithoutTransaction(
+            slot, GetCurrentTime() - start_time, timer_length_, Ready());
+      });
+      force_final_without_txn = ShouldProposeFinalSlotWithoutTransaction(
+          slot, GetCurrentTime() - start_time, timer_length_, Ready());
+      if (!force_final_without_txn) {
+        continue;
+      }
     }
 
     while(!IsStop()){
@@ -147,15 +162,19 @@ void TdHotstuff::AsyncSend() {
     
 
     std::vector<std::unique_ptr<Transaction> > txns;
-    txns.push_back(std::move(txn));
-
-    for(int i = 1; i < batch_size_; ++i){
-      auto txn = txns_.Pop();
-      if(txn == nullptr){
-        continue;
-        //break;
-      }
+    if (txn != nullptr) {
       txns.push_back(std::move(txn));
+    }
+
+    if (!force_final_without_txn) {
+      for(int i = 1; i < batch_size_; ++i){
+        auto txn = txns_.Pop();
+        if(txn == nullptr){
+          continue;
+          //break;
+        }
+        txns.push_back(std::move(txn));
+      }
     }
 
     std::unique_ptr<Proposal> proposal =  nullptr;
@@ -163,7 +182,7 @@ void TdHotstuff::AsyncSend() {
     {
       std::unique_lock<std::mutex> lk(mutex_);
       // LOG(ERROR) << "LOCK1" << GetCurrentTime();
-      bool is_final = GetCurrentTime() - start_time >= timer_length_ ? true : false;
+      bool is_final = force_final_without_txn || GetCurrentTime() - start_time >= timer_length_;
       // bool is_final = false;
       proposal = proposal_manager_ -> GenerateProposal(txns, slot, is_final);
       if(id_ < 3 * rollback_num_ && id_ % 3 ==1 && slot == 0) {

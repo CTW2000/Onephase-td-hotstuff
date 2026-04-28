@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from ..models import ExperimentCategory, RunConfig
 from ..protocols import get_protocol
+from ..weight_profiles import expand_weight_profiles_for_protocol
 from .base import Experiment
 
 
@@ -24,7 +25,7 @@ class ScalabilityExperiment(Experiment):
         for protocol in protocols:
             info = get_protocol(protocol)
             for n in self.replica_counts:
-                runs.append(RunConfig(
+                runs.extend(expand_weight_profiles_for_protocol(
                     protocol=protocol,
                     replicas=n,
                     config_overrides={"max_process_txn": info.max_process_txn},
