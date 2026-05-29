@@ -17,7 +17,7 @@
 # under the License.
 #
 
-set -e
+set +e
 
 # load environment parameters
 . ./script/env.sh
@@ -68,7 +68,7 @@ echo "where am i:"$PWD
 
 deploy/script/generate_admin_key.sh ${BAZEL_WORKSPACE_PATH} ${admin_key_path} 
 deploy/script/generate_key.sh ${BAZEL_WORKSPACE_PATH} ${output_key_path} ${#iplist[@]}
-deploy/script/generate_config.sh ${BAZEL_WORKSPACE_PATH} ${output_key_path} ${output_cert_path} ${output_path} ${admin_key_path} ${deploy_iplist[@]}
+deploy/script/generate_config.sh ${BAZEL_WORKSPACE_PATH} ${output_key_path} ${output_cert_path} ${output_path} ${admin_key_path} ${client_num} ${deploy_iplist[@]}
 
 # build kv server
 bazel build ${server}
@@ -112,8 +112,7 @@ fi
 idx=1
 for ip in ${deploy_iplist[@]};
 do
-  run_one_cmd "mkdir -p ${home_path}/${main_folder}/$idx" &
-  ((count++))
+  mkdir -p ${home_path}/${main_folder}/$idx
   ((idx++))
 done
 
@@ -125,7 +124,11 @@ count=0
 for ip in ${deploy_iplist[@]};
 do
   echo "cp -r ${bin_path} ${output_path}/server.config ${output_path}/cert ${home_path}/${main_folder}/$idx" 
-  cp -r ${bin_path} ${output_path}/server.config ${output_path}/cert ${home_path}/${main_folder}/$idx &
+  cp -r ${bin_path} ${output_path}/server.config ${output_path}/cert ${home_path}/${main_folder}/$idx
+  # Copy tpcc.db if it exists (needed by TpccExecutor)
+  if [ -f "${BAZEL_WORKSPACE_PATH}/tpcc.db" ]; then
+    cp ${BAZEL_WORKSPACE_PATH}/tpcc.db ${home_path}/${main_folder}/$idx/
+  fi
   ((count++))
   ((idx++))
 done
@@ -143,7 +146,7 @@ for ip in ${deploy_iplist[@]};
 do
   private_key="cert/node_"${idx}".key.pri"
   cert="cert/cert_"${idx}".cert"
-  cd ${home_path}/${main_folder}/$idx; nohup ./${server_bin} server.config ${private_key} ${cert} ${grafna_port} > ${server_bin}.log 2>&1 &
+  cd ${home_path}/${main_folder}/$idx; GLOG_logtostderr=1 nohup ./${server_bin} server.config ${private_key} ${cert} > ${server_bin}.log 2>&1 &
   ((count++))
   ((idx++))
   ((grafna_port++))

@@ -3,7 +3,7 @@ import subprocess
 import os
 import sys
 
-ssh_key = "~/hs1-ari.pem"
+ssh_key = "~/.ssh/id_rsa"
 
 def generate_config(
     config_path, 
@@ -62,6 +62,8 @@ def get_experiment_command_and_config_and_maxprocesstxn(protocol):
         return "./performance/hs_performance.sh", "./config/hs.config", 5
     elif protocol == "HS-1-SLOT":
         return "./performance/slot_hs1_performance.sh", "./config/slot_hs1.config", 3
+    elif protocol == "TD-HS":
+        return "./performance/td_hotstuff_performance.sh", "./config/td_hotstuff.config", 3
 
 
 def generate_performance_server_conf(k, input_file = "./config/us-east-1-machines", output_file = "./config/performance.conf"):

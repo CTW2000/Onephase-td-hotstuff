@@ -3,7 +3,7 @@
 # Load the configuration
 source ./config/all_machines.conf
 
-USER_NAME="ubuntu"
+USER_NAME="hyperchain"
 
 # File to be copied
 LOCAL_FILE="../../resilientdb_tpcc.db"
