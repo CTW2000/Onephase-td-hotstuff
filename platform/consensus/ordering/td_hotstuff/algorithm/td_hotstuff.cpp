@@ -7,13 +7,13 @@
 namespace resdb {
 namespace td_hotstuff {
 
-HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier * verifier, int non_responsive_num, int fork_tail_num, uint64_t timer_length)
-  : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), timer_length_(timer_length) {
+HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier * verifier, int non_responsive_num, int fork_tail_num, uint64_t timer_length, const std::vector<int64_t>& replica_weights, int64_t quorum_weight)
+  : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), timer_length_(timer_length), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)) {
 
     LOG(ERROR)<<"id:"<<id<<" f:"<<f<<" total:"<<total_num_;
 
   global_stats_ = Stats::GetGlobalStats();
-  proposal_manager_ = std::make_unique<ProposalManager>(id, 2*f_+1, verifier, total_num, non_responsive_num, fork_tail_num);
+  proposal_manager_ = std::make_unique<ProposalManager>(id, 2*f_+1, verifier, total_num, non_responsive_num, fork_tail_num, replica_weights_, quorum_weight_);
   has_sent_ = false;
     send_thread_ = std::thread(&HotStuff::AsyncSend, this);
     commit_thread_ = std::thread(&HotStuff::AsyncCommit, this);
@@ -115,6 +115,32 @@ bool HotStuff::ReceiveTransaction(std::unique_ptr<Transaction> txn) {
   return true;
 }
 
+int64_t HotStuff::WeightForSigner(int signer) const {
+  if (signer < 1 || signer > static_cast<int>(replica_weights_.size())) {
+    return 0;
+  }
+  return replica_weights_[signer - 1];
+}
+
+int64_t HotStuff::CertificateWeight(
+    const std::map<int, std::unique_ptr<Certificate>>& certs) const {
+  int64_t total_weight = 0;
+  for (const auto& entry : certs) {
+    total_weight += WeightForSigner(entry.first);
+  }
+  return total_weight;
+}
+
+std::vector<int> HotStuff::CertificateSigners(
+    const std::map<int, std::unique_ptr<Certificate>>& certs) const {
+  std::vector<int> signers;
+  signers.reserve(certs.size());
+  for (const auto& entry : certs) {
+    signers.push_back(entry.first);
+  }
+  return signers;
+}
+
 bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   if (IsSlowReplica(id_)) {
     usleep(GetRandomDelay());
@@ -186,15 +212,19 @@ bool HotStuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
 
   int view = cert->view();
   std::string hash = cert->hash();
-  receive_[view][hash].insert(std::make_pair(cert->signer(), std::move(cert)));
+  auto& certs = receive_[view][hash];
+  int64_t previous_weight = CertificateWeight(certs);
+  certs.insert(std::make_pair(cert->signer(), std::move(cert)));
+  int64_t current_weight = CertificateWeight(certs);
 
-  //LOG(ERROR)<<"RECEIVE proposer cert :"<<view<<" size:"<<receive_[view][hash].size();
-  if(receive_[view][hash].size() == 2*f_+1){
+  //LOG(ERROR)<<"RECEIVE proposer cert :"<<view<<" weight:"<<current_weight;
+  if(previous_weight < quorum_weight_ && current_weight >= quorum_weight_){
     std::unique_ptr<QC> qc = std::make_unique<QC>();
     qc->set_hash(hash);
     qc->set_view(view);
+    qc->set_signer_bitmap(BuildSignerBitmap(CertificateSigners(certs), total_num_));
 
-    for(auto & it: receive_[view][hash]){
+    for(auto & it: certs){
       *qc->add_signatures() = it.second->sign();
     }
 

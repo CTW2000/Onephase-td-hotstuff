@@ -34,6 +34,7 @@ message QC {
   int32 view = 2;
   bytes hash = 3;
   int32 slot = 4;
+  bytes signer_bitmap = 5;
 }
 
 message Header {

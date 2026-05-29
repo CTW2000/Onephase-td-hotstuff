@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstdint>
+#include <map>
 #include <thread>
+#include <vector>
 
 #include "platform/common/queue/lock_free_queue.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
@@ -13,7 +16,7 @@ namespace td_hotstuff {
 
 class HotStuff: public common::ProtocolBase {
  public:
-  HotStuff(int id, int f, int total_num, SignatureVerifier* verifier, int non_responsive_num, int fork_tail_num, uint64_t timer_length);
+  HotStuff(int id, int f, int total_num, SignatureVerifier* verifier, int non_responsive_num, int fork_tail_num, uint64_t timer_length, const std::vector<int64_t>& replica_weights = {}, int64_t quorum_weight = 0);
   ~HotStuff();
 
   //  recv txn -> send block with links -> rec block ack -> send block with certs
@@ -34,6 +37,11 @@ class HotStuff: public common::ProtocolBase {
     bool IsLeader(int view);
 
     void CommitProposal(std::unique_ptr<Proposal> p);
+    int64_t WeightForSigner(int signer) const;
+    int64_t CertificateWeight(
+        const std::map<int, std::unique_ptr<Certificate>>& certs) const;
+    std::vector<int> CertificateSigners(
+        const std::map<int, std::unique_ptr<Certificate>>& certs) const;
 
  private:
   LockFreeQueue<Transaction> txns_;
@@ -63,6 +71,8 @@ class HotStuff: public common::ProtocolBase {
   uint64_t crash_num_ = 0;
 
   uint64_t timer_length_;
+  std::vector<int64_t> replica_weights_;
+  int64_t quorum_weight_;
 };
 
 }  // namespace td_hotstuff

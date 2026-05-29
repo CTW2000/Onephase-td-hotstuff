@@ -28,10 +28,47 @@
 #include <glog/logging.h>
 #include <unistd.h>
 
+#include <cstdlib>
+#include <sstream>
+#include <string>
+#include <vector>
+
 #include "common/utils/utils.h"
 
 namespace resdb {
 namespace td_hotstuff {
+namespace {
+
+std::vector<int64_t> ParseReplicaWeightsFromEnv(int total_replicas) {
+  std::vector<int64_t> weights(total_replicas, 1);
+  const char* raw_weights = std::getenv("TD_HS_WEIGHTS");
+  if (raw_weights == nullptr || std::string(raw_weights).empty()) {
+    return weights;
+  }
+
+  std::stringstream input(raw_weights);
+  std::string item;
+  std::vector<int64_t> parsed_weights;
+  while (std::getline(input, item, ',')) {
+    if (item.empty()) {
+      LOG(FATAL) << "TD_HS_WEIGHTS has an empty weight entry";
+    }
+    int64_t weight = std::stoll(item);
+    if (weight <= 0) {
+      LOG(FATAL) << "TD_HS_WEIGHTS must contain positive weights: "
+                 << raw_weights;
+    }
+    parsed_weights.push_back(weight);
+  }
+
+  if (parsed_weights.size() != static_cast<size_t>(total_replicas)) {
+    LOG(FATAL) << "TD_HS_WEIGHTS size:" << parsed_weights.size()
+               << " does not match replica num:" << total_replicas;
+  }
+  return parsed_weights;
+}
+
+}  // namespace
 
 std::unique_ptr<HotStuffPerformanceManager> Consensus::GetPerformanceManager() {
         return config_.IsPerformanceRunning()
@@ -55,7 +92,9 @@ Consensus::Consensus(const ResDBConfig& config,
           .public_key()
           .public_key_info()
           .type() != CertificateKeyInfo::CLIENT) {
-    hs_= std::make_unique<HotStuff>(config_.GetSelfInfo().id(), f, total_replicas, GetSignatureVerifier(), config_.GetNonResponsiveNum(), config_.GetForkTailNum(), config_.GetTimerLength() * 1000);
+    std::vector<int64_t> replica_weights = ParseReplicaWeightsFromEnv(total_replicas);
+    int64_t quorum_weight = CalculateQuorumWeight(replica_weights);
+    hs_= std::make_unique<HotStuff>(config_.GetSelfInfo().id(), f, total_replicas, GetSignatureVerifier(), config_.GetNonResponsiveNum(), config_.GetForkTailNum(), config_.GetTimerLength() * 1000, replica_weights, quorum_weight);
     InitProtocol(hs_.get());
   }
 }

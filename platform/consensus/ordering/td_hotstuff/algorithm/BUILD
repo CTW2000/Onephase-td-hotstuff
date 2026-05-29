@@ -25,3 +25,14 @@ cc_library(
         "//platform/statistic:stats",
     ],
 )
+
+
+cc_test(
+    name = "td_hotstuff_weight_threshold_check",
+    srcs = ["td_hotstuff_weight_threshold_check.cpp"],
+    deps = [
+        ":proposal_manager",
+        "//common/crypto:mock_signature_verifier",
+        "//common/test:test_main",
+    ],
+)
