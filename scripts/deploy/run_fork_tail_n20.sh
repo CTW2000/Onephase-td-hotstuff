@@ -15,7 +15,7 @@ mkdir -p "$RESULT_DIR"
 LOCAL_IP="10.10.131.205"
 SERVERS="10.10.131.224 10.10.131.247 10.10.131.86 10.10.131.125 10.10.131.83"
 SLEEP_TIME=25
-PROTOCOLS=("HS-1" "HS-2" "HS" "HS-1-SLOT")
+PROTOCOLS=("HS-1" "HS-2" "HS" "HS-1-SLOT" "TD-Hotstuff")
 FORK_COUNTS=(0 1 4)
 N=20
 TIMER=100
@@ -73,6 +73,7 @@ run_single_experiment() {
     "HS-2")      export TEMPLATE_PATH=$PWD/config/hs2.config;      export server=//benchmark/protocols/hs2:kv_server_performance;;
     "HS")        export TEMPLATE_PATH=$PWD/config/hs.config;       export server=//benchmark/protocols/hs:kv_server_performance;;
     "HS-1-SLOT") export TEMPLATE_PATH=$PWD/config/slot_hs1.config; export server=//benchmark/protocols/slot_hs1:kv_server_performance;;
+    "TD-Hotstuff"|"TD-HotStuff"|"TD-HS") export TEMPLATE_PATH=$PWD/config/td_hotstuff.config; export server=//benchmark/protocols/td_hotstuff:kv_server_performance;;
   esac
 
   bash ./script/deploy_multi.sh "$config_file" 2>&1 | grep -E "(=== |Phase|deployed|started|ready|running)"
@@ -109,6 +110,7 @@ bazel build //benchmark/protocols/hs1:kv_server_performance \
             //benchmark/protocols/hs2:kv_server_performance \
             //benchmark/protocols/hs:kv_server_performance \
             //benchmark/protocols/slot_hs1:kv_server_performance \
+            //benchmark/protocols/td_hotstuff:kv_server_performance \
             //benchmark/protocols/pbft:kv_service_tools 2>&1 | tail -5
 
 echo ""
@@ -123,6 +125,7 @@ for num_fork in "${FORK_COUNTS[@]}"; do
       "HS-2")      mpt=4; cfg="hs2";;
       "HS")        mpt=5; cfg="hs";;
       "HS-1-SLOT") mpt=3; cfg="slot_hs1";;
+      "TD-Hotstuff"|"TD-HotStuff"|"TD-HS") mpt=5; cfg="td_hotstuff";;
     esac
 
     python3 -c "

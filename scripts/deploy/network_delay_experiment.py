@@ -62,6 +62,8 @@ def get_experiment_command_and_config_and_maxprocesstxn(protocol):
         return "./performance/hs_performance.sh", "./config/hs.config", 5
     elif protocol == "HS-1-SLOT":
         return "./performance/slot_hs1_performance.sh", "./config/slot_hs1.config", 3
+    elif protocol in ("TD-Hotstuff", "TD-HotStuff", "TD-HS"):
+        return "./performance/td_hotstuff_performance.sh", "./config/td_hotstuff.config", 5
 
 
 def generate_performance_server_conf(k, input_file = "./config/us-east-1-machines", output_file = "./config/performance.conf"):
