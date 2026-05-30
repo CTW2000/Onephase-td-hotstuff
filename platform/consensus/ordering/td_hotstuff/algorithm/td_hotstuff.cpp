@@ -14,6 +14,7 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier * verifier, i
 
   global_stats_ = Stats::GetGlobalStats();
   proposal_manager_ = std::make_unique<ProposalManager>(id, 2*f_+1, verifier, total_num, non_responsive_num, fork_tail_num, replica_weights_, quorum_weight_);
+  qc_evidence_recorder_ = AsyncQcEvidenceRecorder::CreateFromEnv(id_, total_num_);
   has_sent_ = false;
     send_thread_ = std::thread(&HotStuff::AsyncSend, this);
     commit_thread_ = std::thread(&HotStuff::AsyncCommit, this);
@@ -22,6 +23,9 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier * verifier, i
 }
 
 HotStuff::~HotStuff() {
+  if (qc_evidence_recorder_ != nullptr) {
+    qc_evidence_recorder_->Stop();
+  }
 }
 
 int HotStuff::NextLeader(int view){
@@ -158,6 +162,12 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     if(!proposal_manager_->Verify(*proposal)){
       LOG(ERROR)<<" proposal invalid";
       return false;
+    }
+
+    if (qc_evidence_recorder_ != nullptr) {
+      const QC& qc = proposal->header().qc();
+      qc_evidence_recorder_->RecordQc(qc.view(), qc.hash(),
+                                      qc.signer_bitmap());
     }
 
     cert = GenerateCertificate(*proposal);

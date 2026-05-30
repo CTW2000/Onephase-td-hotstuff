@@ -13,12 +13,23 @@ cc_library(
     ],
 )
 
+
+cc_library(
+    name = "qc_evidence_recorder",
+    srcs = ["qc_evidence_recorder.cpp"],
+    hdrs = ["qc_evidence_recorder.h"],
+    deps = [
+        "//common:glog",
+    ],
+)
+
 cc_library(
     name = "td_hotstuff",
     srcs = ["td_hotstuff.cpp"],
     hdrs = ["td_hotstuff.h"],
     deps = [
         ":proposal_manager",
+        ":qc_evidence_recorder",
         "//common:comm",
         "//platform/common/queue:lock_free_queue",
         "//platform/consensus/ordering/common/algorithm:protocol_base",
@@ -33,6 +44,16 @@ cc_test(
     deps = [
         ":proposal_manager",
         "//common/crypto:mock_signature_verifier",
+        "//common/test:test_main",
+    ],
+)
+
+
+cc_test(
+    name = "qc_evidence_recorder_test",
+    srcs = ["qc_evidence_recorder_test.cpp"],
+    deps = [
+        ":qc_evidence_recorder",
         "//common/test:test_main",
     ],
 )

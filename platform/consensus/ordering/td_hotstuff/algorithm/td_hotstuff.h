@@ -2,11 +2,13 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <thread>
 #include <vector>
 
 #include "platform/common/queue/lock_free_queue.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/qc_evidence_recorder.h"
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
 #include "platform/consensus/ordering/common/algorithm/protocol_base.h"
 #include "platform/statistic/stats.h"
@@ -73,6 +75,7 @@ class HotStuff: public common::ProtocolBase {
   uint64_t timer_length_;
   std::vector<int64_t> replica_weights_;
   int64_t quorum_weight_;
+  std::unique_ptr<AsyncQcEvidenceRecorder> qc_evidence_recorder_;
 };
 
 }  // namespace td_hotstuff
