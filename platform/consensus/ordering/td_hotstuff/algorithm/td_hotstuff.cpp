@@ -8,21 +8,33 @@ namespace resdb {
 namespace td_hotstuff {
 
 HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier * verifier, int non_responsive_num, int fork_tail_num, uint64_t timer_length, const std::vector<int64_t>& replica_weights, int64_t quorum_weight)
-  : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), timer_length_(timer_length), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)) {
+  : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), timer_length_(timer_length), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), weight_schedule_(std::make_shared<WeightSchedule>(total_num, replica_weights_)) {
 
     LOG(ERROR)<<"id:"<<id<<" f:"<<f<<" total:"<<total_num_;
 
   global_stats_ = Stats::GetGlobalStats();
-  proposal_manager_ = std::make_unique<ProposalManager>(id, 2*f_+1, verifier, total_num, non_responsive_num, fork_tail_num, replica_weights_, quorum_weight_);
-  qc_evidence_recorder_ = AsyncQcEvidenceRecorder::CreateFromEnv(id_, total_num_, replica_weights_);
+  proposal_manager_ = std::make_unique<ProposalManager>(id, 2*f_+1, verifier, total_num, non_responsive_num, fork_tail_num, replica_weights_, quorum_weight_, weight_schedule_);
+  weight_update_manager_ = std::make_unique<WeightUpdateManager>(id_, total_num_, verifier_, WeightUpdateConfigFromEnv());
+  qc_evidence_recorder_ = AsyncQcEvidenceRecorder::CreateFromEnv(id_, total_num_, weight_schedule_->ActiveWeights());
+  SyncReputationWeightsToActiveSchedule();
   has_sent_ = false;
     send_thread_ = std::thread(&HotStuff::AsyncSend, this);
     commit_thread_ = std::thread(&HotStuff::AsyncCommit, this);
+    weight_plugin_broadcast_thread_ =
+        std::thread(&HotStuff::AsyncBroadcastWeightPluginMessages, this);
     batch_size_ = 1;
   qc_formed_ = proposal_received_ = false;
 }
 
 HotStuff::~HotStuff() {
+  {
+    std::unique_lock<std::mutex> lk(weight_plugin_broadcast_mutex_);
+    stop_weight_plugin_broadcast_ = true;
+  }
+  weight_plugin_broadcast_cv_.notify_all();
+  if (weight_plugin_broadcast_thread_.joinable()) {
+    weight_plugin_broadcast_thread_.join();
+  }
   if (qc_evidence_recorder_ != nullptr) {
     qc_evidence_recorder_->Stop();
   }
@@ -83,13 +95,16 @@ void HotStuff::AsyncSend() {
       usleep(timer_length_);
     }
 
-    std::unique_ptr<Proposal> proposal =  nullptr;
+    std::unique_ptr<Proposal> proposal = nullptr;
+    WeightPluginOutboundMessages weight_messages;
     {
       std::unique_lock<std::mutex> lk(mutex_);
+      weight_messages = DrainWeightPlugin(proposal_manager_->CurrentView());
       proposal = proposal_manager_ -> GenerateProposal(txns);
       //LOG(ERROR)<<"propose view:"<<proposal->header().view();
     }
     has_sent_ = true;
+    BroadcastWeightPluginMessages(weight_messages);
     broadcast_call_(MessageType::NewProposal, *proposal);
   }
 }
@@ -119,7 +134,10 @@ bool HotStuff::ReceiveTransaction(std::unique_ptr<Transaction> txn) {
   return true;
 }
 
-int64_t HotStuff::WeightForSigner(int signer) const {
+int64_t HotStuff::WeightForSigner(int signer, int view) const {
+  if (weight_schedule_ != nullptr) {
+    return weight_schedule_->WeightForSigner(signer, view);
+  }
   if (signer < 1 || signer > static_cast<int>(replica_weights_.size())) {
     return 0;
   }
@@ -127,10 +145,10 @@ int64_t HotStuff::WeightForSigner(int signer) const {
 }
 
 int64_t HotStuff::CertificateWeight(
-    const std::map<int, std::unique_ptr<Certificate>>& certs) const {
+    const std::map<int, std::unique_ptr<Certificate>>& certs, int view) const {
   int64_t total_weight = 0;
   for (const auto& entry : certs) {
-    total_weight += WeightForSigner(entry.first);
+    total_weight += WeightForSigner(entry.first, view);
   }
   return total_weight;
 }
@@ -145,12 +163,126 @@ std::vector<int> HotStuff::CertificateSigners(
   return signers;
 }
 
+
+void HotStuff::SyncReputationWeightsToActiveSchedule() {
+  if (qc_evidence_recorder_ == nullptr || weight_schedule_ == nullptr) {
+    return;
+  }
+  qc_evidence_recorder_->UpdateReputationWeights(
+      weight_schedule_->ActiveWeights(), weight_schedule_->ActiveWeightRoot(),
+      weight_schedule_->ActiveWeightVersion());
+}
+
+WeightSnapshot HotStuff::CurrentWeightSnapshot(int current_view) const {
+  return MakeWeightSnapshot(*weight_schedule_, current_view);
+}
+
+WeightPluginOutboundMessages HotStuff::DrainWeightPlugin(int current_view) {
+  WeightPluginOutboundMessages messages;
+  if (weight_update_manager_ == nullptr || !weight_update_manager_->enabled()) {
+    return messages;
+  }
+
+  WeightSnapshot snapshot = CurrentWeightSnapshot(current_view);
+  if (qc_evidence_recorder_ != nullptr) {
+    weight_update_manager_->AddLocalCandidates(
+        qc_evidence_recorder_->TakeCompletedReputationCandidates(), snapshot);
+  }
+
+  messages = weight_update_manager_->DrainOutboundMessages(current_view,
+                                                           snapshot);
+  std::vector<InstallableWeightUpdate> installable_updates =
+      weight_update_manager_->TakeInstallableUpdates(current_view, snapshot);
+  for (const InstallableWeightUpdate& update : installable_updates) {
+    if (InstallWeightUpdate(update, current_view)) {
+      weight_update_manager_->OnWeightsActivated(
+          CurrentWeightSnapshot(current_view));
+    }
+  }
+  return messages;
+}
+
+bool HotStuff::InstallWeightUpdate(const InstallableWeightUpdate& update,
+                                   int current_view) {
+  if (weight_schedule_ == nullptr || update.activation_view > current_view ||
+      update.old_weight_root != weight_schedule_->ActiveWeightRoot() ||
+      update.old_weight_version != weight_schedule_->ActiveWeightVersion()) {
+    return false;
+  }
+  if (!weight_schedule_->ScheduleUpdate(update.activation_view,
+                                        update.next_weights,
+                                        update.old_weight_root,
+                                        update.old_weight_version)) {
+    return false;
+  }
+  weight_schedule_->ActivateUpTo(current_view);
+  SyncReputationWeightsToActiveSchedule();
+  LOG(ERROR) << "activated TD-Hotstuff weight update version:"
+             << weight_schedule_->ActiveWeightVersion()
+             << " view:" << current_view
+             << " root:" << weight_schedule_->ActiveWeightRoot();
+  return true;
+}
+
+void HotStuff::BroadcastWeightPluginMessages(
+    const WeightPluginOutboundMessages& messages) {
+  if (messages.candidates.empty() && messages.votes.empty() &&
+      messages.certs.empty()) {
+    return;
+  }
+  {
+    std::unique_lock<std::mutex> lk(weight_plugin_broadcast_mutex_);
+    weight_plugin_broadcast_queue_.push_back(messages);
+  }
+  weight_plugin_broadcast_cv_.notify_one();
+}
+
+void HotStuff::AsyncBroadcastWeightPluginMessages() {
+  while (true) {
+    WeightPluginOutboundMessages messages;
+    {
+      std::unique_lock<std::mutex> lk(weight_plugin_broadcast_mutex_);
+      weight_plugin_broadcast_cv_.wait_for(
+          lk, std::chrono::milliseconds(100), [this] {
+            return stop_weight_plugin_broadcast_ ||
+                   !weight_plugin_broadcast_queue_.empty();
+          });
+      if (weight_plugin_broadcast_queue_.empty()) {
+        if (stop_weight_plugin_broadcast_ || IsStop()) {
+          break;
+        }
+        continue;
+      }
+      messages = std::move(weight_plugin_broadcast_queue_.front());
+      weight_plugin_broadcast_queue_.pop_front();
+    }
+    BroadcastWeightPluginMessagesNow(messages);
+  }
+}
+
+void HotStuff::BroadcastWeightPluginMessagesNow(
+    const WeightPluginOutboundMessages& messages) {
+  if (broadcast_call_ == nullptr) {
+    return;
+  }
+  for (const CandidateWeightUpdate& candidate : messages.candidates) {
+    broadcast_call_(MessageType::WeightUpdateCandidateMsg, candidate);
+  }
+  for (const WeightUpdateVote& vote : messages.votes) {
+    broadcast_call_(MessageType::WeightUpdateVoteMsg, vote);
+  }
+  for (const WeightUpdateCert& cert : messages.certs) {
+    broadcast_call_(MessageType::WeightUpdateCertMsg, cert);
+  }
+}
+
 bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   if (IsSlowReplica(id_)) {
     usleep(GetRandomDelay());
   }
     int view = proposal->header().view();
     std::unique_ptr<Certificate> cert = nullptr;
+    WeightPluginOutboundMessages weight_messages;
   {
     // LOG(ERROR)<<"RECEIVE proposer view:"<<proposal->header().view() << " from: " << proposal->sender();
     std::unique_lock<std::mutex> lk(mutex_);
@@ -169,6 +301,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
       qc_evidence_recorder_->RecordQc(qc.view(), qc.hash(),
                                       qc.signer_bitmap());
     }
+    weight_messages = DrainWeightPlugin(view);
 
     cert = GenerateCertificate(*proposal);
     assert(cert != nullptr);
@@ -188,6 +321,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     }
   }
 
+  BroadcastWeightPluginMessages(weight_messages);
   auto next_leader = proposal_manager_->GetLeader(view+1);
 
   SendMessage(MessageType::Vote, *cert, next_leader);
@@ -211,44 +345,100 @@ bool HotStuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
     return true;
   }
 
-  std::unique_lock<std::mutex> lk(mutex_);
-  //LOG(ERROR)<<"RECEIVE proposer cert :"<<cert->view()<<" from:"<<cert->signer();
-  bool valid = proposal_manager_->VerifyCert(*cert);
-  if(!valid){
-    LOG(ERROR) << "Verify message fail";
-    assert(1==0);
+  WeightPluginOutboundMessages weight_messages;
+  {
+    std::unique_lock<std::mutex> lk(mutex_);
+    //LOG(ERROR)<<"RECEIVE proposer cert :"<<cert->view()<<" from:"<<cert->signer();
+    bool valid = proposal_manager_->VerifyCert(*cert);
+    if(!valid){
+      LOG(ERROR) << "Verify message fail";
+      assert(1==0);
+      return false;
+    }
+
+    int view = cert->view();
+    std::string hash = cert->hash();
+    auto& certs = receive_[view][hash];
+    int64_t previous_weight = CertificateWeight(certs, view);
+    certs.insert(std::make_pair(cert->signer(), std::move(cert)));
+    int64_t current_weight = CertificateWeight(certs, view);
+
+    //LOG(ERROR)<<"RECEIVE proposer cert :"<<view<<" weight:"<<current_weight;
+    const int64_t quorum_weight = weight_schedule_->QuorumWeightForView(view);
+    if(previous_weight < quorum_weight && current_weight >= quorum_weight){
+      std::unique_ptr<QC> qc = std::make_unique<QC>();
+      qc->set_hash(hash);
+      qc->set_view(view);
+      qc->set_signer_bitmap(BuildSignerBitmap(CertificateSigners(certs), total_num_));
+
+      for(auto & it: certs){
+        *qc->add_signatures() = it.second->sign();
+      }
+
+      qc_formed_ = true;
+      if (proposal_received_) {
+        // LOG(ERROR) << "after qc formed";
+        proposal_manager_->AddQC(std::move(qc));
+        StartNewRound();
+        qc_formed_ = proposal_received_ = false;
+      } else {
+        formed_qc_ = std::move(qc);
+      }
+
+    }
+    weight_messages = DrainWeightPlugin(view);
+  }
+  BroadcastWeightPluginMessages(weight_messages);
+  return true;
+}
+
+bool HotStuff::ReceiveWeightUpdateCandidate(
+    std::unique_ptr<CandidateWeightUpdate> candidate) {
+  if (candidate == nullptr || weight_update_manager_ == nullptr ||
+      !weight_update_manager_->enabled()) {
     return false;
   }
-
-  int view = cert->view();
-  std::string hash = cert->hash();
-  auto& certs = receive_[view][hash];
-  int64_t previous_weight = CertificateWeight(certs);
-  certs.insert(std::make_pair(cert->signer(), std::move(cert)));
-  int64_t current_weight = CertificateWeight(certs);
-
-  //LOG(ERROR)<<"RECEIVE proposer cert :"<<view<<" weight:"<<current_weight;
-  if(previous_weight < quorum_weight_ && current_weight >= quorum_weight_){
-    std::unique_ptr<QC> qc = std::make_unique<QC>();
-    qc->set_hash(hash);
-    qc->set_view(view);
-    qc->set_signer_bitmap(BuildSignerBitmap(CertificateSigners(certs), total_num_));
-
-    for(auto & it: certs){
-      *qc->add_signatures() = it.second->sign();
-    }
-
-    qc_formed_ = true;
-    if (proposal_received_) {
-      // LOG(ERROR) << "after qc formed";
-      proposal_manager_->AddQC(std::move(qc));
-      StartNewRound();
-      qc_formed_ = proposal_received_ = false;
-    } else {
-      formed_qc_ = std::move(qc);
-    }
-
+  WeightPluginOutboundMessages weight_messages;
+  {
+    std::unique_lock<std::mutex> lk(mutex_);
+    const int current_view = proposal_manager_->CurrentView();
+    weight_update_manager_->HandleCandidate(
+        *candidate, CurrentWeightSnapshot(current_view));
+    weight_messages = DrainWeightPlugin(current_view);
   }
+  BroadcastWeightPluginMessages(weight_messages);
+  return true;
+}
+
+bool HotStuff::ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote) {
+  if (vote == nullptr || weight_update_manager_ == nullptr ||
+      !weight_update_manager_->enabled()) {
+    return false;
+  }
+  WeightPluginOutboundMessages weight_messages;
+  {
+    std::unique_lock<std::mutex> lk(mutex_);
+    const int current_view = proposal_manager_->CurrentView();
+    weight_update_manager_->HandleVote(*vote, CurrentWeightSnapshot(current_view));
+    weight_messages = DrainWeightPlugin(current_view);
+  }
+  BroadcastWeightPluginMessages(weight_messages);
+  return true;
+}
+
+bool HotStuff::ReceiveWeightUpdateCert(std::unique_ptr<WeightUpdateCert> cert) {
+  if (cert == nullptr || weight_update_manager_ == nullptr ||
+      !weight_update_manager_->enabled()) {
+    return false;
+  }
+  WeightPluginOutboundMessages weight_messages;
+  {
+    std::unique_lock<std::mutex> lk(mutex_);
+    const int current_view = proposal_manager_->CurrentView();
+    weight_update_manager_->HandleCert(*cert, CurrentWeightSnapshot(current_view));
+    weight_messages = DrainWeightPlugin(current_view);
+  }
+  BroadcastWeightPluginMessages(weight_messages);
   return true;
 }
 

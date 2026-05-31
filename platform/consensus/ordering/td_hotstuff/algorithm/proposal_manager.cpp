@@ -59,8 +59,8 @@ bool SignerBitmapMatchesSignatures(const QC& qc, int total_num) {
   return qc.signer_bitmap() == BuildSignerBitmap(signers, total_num);
 }
 
-ProposalManager::ProposalManager(int32_t id, int limit_count, SignatureVerifier* verifier, int total_num, int non_responsive_num, int fork_tail_num, const std::vector<int64_t>& replica_weights, int64_t quorum_weight)
-    : id_(id), limit_count_(limit_count), total_num_(total_num), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), verifier_(verifier) {
+ProposalManager::ProposalManager(int32_t id, int limit_count, SignatureVerifier* verifier, int total_num, int non_responsive_num, int fork_tail_num, const std::vector<int64_t>& replica_weights, int64_t quorum_weight, std::shared_ptr<WeightSchedule> weight_schedule)
+    : id_(id), limit_count_(limit_count), total_num_(total_num), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), weight_schedule_(weight_schedule != nullptr ? weight_schedule : std::make_shared<WeightSchedule>(total_num, replica_weights_)), verifier_(verifier) {
     round_ = 1;
     global_stats_ = Stats::GetGlobalStats();
     assert(verifier_ != nullptr);
@@ -87,11 +87,21 @@ bool ProposalManager::VerifyHash(const Proposal& proposal) {
   return  GetHash(proposal) == proposal.hash();
 }
 
-int64_t ProposalManager::WeightForSigner(int signer) const {
+int64_t ProposalManager::WeightForSigner(int signer, int view) const {
+  if (weight_schedule_ != nullptr) {
+    return weight_schedule_->WeightForSigner(signer, view);
+  }
   if (signer < 1 || signer > static_cast<int>(replica_weights_.size())) {
     return 0;
   }
   return replica_weights_[signer - 1];
+}
+
+int64_t ProposalManager::QuorumWeightForView(int view) const {
+  if (weight_schedule_ != nullptr) {
+    return weight_schedule_->QuorumWeightForView(view);
+  }
+  return quorum_weight_;
 }
 
 bool ProposalManager::VerifyCert(const Certificate& cert) {
@@ -100,7 +110,7 @@ bool ProposalManager::VerifyCert(const Certificate& cert) {
                << " sign node:" << cert.sign().node_id();
     return false;
   }
-  if (WeightForSigner(cert.signer()) <= 0) {
+  if (WeightForSigner(cert.signer(), cert.view()) <= 0) {
     LOG(ERROR) << "cert signer out of range:" << cert.signer();
     return false;
   }
@@ -118,7 +128,7 @@ bool ProposalManager::VerifyQC(const QC& qc) {
   std::set<int> seen_signers;
   for(const auto& sign : qc.signatures()){
     int signer = sign.node_id();
-    if (WeightForSigner(signer) <= 0) {
+    if (WeightForSigner(signer, qc.view()) <= 0) {
       LOG(ERROR) << "qc has unknown signer:" << signer;
       return false;
     }
@@ -131,12 +141,13 @@ bool ProposalManager::VerifyQC(const QC& qc) {
       LOG(ERROR) << "Verify message fail";
       return false;
     }
-    total_weight += WeightForSigner(signer);
+    total_weight += WeightForSigner(signer, qc.view());
   }
 
-  if (total_weight < quorum_weight_) {
+  const int64_t quorum_weight = QuorumWeightForView(qc.view());
+  if (total_weight < quorum_weight) {
     LOG(ERROR) << "qc weight:" << total_weight << " not enough, quorum:"
-               << quorum_weight_ << " signatures:" << qc.signatures_size();
+               << quorum_weight << " signatures:" << qc.signatures_size();
     return false;
   }
   return true;

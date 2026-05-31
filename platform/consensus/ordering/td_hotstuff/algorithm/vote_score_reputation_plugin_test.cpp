@@ -97,6 +97,37 @@ TEST(VoteScoreReputationPluginTest, CandidateRootsAreStable) {
   EXPECT_NE(json.find("\"next_weight_root\":\""), std::string::npos);
 }
 
+TEST(VoteScoreReputationPluginTest,
+     CandidateDigestIgnoresLocalNodeButAuditJsonKeepsIt) {
+  std::vector<ReputationQcEvent> events;
+  events.push_back({4, "hash-a", std::string(1, static_cast<char>(0x03))});
+  events.push_back({5, "hash-b", std::string(1, static_cast<char>(0x05))});
+
+  const std::string old_weight_root = "old-root";
+  const VoteScoreCandidate first = ComputeVoteScoreCandidate(
+      1, 3, 0, events, {10, 20, 30}, 2, old_weight_root,
+      /*old_weight_version=*/7, /*activation_view=*/8192);
+  const VoteScoreCandidate second = ComputeVoteScoreCandidate(
+      2, 3, 0, events, {10, 20, 30}, 2, old_weight_root,
+      /*old_weight_version=*/7, /*activation_view=*/8192);
+
+  EXPECT_EQ(first.metric_root_hex, second.metric_root_hex);
+  EXPECT_EQ(first.next_weight_root_hex, second.next_weight_root_hex);
+  EXPECT_EQ(first.candidate_digest_hex, second.candidate_digest_hex);
+  EXPECT_EQ(first.old_weight_root_hex, old_weight_root);
+  EXPECT_EQ(first.old_weight_version, 7);
+  EXPECT_EQ(first.activation_view, 8192);
+  EXPECT_EQ(first.next_weights, std::vector<int64_t>({10, 20, 30}));
+
+  const std::string first_json = VoteScoreCandidateToJson(first);
+  const std::string second_json = VoteScoreCandidateToJson(second);
+  EXPECT_NE(first_json.find("\"local_node_id\":1"), std::string::npos);
+  EXPECT_NE(second_json.find("\"local_node_id\":2"), std::string::npos);
+  EXPECT_NE(first_json.find("\"old_weight_root\":\"old-root\""),
+            std::string::npos);
+  EXPECT_NE(first_json.find("\"activation_view\":8192"), std::string::npos);
+}
+
 TEST(VoteScoreReputationPluginTest, AsyncPluginWritesFullAndPartialWindows) {
   const std::string output_dir = TempDir("td_hotstuff_reputation_writer_test");
   const std::string output_file = output_dir + "/td_hotstuff_reputation_node_3.jsonl";

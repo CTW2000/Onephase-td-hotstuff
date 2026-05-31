@@ -121,6 +121,36 @@ int Consensus::ProcessCustomConsensus(std::unique_ptr<Request> request) {
     }
     hs_->ReceiveCertificate(std::move(cert));
   }
+  else if(request->user_type() == MessageType::WeightUpdateCandidateMsg) {
+    std::unique_ptr<CandidateWeightUpdate> candidate =
+        std::make_unique<CandidateWeightUpdate>();
+    if (!candidate->ParseFromString(request->data())) {
+      LOG(ERROR) << "parse weight update candidate fail";
+      assert(1 == 0);
+      return -1;
+    }
+    hs_->ReceiveWeightUpdateCandidate(std::move(candidate));
+  }
+  else if(request->user_type() == MessageType::WeightUpdateVoteMsg) {
+    std::unique_ptr<WeightUpdateVote> vote =
+        std::make_unique<WeightUpdateVote>();
+    if (!vote->ParseFromString(request->data())) {
+      LOG(ERROR) << "parse weight update vote fail";
+      assert(1 == 0);
+      return -1;
+    }
+    hs_->ReceiveWeightUpdateVote(std::move(vote));
+  }
+  else if(request->user_type() == MessageType::WeightUpdateCertMsg) {
+    std::unique_ptr<WeightUpdateCert> cert =
+        std::make_unique<WeightUpdateCert>();
+    if (!cert->ParseFromString(request->data())) {
+      LOG(ERROR) << "parse weight update cert fail";
+      assert(1 == 0);
+      return -1;
+    }
+    hs_->ReceiveWeightUpdateCert(std::move(cert));
+  }
   return 0;
 }
 

@@ -15,6 +15,7 @@ namespace resdb {
 namespace td_hotstuff {
 
 class AsyncVoteScoreReputationPlugin;
+struct VoteScoreCandidate;
 
 struct QcEvidenceRecord {
   int node_id = 0;
@@ -46,6 +47,10 @@ class AsyncQcEvidenceRecorder {
   bool Enqueue(const QcEvidenceRecord& record);
   bool RecordQc(int qc_view, const std::string& qc_hash,
                 const std::string& signer_bitmap);
+  std::vector<VoteScoreCandidate> TakeCompletedReputationCandidates();
+  void UpdateReputationWeights(std::vector<int64_t> current_weights,
+                               std::string old_weight_root_hex,
+                               uint64_t old_weight_version);
 
   bool enabled() const { return enabled_; }
   uint64_t dropped_count() const { return dropped_count_.load(); }

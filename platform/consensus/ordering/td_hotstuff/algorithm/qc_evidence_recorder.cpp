@@ -185,6 +185,25 @@ bool AsyncQcEvidenceRecorder::RecordQc(int qc_view, const std::string& qc_hash,
   return Enqueue(record);
 }
 
+std::vector<VoteScoreCandidate>
+AsyncQcEvidenceRecorder::TakeCompletedReputationCandidates() {
+  if (reputation_plugin_ == nullptr) {
+    return {};
+  }
+  return reputation_plugin_->TakeCompletedCandidates();
+}
+
+void AsyncQcEvidenceRecorder::UpdateReputationWeights(
+    std::vector<int64_t> current_weights, std::string old_weight_root_hex,
+    uint64_t old_weight_version) {
+  if (reputation_plugin_ == nullptr) {
+    return;
+  }
+  reputation_plugin_->UpdateCurrentWeights(std::move(current_weights),
+                                           std::move(old_weight_root_hex),
+                                           old_weight_version);
+}
+
 void AsyncQcEvidenceRecorder::DropRecord(int qc_view) {
   uint64_t dropped = dropped_count_.fetch_add(1) + 1;
   if (dropped == 1 || dropped % 1000 == 0) {

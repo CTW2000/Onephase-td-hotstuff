@@ -54,7 +54,47 @@ message Proposal {
   uint64 createtime = 5;
 };
 
+message CandidateValidatorWeight {
+  int32 validator_id = 1;
+  int64 next_weight = 2;
+}
+
+message CandidateWeightUpdate {
+  string protocol_id = 1;
+  int64 old_weight_version = 2;
+  string old_weight_root = 3;
+  int32 activation_view = 4;
+  int32 total_replicas = 5;
+  uint64 window_index = 6;
+  int32 start_qc_view = 7;
+  int32 end_qc_view = 8;
+  uint64 event_count = 9;
+  string metric_root = 10;
+  string next_weight_root = 11;
+  string candidate_digest = 12;
+  repeated CandidateValidatorWeight validators = 13;
+}
+
+message WeightUpdateVote {
+  string candidate_digest = 1;
+  int32 validator_id = 2;
+  string old_weight_root = 3;
+  int64 old_weight_version = 4;
+  int32 activation_view = 5;
+  SignatureInfo signature = 6;
+}
+
+message WeightUpdateCert {
+  CandidateWeightUpdate candidate_update = 1;
+  bytes signer_bitmap = 2;
+  repeated WeightUpdateVote votes = 3;
+  string quorum_rule_id = 4;
+}
+
 enum MessageType {
   NewProposal = 0;
   Vote = 1;
+  WeightUpdateCandidateMsg = 2;
+  WeightUpdateVoteMsg = 3;
+  WeightUpdateCertMsg = 4;
 };

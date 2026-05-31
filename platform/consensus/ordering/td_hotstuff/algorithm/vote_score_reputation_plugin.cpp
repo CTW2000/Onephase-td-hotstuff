@@ -12,6 +12,7 @@
 #include <glog/logging.h>
 
 #include "common/crypto/hash.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -22,6 +23,8 @@ constexpr const char* kWindowSizeEnv = "TD_HS_REPUTATION_WINDOW_SIZE";
 constexpr const char* kOutputDirEnv = "TD_HS_REPUTATION_OUTPUT_DIR";
 constexpr const char* kQueueCapacityEnv = "TD_HS_REPUTATION_QUEUE_CAPACITY";
 constexpr const char* kMaxDeltaEnv = "TD_HS_REPUTATION_MAX_DELTA";
+constexpr const char* kWeightUpdateEpochViewsEnv = "TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS";
+constexpr const char* kWeightUpdateActivationDelayEnv = "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY";
 constexpr size_t kDefaultWindowSize = 4096;
 constexpr size_t kDefaultQueueCapacity = 65536;
 constexpr int kDefaultMaxDelta = 2;
@@ -137,10 +140,9 @@ int ClampDelta(int delta, int max_delta) {
 
 std::string MetricCanonical(const VoteScoreCandidate& candidate) {
   std::ostringstream out;
-  out << "td_hotstuff_reputation_vote_metric_v1|" << candidate.node_id << '|'
-      << candidate.total_replicas << '|' << candidate.window_index << '|'
-      << candidate.start_qc_view << '|' << candidate.end_qc_view << '|'
-      << candidate.event_count;
+  out << "td_hotstuff_reputation_vote_metric_v1|" << candidate.total_replicas
+      << '|' << candidate.window_index << '|' << candidate.start_qc_view << '|'
+      << candidate.end_qc_view << '|' << candidate.event_count;
   for (const auto& validator : candidate.validators) {
     out << '|' << validator.validator_id << ':' << validator.opportunities << ':'
         << validator.inclusions << ':' << validator.vote_score;
@@ -148,25 +150,33 @@ std::string MetricCanonical(const VoteScoreCandidate& candidate) {
   return out.str();
 }
 
-std::string WeightCanonical(const VoteScoreCandidate& candidate) {
+std::string CandidateCanonicalFromParts(
+    int total_replicas, uint64_t window_index, int start_qc_view,
+    int end_qc_view, uint64_t event_count,
+    const std::string& old_weight_root_hex, uint64_t old_weight_version,
+    int activation_view, const std::string& metric_root_hex,
+    const std::string& next_weight_root_hex,
+    const std::vector<int64_t>& next_weights) {
   std::ostringstream out;
-  out << "td_hotstuff_reputation_next_weight_v1|" << candidate.node_id << '|'
-      << candidate.total_replicas << '|' << candidate.window_index;
-  for (const auto& validator : candidate.validators) {
-    out << '|' << validator.validator_id << ':' << validator.current_weight << ':'
-        << validator.next_weight;
+  out << "td_hotstuff_reputation_candidate_v1|" << total_replicas << '|'
+      << window_index << '|' << start_qc_view << '|' << end_qc_view << '|'
+      << event_count << '|' << old_weight_root_hex << '|'
+      << old_weight_version << '|' << activation_view << '|' << metric_root_hex
+      << '|' << next_weight_root_hex;
+  for (size_t i = 0; i < next_weights.size(); ++i) {
+    out << '|' << (i + 1) << ':' << next_weights[i];
   }
   return out.str();
 }
 
-std::string CandidateCanonical(const VoteScoreCandidate& candidate) {
-  std::ostringstream out;
-  out << "td_hotstuff_reputation_candidate_v1|" << candidate.node_id << '|'
-      << candidate.total_replicas << '|' << candidate.window_index << '|'
-      << candidate.start_qc_view << '|' << candidate.end_qc_view << '|'
-      << candidate.event_count << '|' << candidate.metric_root_hex << '|'
-      << candidate.next_weight_root_hex;
-  return out.str();
+int ActivationViewForWindow(int end_qc_view, size_t epoch_views,
+                            size_t activation_epoch_delay) {
+  if (end_qc_view <= 0 || epoch_views == 0) {
+    return 0;
+  }
+  const size_t delay = std::max<size_t>(activation_epoch_delay, 1);
+  return static_cast<int>(((static_cast<size_t>(end_qc_view) / epoch_views) +
+                           delay) * epoch_views);
 }
 
 }  // namespace
@@ -191,9 +201,11 @@ std::vector<int> DecodeSignerBitmap(const std::string& signer_bitmap,
 VoteScoreCandidate ComputeVoteScoreCandidate(
     int node_id, int total_replicas, uint64_t window_index,
     const std::vector<ReputationQcEvent>& events,
-    const std::vector<int64_t>& current_weights, int max_delta) {
+    const std::vector<int64_t>& current_weights, int max_delta,
+    const std::string& old_weight_root_hex, uint64_t old_weight_version,
+    int activation_view) {
   VoteScoreCandidate candidate;
-  candidate.node_id = node_id;
+  candidate.local_node_id = node_id;
   candidate.total_replicas = total_replicas;
   candidate.window_index = window_index;
   candidate.event_count = events.size();
@@ -203,6 +215,11 @@ VoteScoreCandidate ComputeVoteScoreCandidate(
   }
 
   const std::vector<int64_t> weights = NormalizeWeights(current_weights, total_replicas);
+  candidate.old_weight_root_hex = old_weight_root_hex.empty()
+                                      ? WeightRootHex(weights)
+                                      : old_weight_root_hex;
+  candidate.old_weight_version = old_weight_version;
+  candidate.activation_view = activation_view;
   candidate.validators.resize(std::max(total_replicas, 0));
   for (int i = 0; i < total_replicas; ++i) {
     ValidatorVoteScore& validator = candidate.validators[i];
@@ -230,24 +247,66 @@ VoteScoreCandidate ComputeVoteScoreCandidate(
     validator.next_weight = ClampWeight(validator.current_weight + delta);
   }
 
-  candidate.metric_root_hex = HashHex(MetricCanonical(candidate));
-  candidate.next_weight_root_hex = HashHex(WeightCanonical(candidate));
-  candidate.candidate_digest_hex = HashHex(CandidateCanonical(candidate));
+  RecomputeVoteScoreCandidateRoots(&candidate);
   return candidate;
+}
+
+void RecomputeVoteScoreCandidateRoots(VoteScoreCandidate* candidate) {
+  if (candidate == nullptr) {
+    return;
+  }
+  candidate->next_weights.clear();
+  candidate->next_weights.reserve(candidate->validators.size());
+  for (const ValidatorVoteScore& validator : candidate->validators) {
+    candidate->next_weights.push_back(validator.next_weight);
+  }
+  candidate->metric_root_hex = HashHex(MetricCanonical(*candidate));
+  candidate->next_weight_root_hex = WeightRootHex(candidate->next_weights);
+  candidate->candidate_digest_hex = VoteScoreCandidateDigest(
+      candidate->total_replicas, candidate->window_index,
+      candidate->start_qc_view, candidate->end_qc_view,
+      candidate->event_count, candidate->old_weight_root_hex,
+      candidate->old_weight_version, candidate->activation_view,
+      candidate->metric_root_hex, candidate->next_weight_root_hex,
+      candidate->next_weights);
+}
+
+std::string VoteScoreCandidateDigest(
+    int total_replicas, uint64_t window_index, int start_qc_view,
+    int end_qc_view, uint64_t event_count,
+    const std::string& old_weight_root_hex, uint64_t old_weight_version,
+    int activation_view, const std::string& metric_root_hex,
+    const std::string& next_weight_root_hex,
+    const std::vector<int64_t>& next_weights) {
+  return HashHex(CandidateCanonicalFromParts(
+      total_replicas, window_index, start_qc_view, end_qc_view, event_count,
+      old_weight_root_hex, old_weight_version, activation_view, metric_root_hex,
+      next_weight_root_hex, next_weights));
 }
 
 std::string VoteScoreCandidateToJson(const VoteScoreCandidate& candidate) {
   std::ostringstream out;
   out << "{\"schema\":\"td_hotstuff_reputation_vote_score_v1\""
-      << ",\"node_id\":" << candidate.node_id
+      << ",\"local_node_id\":" << candidate.local_node_id
       << ",\"total_replicas\":" << candidate.total_replicas
       << ",\"window_index\":" << candidate.window_index
       << ",\"start_qc_view\":" << candidate.start_qc_view
       << ",\"end_qc_view\":" << candidate.end_qc_view
       << ",\"event_count\":" << candidate.event_count
+      << ",\"old_weight_root\":\"" << candidate.old_weight_root_hex << "\""
+      << ",\"old_weight_version\":" << candidate.old_weight_version
+      << ",\"activation_view\":" << candidate.activation_view
       << ",\"metric_root\":\"" << candidate.metric_root_hex << "\""
       << ",\"next_weight_root\":\"" << candidate.next_weight_root_hex << "\""
       << ",\"candidate_digest\":\"" << candidate.candidate_digest_hex << "\""
+      << ",\"next_weights\":[";
+  for (size_t i = 0; i < candidate.next_weights.size(); ++i) {
+    if (i != 0) {
+      out << ',';
+    }
+    out << candidate.next_weights[i];
+  }
+  out << ']'
       << ",\"validators\":[";
   for (size_t i = 0; i < candidate.validators.size(); ++i) {
     if (i != 0) {
@@ -272,6 +331,10 @@ AsyncVoteScoreReputationPlugin::AsyncVoteScoreReputationPlugin(
     : node_id_(node_id),
       total_replicas_(total_replicas),
       current_weights_(NormalizeWeights(current_weights, total_replicas)),
+      old_weight_root_hex_(WeightRootHex(current_weights_)),
+      old_weight_version_(0),
+      epoch_views_(SizeFromEnv(kWeightUpdateEpochViewsEnv, kDefaultWindowSize)),
+      activation_epoch_delay_(SizeFromEnv(kWeightUpdateActivationDelayEnv, 1)),
       output_dir_(std::move(output_dir)),
       output_path_(OutputPath(output_dir_, node_id_)),
       window_size_(window_size == 0 ? kDefaultWindowSize : window_size),
@@ -318,6 +381,28 @@ void AsyncVoteScoreReputationPlugin::Stop() {
   started_ = false;
 }
 
+std::vector<VoteScoreCandidate>
+AsyncVoteScoreReputationPlugin::TakeCompletedCandidates() {
+  std::vector<VoteScoreCandidate> candidates;
+  std::unique_lock<std::mutex> lock(mutex_);
+  while (!completed_candidates_.empty()) {
+    candidates.push_back(std::move(completed_candidates_.front()));
+    completed_candidates_.pop_front();
+  }
+  return candidates;
+}
+
+void AsyncVoteScoreReputationPlugin::UpdateCurrentWeights(
+    std::vector<int64_t> current_weights, std::string old_weight_root_hex,
+    uint64_t old_weight_version) {
+  std::unique_lock<std::mutex> lock(mutex_);
+  current_weights_ = NormalizeWeights(current_weights, total_replicas_);
+  old_weight_root_hex_ = std::move(old_weight_root_hex);
+  old_weight_version_ = old_weight_version;
+  current_window_.clear();
+  completed_candidates_.clear();
+}
+
 bool AsyncVoteScoreReputationPlugin::RecordQc(
     int qc_view, const std::string& qc_hash,
     const std::string& signer_bitmap) {
@@ -354,23 +439,49 @@ void AsyncVoteScoreReputationPlugin::DropRecord(int qc_view) {
 
 void AsyncVoteScoreReputationPlugin::ProcessEvent(
     const ReputationQcEvent& event, std::ofstream& output) {
-  current_window_.push_back(event);
-  if (current_window_.size() >= window_size_) {
-    FlushWindow(output);
+  std::vector<ReputationQcEvent> window;
+  std::vector<int64_t> current_weights;
+  std::string old_weight_root_hex;
+  uint64_t old_weight_version = 0;
+  uint64_t window_index = 0;
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    current_window_.push_back(event);
+    if (current_window_.size() < window_size_) {
+      return;
+    }
+    window = std::move(current_window_);
+    current_window_.clear();
+    window_index = window_index_++;
+    current_weights = current_weights_;
+    old_weight_root_hex = old_weight_root_hex_;
+    old_weight_version = old_weight_version_;
   }
+  FlushWindow(output, std::move(window), window_index, std::move(current_weights),
+              std::move(old_weight_root_hex), old_weight_version);
 }
 
-void AsyncVoteScoreReputationPlugin::FlushWindow(std::ofstream& output) {
-  if (current_window_.empty()) {
+void AsyncVoteScoreReputationPlugin::FlushWindow(
+    std::ofstream& output, std::vector<ReputationQcEvent> window,
+    uint64_t window_index, std::vector<int64_t> current_weights,
+    std::string old_weight_root_hex, uint64_t old_weight_version) {
+  if (window.empty()) {
     return;
   }
+  const int activation_view = ActivationViewForWindow(
+      window.back().qc_view, epoch_views_, activation_epoch_delay_);
   const VoteScoreCandidate candidate = ComputeVoteScoreCandidate(
-      node_id_, total_replicas_, window_index_, current_window_, current_weights_,
-      max_delta_);
+      node_id_, total_replicas_, window_index, window, current_weights,
+      max_delta_, old_weight_root_hex, old_weight_version, activation_view);
   output << VoteScoreCandidateToJson(candidate) << '\n';
   output.flush();
-  current_window_.clear();
-  ++window_index_;
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (completed_candidates_.size() >= queue_capacity_) {
+      completed_candidates_.pop_front();
+    }
+    completed_candidates_.push_back(candidate);
+  }
 }
 
 void AsyncVoteScoreReputationPlugin::WorkerLoop() {
@@ -401,7 +512,24 @@ void AsyncVoteScoreReputationPlugin::WorkerLoop() {
     ProcessEvent(event, output);
   }
 
-  FlushWindow(output);
+  std::vector<ReputationQcEvent> window;
+  std::vector<int64_t> current_weights;
+  std::string old_weight_root_hex;
+  uint64_t old_weight_version = 0;
+  uint64_t window_index = 0;
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (!current_window_.empty()) {
+      window = std::move(current_window_);
+      current_window_.clear();
+      window_index = window_index_++;
+      current_weights = current_weights_;
+      old_weight_root_hex = old_weight_root_hex_;
+      old_weight_version = old_weight_version_;
+    }
+  }
+  FlushWindow(output, std::move(window), window_index, std::move(current_weights),
+              std::move(old_weight_root_hex), old_weight_version);
   output.flush();
 }
 
