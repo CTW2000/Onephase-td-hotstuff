@@ -1,5 +1,6 @@
 #include "platform/consensus/ordering/td_hotstuff/algorithm/qc_evidence_recorder.h"
 
+#include <memory>
 #include <chrono>
 #include <cstdlib>
 #include <exception>
@@ -9,6 +10,8 @@
 #include <utility>
 
 #include <glog/logging.h>
+
+#include "platform/consensus/ordering/td_hotstuff/algorithm/vote_score_reputation_plugin.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -84,34 +87,44 @@ AsyncQcEvidenceRecorder::AsyncQcEvidenceRecorder(int node_id,
                                                  std::string output_dir,
                                                  size_t queue_capacity)
     : AsyncQcEvidenceRecorder(node_id, total_replicas, std::move(output_dir),
-                              queue_capacity, true) {}
+                              queue_capacity, true, nullptr) {}
 
 AsyncQcEvidenceRecorder::AsyncQcEvidenceRecorder(int node_id,
                                                  int total_replicas,
                                                  std::string output_dir,
                                                  size_t queue_capacity,
-                                                 bool enabled)
+                                                 bool write_json,
+                                                 std::unique_ptr<AsyncVoteScoreReputationPlugin> reputation_plugin)
     : node_id_(node_id),
       total_replicas_(total_replicas),
       output_dir_(std::move(output_dir)),
       output_path_(OutputPath(output_dir_, node_id_)),
       queue_capacity_(queue_capacity == 0 ? kDefaultQueueCapacity
                                           : queue_capacity),
-      enabled_(enabled) {}
+      write_json_(write_json),
+      enabled_(write_json || reputation_plugin != nullptr),
+      reputation_plugin_(std::move(reputation_plugin)) {}
 
 AsyncQcEvidenceRecorder::~AsyncQcEvidenceRecorder() { Stop(); }
 
 AsyncQcEvidenceRecorder AsyncQcEvidenceRecorder::Disabled(int node_id) {
-  return AsyncQcEvidenceRecorder(node_id, 0, ".", kDefaultQueueCapacity, false);
+  return AsyncQcEvidenceRecorder(node_id, 0, ".", kDefaultQueueCapacity, false,
+                                 nullptr);
 }
 
 std::unique_ptr<AsyncQcEvidenceRecorder> AsyncQcEvidenceRecorder::CreateFromEnv(
-    int node_id, int total_replicas) {
-  if (!EvidenceEnabledFromEnv()) {
+    int node_id, int total_replicas,
+    const std::vector<int64_t>& current_weights) {
+  std::unique_ptr<AsyncVoteScoreReputationPlugin> reputation_plugin =
+      AsyncVoteScoreReputationPlugin::CreateFromEnv(node_id, total_replicas,
+                                                    current_weights);
+  const bool write_json = EvidenceEnabledFromEnv();
+  if (!write_json && reputation_plugin == nullptr) {
     return nullptr;
   }
-  auto recorder = std::make_unique<AsyncQcEvidenceRecorder>(
-      node_id, total_replicas, OutputDirFromEnv(), QueueCapacityFromEnv());
+  std::unique_ptr<AsyncQcEvidenceRecorder> recorder(new AsyncQcEvidenceRecorder(
+      node_id, total_replicas, OutputDirFromEnv(), QueueCapacityFromEnv(),
+      write_json, std::move(reputation_plugin)));
   recorder->Start();
   return recorder;
 }
@@ -135,6 +148,9 @@ void AsyncQcEvidenceRecorder::Stop() {
     worker_.join();
   }
   started_ = false;
+  if (reputation_plugin_ != nullptr) {
+    reputation_plugin_->Stop();
+  }
 }
 
 bool AsyncQcEvidenceRecorder::Enqueue(const QcEvidenceRecord& record) {
@@ -178,11 +194,18 @@ void AsyncQcEvidenceRecorder::DropRecord(int qc_view) {
 }
 
 void AsyncQcEvidenceRecorder::WorkerLoop() {
-  std::filesystem::create_directories(output_dir_);
-  std::ofstream output(output_path_, std::ios::app);
-  if (!output.is_open()) {
-    LOG(ERROR) << "open TD-Hotstuff QC evidence output fail:" << output_path_;
-    return;
+  bool write_json = write_json_;
+  std::ofstream output;
+  if (write_json) {
+    std::filesystem::create_directories(output_dir_);
+    output.open(output_path_, std::ios::app);
+    if (!output.is_open()) {
+      LOG(ERROR) << "open TD-Hotstuff QC evidence output fail:" << output_path_;
+      write_json = false;
+      if (reputation_plugin_ == nullptr) {
+        return;
+      }
+    }
   }
 
   size_t pending_flush = 0;
@@ -197,22 +220,32 @@ void AsyncQcEvidenceRecorder::WorkerLoop() {
         if (stopping_.load()) {
           break;
         }
-        output.flush();
-        pending_flush = 0;
+        if (write_json) {
+          output.flush();
+          pending_flush = 0;
+        }
         continue;
       }
       record = std::move(queue_.front());
       queue_.pop_front();
     }
 
-    output << SerializeQcEvidenceRecord(record) << '\n';
-    ++pending_flush;
-    if (pending_flush >= kFlushEveryRecords) {
-      output.flush();
-      pending_flush = 0;
+    if (write_json) {
+      output << SerializeQcEvidenceRecord(record) << '\n';
+      ++pending_flush;
+      if (pending_flush >= kFlushEveryRecords) {
+        output.flush();
+        pending_flush = 0;
+      }
+    }
+    if (reputation_plugin_ != nullptr) {
+      reputation_plugin_->RecordQc(record.qc_view, record.qc_hash,
+                                   record.signer_bitmap);
     }
   }
-  output.flush();
+  if (write_json) {
+    output.flush();
+  }
 }
 
 }  // namespace td_hotstuff

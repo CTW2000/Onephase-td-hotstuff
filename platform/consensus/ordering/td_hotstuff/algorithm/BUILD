@@ -15,10 +15,22 @@ cc_library(
 
 
 cc_library(
+    name = "vote_score_reputation_plugin",
+    srcs = ["vote_score_reputation_plugin.cpp"],
+    hdrs = ["vote_score_reputation_plugin.h"],
+    deps = [
+        "//common:glog",
+        "//common/crypto:hash",
+    ],
+)
+
+
+cc_library(
     name = "qc_evidence_recorder",
     srcs = ["qc_evidence_recorder.cpp"],
     hdrs = ["qc_evidence_recorder.h"],
     deps = [
+        ":vote_score_reputation_plugin",
         "//common:glog",
     ],
 )
@@ -54,6 +66,15 @@ cc_test(
     srcs = ["qc_evidence_recorder_test.cpp"],
     deps = [
         ":qc_evidence_recorder",
+        "//common/test:test_main",
+    ],
+)
+
+cc_test(
+    name = "vote_score_reputation_plugin_test",
+    srcs = ["vote_score_reputation_plugin_test.cpp"],
+    deps = [
+        ":vote_score_reputation_plugin",
         "//common/test:test_main",
     ],
 )

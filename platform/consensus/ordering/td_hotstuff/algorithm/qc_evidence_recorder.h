@@ -9,9 +9,12 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace resdb {
 namespace td_hotstuff {
+
+class AsyncVoteScoreReputationPlugin;
 
 struct QcEvidenceRecord {
   int node_id = 0;
@@ -35,7 +38,8 @@ class AsyncQcEvidenceRecorder {
 
   static AsyncQcEvidenceRecorder Disabled(int node_id);
   static std::unique_ptr<AsyncQcEvidenceRecorder> CreateFromEnv(
-      int node_id, int total_replicas);
+      int node_id, int total_replicas,
+      const std::vector<int64_t>& current_weights);
 
   void Start();
   void Stop();
@@ -49,7 +53,8 @@ class AsyncQcEvidenceRecorder {
  private:
   AsyncQcEvidenceRecorder(int node_id, int total_replicas,
                           std::string output_dir, size_t queue_capacity,
-                          bool enabled);
+                          bool write_json,
+                          std::unique_ptr<AsyncVoteScoreReputationPlugin> reputation_plugin);
 
   void WorkerLoop();
   void DropRecord(int qc_view);
@@ -59,7 +64,9 @@ class AsyncQcEvidenceRecorder {
   std::string output_dir_;
   std::string output_path_;
   size_t queue_capacity_;
+  bool write_json_;
   bool enabled_;
+  std::unique_ptr<AsyncVoteScoreReputationPlugin> reputation_plugin_;
 
   std::atomic<bool> stopping_{false};
   std::atomic<uint64_t> dropped_count_{0};

@@ -6,6 +6,7 @@
 #include <memory>
 #include <iterator>
 #include <string>
+#include <unistd.h>
 
 #include <gtest/gtest.h>
 
@@ -17,6 +18,10 @@ std::string ReadFile(const std::string& path) {
   std::ifstream input(path);
   return std::string(std::istreambuf_iterator<char>(input),
                      std::istreambuf_iterator<char>());
+}
+
+std::string TempDir(const std::string& name) {
+  return "/tmp/" + name + "_" + std::to_string(getpid());
 }
 
 TEST(QcEvidenceRecorderTest, FormatsCompactJsonWithoutSignatures) {
@@ -56,9 +61,45 @@ TEST(QcEvidenceRecorderTest, DisabledRecorderDoesNotWriteFile) {
 
 TEST(QcEvidenceRecorderTest, CreateFromEnvReturnsNullWhenDisabled) {
   unsetenv("TD_HS_EVIDENCE_ENABLE");
+  unsetenv("TD_HS_REPUTATION_ENABLE");
   EXPECT_EQ(AsyncQcEvidenceRecorder::CreateFromEnv(/*node_id=*/1,
-                                                   /*total_replicas=*/4),
+                                                   /*total_replicas=*/4,
+                                                   /*current_weights=*/{1, 1, 1, 1}),
             nullptr);
+}
+
+TEST(QcEvidenceRecorderTest, ReputationOnlyModeDispatchesWithoutEvidenceJson) {
+  const std::string output_dir = TempDir("td_hotstuff_reputation_dispatch_test");
+  const std::string reputation_file =
+      output_dir + "/td_hotstuff_reputation_node_5.jsonl";
+  std::remove(reputation_file.c_str());
+
+  unsetenv("TD_HS_EVIDENCE_ENABLE");
+  setenv("TD_HS_REPUTATION_ENABLE", "1", /*overwrite=*/1);
+  setenv("TD_HS_REPUTATION_WINDOW_SIZE", "1", /*overwrite=*/1);
+  setenv("TD_HS_REPUTATION_OUTPUT_DIR", output_dir.c_str(), /*overwrite=*/1);
+  setenv("TD_HS_REPUTATION_QUEUE_CAPACITY", "8", /*overwrite=*/1);
+  setenv("TD_HS_REPUTATION_MAX_DELTA", "2", /*overwrite=*/1);
+
+  std::unique_ptr<AsyncQcEvidenceRecorder> recorder =
+      AsyncQcEvidenceRecorder::CreateFromEnv(
+          /*node_id=*/5, /*total_replicas=*/4,
+          /*current_weights=*/{10, 10, 10, 10});
+  ASSERT_NE(recorder, nullptr);
+
+  EXPECT_TRUE(recorder->RecordQc(8, "hash", std::string(1, static_cast<char>(0x0f))));
+  recorder->Stop();
+
+  const std::string data = ReadFile(reputation_file);
+  EXPECT_NE(data.find("\"schema\":\"td_hotstuff_reputation_vote_score_v1\""),
+            std::string::npos);
+  EXPECT_NE(data.find("\"event_count\":1"), std::string::npos);
+
+  unsetenv("TD_HS_REPUTATION_ENABLE");
+  unsetenv("TD_HS_REPUTATION_WINDOW_SIZE");
+  unsetenv("TD_HS_REPUTATION_OUTPUT_DIR");
+  unsetenv("TD_HS_REPUTATION_QUEUE_CAPACITY");
+  unsetenv("TD_HS_REPUTATION_MAX_DELTA");
 }
 
 
