@@ -21,6 +21,9 @@ struct QcEvidenceRecord {
   int node_id = 0;
   int total_replicas = 0;
   int qc_view = 0;
+  int leader_id = 0;
+  uint64_t weight_version = 0;
+  std::string active_weight_root;
   std::string qc_hash;
   std::string signer_bitmap;
 };
@@ -47,6 +50,9 @@ class AsyncQcEvidenceRecorder {
   bool Enqueue(const QcEvidenceRecord& record);
   bool RecordQc(int qc_view, const std::string& qc_hash,
                 const std::string& signer_bitmap);
+  bool RecordQc(int qc_view, const std::string& qc_hash,
+                const std::string& signer_bitmap, int leader_id,
+                uint64_t weight_version, std::string active_weight_root);
   std::vector<VoteScoreCandidate> TakeCompletedReputationCandidates();
   void UpdateReputationWeights(std::vector<int64_t> current_weights,
                                std::string old_weight_root_hex,

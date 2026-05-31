@@ -26,10 +26,33 @@ server_bin=${server_name}
 
 local_server_env=()
 remote_server_env=""
-if [ -n "${TD_HS_WEIGHTS:-}" ]; then
-  local_server_env=(env "TD_HS_WEIGHTS=${TD_HS_WEIGHTS}")
-  td_hs_weights_escaped=$(printf "%q" "${TD_HS_WEIGHTS}")
-  remote_server_env="env TD_HS_WEIGHTS=${td_hs_weights_escaped} "
+td_env_names=(
+  TD_HS_WEIGHTS
+  TD_HS_EVIDENCE_ENABLE
+  TD_HS_EVIDENCE_OUTPUT_DIR
+  TD_HS_EVIDENCE_QUEUE_CAPACITY
+  TD_HS_REPUTATION_ENABLE
+  TD_HS_REPUTATION_WINDOW_SIZE
+  TD_HS_REPUTATION_OUTPUT_DIR
+  TD_HS_REPUTATION_QUEUE_CAPACITY
+  TD_HS_REPUTATION_MAX_DELTA
+  TD_HS_WEIGHT_UPDATE_ENABLE
+  TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS
+  TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY
+)
+for env_name in "${td_env_names[@]}"; do
+  env_value="${!env_name:-}"
+  if [ -n "${env_value}" ]; then
+    if [ ${#local_server_env[@]} -eq 0 ]; then
+      local_server_env=(env)
+    fi
+    local_server_env+=("${env_name}=${env_value}")
+    env_value_escaped=$(printf "%q" "${env_value}")
+    remote_server_env="${remote_server_env}${env_name}=${env_value_escaped} "
+  fi
+done
+if [ -n "${remote_server_env}" ]; then
+  remote_server_env="env ${remote_server_env}"
 fi
 
 bin_path=${BAZEL_WORKSPACE_PATH}/bazel-bin/${server_path}

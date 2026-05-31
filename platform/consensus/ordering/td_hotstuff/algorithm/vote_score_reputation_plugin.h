@@ -18,6 +18,9 @@ struct ReputationQcEvent {
   int qc_view = 0;
   std::string qc_hash;
   std::string signer_bitmap;
+  int leader_id = 0;
+  uint64_t weight_version = 0;
+  std::string active_weight_root;
 };
 
 struct ValidatorVoteScore {
@@ -25,11 +28,17 @@ struct ValidatorVoteScore {
   uint64_t opportunities = 0;
   uint64_t inclusions = 0;
   int vote_score = 0;
+  uint64_t leader_certified_count = 0;
+  uint64_t leader_gap_count = 0;
+  int leader_score = 100;
+  int leader_diversity_score = 100;
+  int reputation_score = 100;
   int64_t current_weight = 1;
   int64_t next_weight = 1;
 };
 
 struct VoteScoreCandidate {
+  std::string algorithm = "bayes_v2";
   int local_node_id = 0;
   int total_replicas = 0;
   uint64_t window_index = 0;
@@ -49,7 +58,7 @@ struct VoteScoreCandidate {
 std::vector<int> DecodeSignerBitmap(const std::string& signer_bitmap,
                                     int total_replicas);
 
-VoteScoreCandidate ComputeVoteScoreCandidate(
+VoteScoreCandidate ComputeBayesianReputationCandidate(
     int node_id, int total_replicas, uint64_t window_index,
     const std::vector<ReputationQcEvent>& events,
     const std::vector<int64_t>& current_weights, int max_delta,
@@ -89,6 +98,9 @@ class AsyncVoteScoreReputationPlugin {
   void Stop();
   bool RecordQc(int qc_view, const std::string& qc_hash,
                 const std::string& signer_bitmap);
+  bool RecordQc(int qc_view, const std::string& qc_hash,
+                const std::string& signer_bitmap, int leader_id,
+                uint64_t weight_version, std::string active_weight_root);
   std::vector<VoteScoreCandidate> TakeCompletedCandidates();
   void UpdateCurrentWeights(std::vector<int64_t> current_weights,
                             std::string old_weight_root_hex,

@@ -298,8 +298,17 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
 
     if (qc_evidence_recorder_ != nullptr) {
       const QC& qc = proposal->header().qc();
-      qc_evidence_recorder_->RecordQc(qc.view(), qc.hash(),
-                                      qc.signer_bitmap());
+      const int qc_view = qc.view();
+      const int leader_id = qc_view > 0 ? proposal_manager_->GetLeader(qc_view) : 0;
+      const uint64_t weight_version = weight_schedule_ != nullptr
+                                          ? weight_schedule_->WeightVersionForView(qc_view)
+                                          : 0;
+      const std::string active_weight_root = weight_schedule_ != nullptr
+                                                 ? weight_schedule_->WeightRootForView(qc_view)
+                                                 : std::string();
+      qc_evidence_recorder_->RecordQc(qc_view, qc.hash(), qc.signer_bitmap(),
+                                      leader_id, weight_version,
+                                      active_weight_root);
     }
     weight_messages = DrainWeightPlugin(view);
 

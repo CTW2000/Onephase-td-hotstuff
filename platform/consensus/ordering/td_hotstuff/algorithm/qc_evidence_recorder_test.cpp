@@ -29,12 +29,17 @@ TEST(QcEvidenceRecorderTest, FormatsCompactJsonWithoutSignatures) {
   record.node_id = 3;
   record.total_replicas = 4;
   record.qc_view = 7;
+  record.leader_id = 4;
+  record.weight_version = 2;
+  record.active_weight_root = "root-2";
   record.qc_hash = std::string("\x01\xAB", 2);
   record.signer_bitmap = std::string("\x0D", 1);
 
   EXPECT_EQ(SerializeQcEvidenceRecord(record),
             "{\"schema\":\"td_hotstuff_qc_evidence_v1\","
             "\"node_id\":3,\"total_replicas\":4,\"qc_view\":7,"
+            "\"leader_id\":4,\"weight_version\":2,"
+            "\"active_weight_root\":\"root-2\","
             "\"qc_hash_hex\":\"01ab\",\"signer_bitmap_hex\":\"0d\"}");
 }
 
@@ -91,7 +96,7 @@ TEST(QcEvidenceRecorderTest, ReputationOnlyModeDispatchesWithoutEvidenceJson) {
   recorder->Stop();
 
   const std::string data = ReadFile(reputation_file);
-  EXPECT_NE(data.find("\"schema\":\"td_hotstuff_reputation_vote_score_v1\""),
+  EXPECT_NE(data.find("\"schema\":\"td_hotstuff_reputation_bayes_v2\""),
             std::string::npos);
   EXPECT_NE(data.find("\"event_count\":1"), std::string::npos);
 

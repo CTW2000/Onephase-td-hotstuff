@@ -3,6 +3,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -52,10 +53,14 @@ VoteScoreCandidate MakeCandidate(const WeightSchedule& schedule,
   std::vector<ReputationQcEvent> events;
   events.push_back({4095, "hash-a", std::string(1, static_cast<char>(0x03))});
   events.push_back({4096, "hash-b", std::string(1, static_cast<char>(0x03))});
-  return ComputeVoteScoreCandidate(
+  VoteScoreCandidate candidate = ComputeBayesianReputationCandidate(
       /*node_id=*/1, /*total_replicas=*/4, /*window_index=*/0, events,
       schedule.ActiveWeights(), /*max_delta=*/2, schedule.ActiveWeightRoot(),
       schedule.ActiveWeightVersion(), activation_view);
+  candidate.validators[0].next_weight =
+      std::max<int64_t>(1, candidate.validators[0].current_weight - 1);
+  RecomputeVoteScoreCandidateRoots(&candidate);
+  return candidate;
 }
 
 TEST(WeightScheduleTest,

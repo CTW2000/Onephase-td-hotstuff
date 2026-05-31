@@ -76,6 +76,9 @@ std::string SerializeQcEvidenceRecord(const QcEvidenceRecord& record) {
       << "\"node_id\":" << record.node_id << ","
       << "\"total_replicas\":" << record.total_replicas << ","
       << "\"qc_view\":" << record.qc_view << ","
+      << "\"leader_id\":" << record.leader_id << ","
+      << "\"weight_version\":" << record.weight_version << ","
+      << "\"active_weight_root\":\"" << record.active_weight_root << "\","
       << "\"qc_hash_hex\":\"" << HexEncode(record.qc_hash) << "\","
       << "\"signer_bitmap_hex\":\"" << HexEncode(record.signer_bitmap)
       << "\"}";
@@ -173,6 +176,14 @@ bool AsyncQcEvidenceRecorder::Enqueue(const QcEvidenceRecord& record) {
 
 bool AsyncQcEvidenceRecorder::RecordQc(int qc_view, const std::string& qc_hash,
                                        const std::string& signer_bitmap) {
+  return RecordQc(qc_view, qc_hash, signer_bitmap, /*leader_id=*/0,
+                  /*weight_version=*/0, /*active_weight_root=*/"");
+}
+
+bool AsyncQcEvidenceRecorder::RecordQc(int qc_view, const std::string& qc_hash,
+                                       const std::string& signer_bitmap,
+                                       int leader_id, uint64_t weight_version,
+                                       std::string active_weight_root) {
   if (!enabled_ || qc_hash.empty()) {
     return false;
   }
@@ -180,6 +191,9 @@ bool AsyncQcEvidenceRecorder::RecordQc(int qc_view, const std::string& qc_hash,
   record.node_id = node_id_;
   record.total_replicas = total_replicas_;
   record.qc_view = qc_view;
+  record.leader_id = leader_id;
+  record.weight_version = weight_version;
+  record.active_weight_root = std::move(active_weight_root);
   record.qc_hash = qc_hash;
   record.signer_bitmap = signer_bitmap;
   return Enqueue(record);
@@ -259,7 +273,9 @@ void AsyncQcEvidenceRecorder::WorkerLoop() {
     }
     if (reputation_plugin_ != nullptr) {
       reputation_plugin_->RecordQc(record.qc_view, record.qc_hash,
-                                   record.signer_bitmap);
+                                   record.signer_bitmap, record.leader_id,
+                                   record.weight_version,
+                                   record.active_weight_root);
     }
   }
   if (write_json) {
