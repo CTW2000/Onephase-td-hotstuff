@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "common/crypto/mock_signature_verifier.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -21,6 +22,13 @@ class TestProposalManager : public ProposalManager {
                       const std::vector<int64_t>& replica_weights = {})
       : ProposalManager(1, 3, verifier, 4, 0, 0, replica_weights) {}
 
+  TestProposalManager(int node_id, SignatureVerifier* verifier,
+                      std::shared_ptr<LeaderSelectionSchedule> leader_schedule)
+      : ProposalManager(node_id, 3, verifier, 4, 0, 0,
+                        /*replica_weights=*/{}, /*quorum_weight=*/0,
+                        /*weight_schedule=*/nullptr, leader_schedule) {}
+
+  using ProposalManager::GetHash;
   using ProposalManager::VerifyQC;
 };
 
@@ -94,6 +102,35 @@ TEST(TdHotstuffWeightedQCTest, RejectsBitmapThatDoesNotMatchSignatures) {
   qc.set_signer_bitmap(BuildSignerBitmap({1, 3}, 4));
 
   EXPECT_FALSE(manager.VerifyQC(qc));
+}
+
+TEST(TdHotstuffLeaderSelectionTest,
+     RejectsWrongLeaderSenderAndContextHashWhenEnabled) {
+  LeaderSelectionConfig config;
+  config.enabled = true;
+  auto leader_schedule = std::make_shared<LeaderSelectionSchedule>(
+      /*total_replicas=*/4, std::vector<int64_t>{1, 1, 100, 1}, config);
+  const int expected_leader = leader_schedule->LeaderForView(1);
+
+  MockSignatureVerifier verifier;
+  TestProposalManager manager(expected_leader, &verifier, leader_schedule);
+  std::vector<std::unique_ptr<Transaction>> txns;
+  std::unique_ptr<Proposal> proposal = manager.GenerateProposal(txns);
+
+  ASSERT_EQ(proposal->header().view(), 1);
+  ASSERT_EQ(proposal->sender(), expected_leader);
+  ASSERT_EQ(proposal->header().leader_context_hash(),
+            leader_schedule->ContextHashForView(1));
+  EXPECT_TRUE(manager.Verify(*proposal));
+
+  Proposal wrong_sender = *proposal;
+  wrong_sender.set_sender(expected_leader == 1 ? 2 : 1);
+  EXPECT_FALSE(manager.Verify(wrong_sender));
+
+  Proposal wrong_context = *proposal;
+  wrong_context.mutable_header()->set_leader_context_hash("wrong-context");
+  wrong_context.set_hash(manager.GetHash(wrong_context));
+  EXPECT_FALSE(manager.Verify(wrong_context));
 }
 
 }  // namespace

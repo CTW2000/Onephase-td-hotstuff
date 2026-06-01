@@ -59,8 +59,8 @@ bool SignerBitmapMatchesSignatures(const QC& qc, int total_num) {
   return qc.signer_bitmap() == BuildSignerBitmap(signers, total_num);
 }
 
-ProposalManager::ProposalManager(int32_t id, int limit_count, SignatureVerifier* verifier, int total_num, int non_responsive_num, int fork_tail_num, const std::vector<int64_t>& replica_weights, int64_t quorum_weight, std::shared_ptr<WeightSchedule> weight_schedule)
-    : id_(id), limit_count_(limit_count), total_num_(total_num), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), weight_schedule_(weight_schedule != nullptr ? weight_schedule : std::make_shared<WeightSchedule>(total_num, replica_weights_)), verifier_(verifier) {
+ProposalManager::ProposalManager(int32_t id, int limit_count, SignatureVerifier* verifier, int total_num, int non_responsive_num, int fork_tail_num, const std::vector<int64_t>& replica_weights, int64_t quorum_weight, std::shared_ptr<WeightSchedule> weight_schedule, std::shared_ptr<LeaderSelectionSchedule> leader_schedule)
+    : id_(id), limit_count_(limit_count), total_num_(total_num), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), weight_schedule_(weight_schedule != nullptr ? weight_schedule : std::make_shared<WeightSchedule>(total_num, replica_weights_)), leader_schedule_(leader_schedule), verifier_(verifier) {
     round_ = 1;
     global_stats_ = Stats::GetGlobalStats();
     assert(verifier_ != nullptr);
@@ -85,6 +85,25 @@ std::string ProposalManager::GetHash(const Proposal& proposal){
 
 bool ProposalManager::VerifyHash(const Proposal& proposal) {
   return  GetHash(proposal) == proposal.hash();
+}
+
+bool ProposalManager::VerifyLeader(const Proposal& proposal) {
+  const int view = proposal.header().view();
+  const int expected_leader = GetLeader(view);
+  if (expected_leader <= 0 || proposal.sender() != expected_leader) {
+    LOG(ERROR) << "proposal leader mismatch, view:" << view
+               << " sender:" << proposal.sender()
+               << " expected:" << expected_leader;
+    return false;
+  }
+  const std::string expected_context =
+      leader_schedule_ != nullptr ? leader_schedule_->ContextHashForView(view)
+                                  : std::string();
+  if (proposal.header().leader_context_hash() != expected_context) {
+    LOG(ERROR) << "proposal leader context mismatch, view:" << view;
+    return false;
+  }
+  return true;
 }
 
 int64_t ProposalManager::WeightForSigner(int signer, int view) const {
@@ -167,6 +186,10 @@ bool ProposalManager::Verify(const Proposal& proposal) {
     return false;
   }
 
+  if (!VerifyLeader(proposal)) {
+    return false;
+  }
+
   if(proposal.header().view() == 1){
     return true;
   }
@@ -193,6 +216,10 @@ std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
     }
 
     proposal->mutable_header()->set_view(round_);
+    if (leader_schedule_ != nullptr) {
+      proposal->mutable_header()->set_leader_context_hash(
+          leader_schedule_->ContextHashForView(round_));
+    }
     proposal->set_sender(id_);
   }
   proposal->set_createtime(GetCurrentTime());
@@ -269,8 +296,10 @@ std::unique_ptr<Proposal> ProposalManager::FetchProposal(const std::string& hash
 }
 
 int ProposalManager::GetLeader(int view){
-  //LOG(ERROR)<<" view:"<<view<<" next leader:"<<(view+1)%total_num_ + 1;
-  return view % total_num_ + 1;
+  if (leader_schedule_ != nullptr) {
+    return leader_schedule_->LeaderForView(view);
+  }
+  return DefaultLeaderForView(view, total_num_);
 }
 
 }  // namespace td_hotstuff

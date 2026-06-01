@@ -155,6 +155,24 @@ int Consensus::ProcessCustomConsensus(std::unique_ptr<Request> request) {
 }
 
 int Consensus::ProcessNewTransaction(std::unique_ptr<Request> request) {
+  if (request == nullptr) {
+    return -1;
+  }
+  if (hs_ != nullptr && replica_communicator_ != nullptr &&
+      request->next_primary() == 0) {
+    const int request_view =
+        request->current_view() > 0 ? request->current_view()
+                                    : hs_->CurrentView();
+    const int leader = hs_->LeaderForView(request_view);
+    if (leader > 0 && leader != config_.GetSelfInfo().id()) {
+      Request forwarded(*request);
+      forwarded.set_current_view(request_view);
+      forwarded.set_next_primary(leader);
+      forwarded.set_sender_id(config_.GetSelfInfo().id());
+      replica_communicator_->SendMessage(forwarded, leader);
+      return 0;
+    }
+  }
   std::unique_ptr<Transaction> txn = std::make_unique<Transaction>();
   txn->set_data(request->data());
   txn->set_hash(request->hash());
@@ -173,6 +191,7 @@ int Consensus::CommitMsgInternal(const Transaction& txn) {
   request->set_data(txn.data());
   request->set_seq(txn.id());
   request->set_proxy_id(txn.proxy_id());
+  request->set_primary_id(txn.proposer());
   transaction_executor_->AddExecuteMessage(std::move(request));
   return 0;
 }

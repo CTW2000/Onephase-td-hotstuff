@@ -14,6 +14,15 @@
 namespace resdb {
 namespace td_hotstuff {
 
+struct ReputationRecoveryConfig {
+  int decay_per_epoch = 3;
+  int max_recovery_per_epoch = 3;
+  int bonus_per_epoch = 1;
+  int64_t min_weight = 1;
+  int64_t max_weight = 100;
+  uint64_t min_decay_opportunities = 1;
+};
+
 struct ReputationQcEvent {
   int qc_view = 0;
   std::string qc_hash;
@@ -33,12 +42,15 @@ struct ValidatorVoteScore {
   int leader_score = 100;
   int leader_diversity_score = 100;
   int reputation_score = 100;
+  int decay_applied = 0;
+  int recovery_credit = 0;
+  int bonus_credit = 0;
   int64_t current_weight = 1;
   int64_t next_weight = 1;
 };
 
 struct VoteScoreCandidate {
-  std::string algorithm = "bayes_v2";
+  std::string algorithm = "bayes_v3";
   int local_node_id = 0;
   int total_replicas = 0;
   uint64_t window_index = 0;
@@ -50,8 +62,12 @@ struct VoteScoreCandidate {
   int activation_view = 0;
   std::vector<ValidatorVoteScore> validators;
   std::vector<int64_t> next_weights;
+  std::vector<int64_t> leader_weights;
   std::string metric_root_hex;
   std::string next_weight_root_hex;
+  std::string leader_weight_root_hex;
+  uint64_t leader_params_version = 1;
+  std::string leader_randomness_ref;
   std::string candidate_digest_hex;
 };
 
@@ -65,6 +81,14 @@ VoteScoreCandidate ComputeBayesianReputationCandidate(
     const std::string& old_weight_root_hex = "",
     uint64_t old_weight_version = 0, int activation_view = 0);
 
+VoteScoreCandidate ComputeBayesianReputationCandidateWithConfig(
+    int node_id, int total_replicas, uint64_t window_index,
+    const std::vector<ReputationQcEvent>& events,
+    const std::vector<int64_t>& current_weights,
+    const ReputationRecoveryConfig& recovery_config,
+    const std::string& old_weight_root_hex = "",
+    uint64_t old_weight_version = 0, int activation_view = 0);
+
 void RecomputeVoteScoreCandidateRoots(VoteScoreCandidate* candidate);
 
 std::string VoteScoreCandidateDigest(
@@ -73,7 +97,11 @@ std::string VoteScoreCandidateDigest(
     const std::string& old_weight_root_hex, uint64_t old_weight_version,
     int activation_view, const std::string& metric_root_hex,
     const std::string& next_weight_root_hex,
-    const std::vector<int64_t>& next_weights);
+    const std::vector<int64_t>& next_weights,
+    const std::string& leader_weight_root_hex = "",
+    uint64_t leader_params_version = 0,
+    const std::string& leader_randomness_ref = "",
+    const std::vector<int64_t>& leader_weights = {});
 
 std::string VoteScoreCandidateToJson(const VoteScoreCandidate& candidate);
 
@@ -126,12 +154,12 @@ class AsyncVoteScoreReputationPlugin {
   std::string old_weight_root_hex_;
   uint64_t old_weight_version_ = 0;
   size_t epoch_views_ = 4096;
-  size_t activation_epoch_delay_ = 1;
+  size_t activation_epoch_delay_ = 2;
   std::string output_dir_;
   std::string output_path_;
   size_t window_size_;
   size_t queue_capacity_;
-  int max_delta_;
+  ReputationRecoveryConfig recovery_config_;
   bool enabled_ = true;
 
   std::atomic<bool> stopping_{false};

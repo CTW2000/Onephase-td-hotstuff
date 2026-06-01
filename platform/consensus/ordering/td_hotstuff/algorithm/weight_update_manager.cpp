@@ -9,6 +9,7 @@
 
 #include <glog/logging.h>
 
+#include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
 
 namespace resdb {
@@ -81,6 +82,13 @@ bool CandidateShouldEnterConsensus(const CandidateWeightUpdate& update,
          !IsWarmupCandidate(update) && CandidateChangesWeights(update, snapshot);
 }
 
+bool SameWeightVersion(const VoteScoreCandidate& candidate,
+                       const CandidateWeightUpdate& update) {
+  return candidate.old_weight_root_hex == update.old_weight_root() &&
+         static_cast<int64_t>(candidate.old_weight_version) ==
+             update.old_weight_version();
+}
+
 int CandidateBroadcaster(const CandidateWeightUpdate& update,
                          int total_replicas) {
   if (total_replicas <= 0) {
@@ -107,7 +115,7 @@ WeightUpdateConfig WeightUpdateConfigFromEnv() {
   const char* enabled = std::getenv(kEnableEnv);
   config.enabled = enabled != nullptr && std::string(enabled) == "1";
   config.epoch_views = PositiveIntFromEnv(kEpochViewsEnv, 4096);
-  config.activation_epoch_delay = PositiveIntFromEnv(kActivationDelayEnv, 1);
+  config.activation_epoch_delay = PositiveIntFromEnv(kActivationDelayEnv, 2);
   return config;
 }
 
@@ -135,6 +143,16 @@ std::vector<int64_t> CandidateNextWeights(
   return weights;
 }
 
+std::vector<int64_t> CandidateLeaderWeights(
+    const CandidateWeightUpdate& update) {
+  std::vector<int64_t> weights;
+  weights.reserve(update.leader_validators_size());
+  for (const CandidateLeaderWeight& validator : update.leader_validators()) {
+    weights.push_back(validator.leader_weight());
+  }
+  return weights;
+}
+
 CandidateWeightUpdate BuildCandidateWeightUpdate(
     const VoteScoreCandidate& candidate) {
   CandidateWeightUpdate update;
@@ -150,10 +168,18 @@ CandidateWeightUpdate BuildCandidateWeightUpdate(
   update.set_metric_root(candidate.metric_root_hex);
   update.set_next_weight_root(candidate.next_weight_root_hex);
   update.set_candidate_digest(candidate.candidate_digest_hex);
+  update.set_leader_weight_root(candidate.leader_weight_root_hex);
+  update.set_leader_params_version(candidate.leader_params_version);
+  update.set_leader_randomness_ref(candidate.leader_randomness_ref);
   for (size_t i = 0; i < candidate.next_weights.size(); ++i) {
     CandidateValidatorWeight* validator = update.add_validators();
     validator->set_validator_id(static_cast<int>(i + 1));
     validator->set_next_weight(candidate.next_weights[i]);
+  }
+  for (size_t i = 0; i < candidate.leader_weights.size(); ++i) {
+    CandidateLeaderWeight* validator = update.add_leader_validators();
+    validator->set_validator_id(static_cast<int>(i + 1));
+    validator->set_leader_weight(candidate.leader_weights[i]);
   }
   return update;
 }
@@ -196,6 +222,10 @@ void WeightUpdateManager::AddLocalCandidates(
       continue;
     }
     if (!CandidateShouldEnterConsensus(update, snapshot, config_.epoch_views)) {
+      continue;
+    }
+    if (has_latest_local_weight_candidate_ &&
+        SameWeightVersion(latest_local_weight_candidate_, update)) {
       continue;
     }
     latest_local_weight_candidate_ = local_candidate;
@@ -248,6 +278,11 @@ void WeightUpdateManager::HandleCert(const WeightUpdateCert& cert,
     return;
   }
   pending_weight_update_certs_[cert.candidate_update().activation_view()] = cert;
+  const std::string& candidate_digest =
+      cert.candidate_update().candidate_digest();
+  if (broadcast_weight_cert_digests_.insert(candidate_digest).second) {
+    outbound_messages_.certs.push_back(cert);
+  }
 }
 
 WeightPluginOutboundMessages WeightUpdateManager::DrainOutboundMessages(
@@ -291,6 +326,10 @@ WeightUpdateManager::TakeInstallableUpdates(
     installable.old_weight_root = update.old_weight_root();
     installable.old_weight_version = update.old_weight_version();
     installable.next_weights = CandidateNextWeights(update);
+    installable.leader_weights = CandidateLeaderWeights(update);
+    installable.leader_weight_root = update.leader_weight_root();
+    installable.leader_params_version = update.leader_params_version();
+    installable.leader_randomness_ref = update.leader_randomness_ref();
     installable.cert = it->second;
     updates.push_back(installable);
     it = pending_weight_update_certs_.erase(it);
@@ -389,11 +428,38 @@ bool WeightUpdateManager::ValidateCandidateFields(
   if (update.next_weight_root() != WeightRootHex(next_weights)) {
     return SetError(error, "next weight root mismatch");
   }
+  if (update.leader_validators_size() != total_replicas_) {
+    return SetError(error, "leader replica count mismatch");
+  }
+  std::vector<int64_t> leader_weights;
+  leader_weights.reserve(update.leader_validators_size());
+  for (int i = 0; i < update.leader_validators_size(); ++i) {
+    const CandidateLeaderWeight& validator = update.leader_validators(i);
+    if (validator.validator_id() != i + 1) {
+      return SetError(error, "leader validator order mismatch");
+    }
+    if (!ValidWeight(validator.leader_weight())) {
+      return SetError(error, "leader weight out of range");
+    }
+    leader_weights.push_back(validator.leader_weight());
+  }
+  if (update.leader_weight_root() != LeaderWeightRootHex(leader_weights)) {
+    return SetError(error, "leader weight root mismatch");
+  }
+  if (leader_weights != snapshot.weights) {
+    return SetError(error, "leader weights must match old weights");
+  }
+  if (update.leader_params_version() != 1 ||
+      update.leader_randomness_ref().empty()) {
+    return SetError(error, "leader params mismatch");
+  }
   const std::string expected_digest = VoteScoreCandidateDigest(
       update.total_replicas(), update.window_index(), update.start_qc_view(),
       update.end_qc_view(), update.event_count(), update.old_weight_root(),
       update.old_weight_version(), update.activation_view(),
-      update.metric_root(), update.next_weight_root(), next_weights);
+      update.metric_root(), update.next_weight_root(), next_weights,
+      update.leader_weight_root(), update.leader_params_version(),
+      update.leader_randomness_ref(), leader_weights);
   if (update.candidate_digest() != expected_digest) {
     return SetError(error, "candidate digest mismatch");
   }
@@ -415,6 +481,11 @@ bool WeightUpdateManager::VerifyCandidateWithSnapshot(
   }
   if (update.metric_root() != local_candidate.metric_root_hex ||
       update.next_weight_root() != local_candidate.next_weight_root_hex ||
+      update.leader_weight_root() != local_candidate.leader_weight_root_hex ||
+      update.leader_params_version() !=
+          local_candidate.leader_params_version ||
+      update.leader_randomness_ref() !=
+          local_candidate.leader_randomness_ref ||
       update.activation_view() != local_candidate.activation_view ||
       update.old_weight_root() != local_candidate.old_weight_root_hex ||
       update.old_weight_version() !=
@@ -494,8 +565,7 @@ bool WeightUpdateManager::VerifyCertWithSnapshot(
 void WeightUpdateManager::TryVoteForCandidate(
     const CandidateWeightUpdate& candidate, const WeightSnapshot& snapshot) {
   if (!has_latest_local_weight_candidate_ ||
-      voted_weight_candidate_digests_.count(candidate.candidate_digest()) > 0 ||
-      candidate.activation_view() <= snapshot.current_view) {
+      voted_weight_candidate_digests_.count(candidate.candidate_digest()) > 0) {
     return;
   }
   std::unique_ptr<WeightUpdateVote> vote = CreateVoteWithSnapshot(

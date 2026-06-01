@@ -1,19 +1,38 @@
 #include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.h"
 
 #include <glog/logging.h>
+#include <sstream>
 #include "common/utils/utils.h"
 
 
 namespace resdb {
 namespace td_hotstuff {
+namespace {
+
+std::string WeightsForLog(const std::vector<int64_t>& weights) {
+  std::ostringstream out;
+  out << '[';
+  for (size_t i = 0; i < weights.size(); ++i) {
+    if (i > 0) {
+      out << ',';
+    }
+    out << weights[i];
+  }
+  out << ']';
+  return out.str();
+}
+
+}  // namespace
 
 HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier * verifier, int non_responsive_num, int fork_tail_num, uint64_t timer_length, const std::vector<int64_t>& replica_weights, int64_t quorum_weight)
-  : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), timer_length_(timer_length), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), weight_schedule_(std::make_shared<WeightSchedule>(total_num, replica_weights_)) {
+  : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), timer_length_(timer_length), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), weight_schedule_(std::make_shared<WeightSchedule>(total_num, replica_weights_)), qc_signer_cooldown_(QcSignerDiversityConfigFromEnv()) {
 
     LOG(ERROR)<<"id:"<<id<<" f:"<<f<<" total:"<<total_num_;
 
   global_stats_ = Stats::GetGlobalStats();
-  proposal_manager_ = std::make_unique<ProposalManager>(id, 2*f_+1, verifier, total_num, non_responsive_num, fork_tail_num, replica_weights_, quorum_weight_, weight_schedule_);
+  leader_selection_schedule_ = std::make_shared<LeaderSelectionSchedule>(
+      total_num_, replica_weights_, LeaderSelectionConfigFromEnv());
+  proposal_manager_ = std::make_unique<ProposalManager>(id, 2*f_+1, verifier, total_num, non_responsive_num, fork_tail_num, replica_weights_, quorum_weight_, weight_schedule_, leader_selection_schedule_);
   weight_update_manager_ = std::make_unique<WeightUpdateManager>(id_, total_num_, verifier_, WeightUpdateConfigFromEnv());
   qc_evidence_recorder_ = AsyncQcEvidenceRecorder::CreateFromEnv(id_, total_num_, weight_schedule_->ActiveWeights());
   SyncReputationWeightsToActiveSchedule();
@@ -40,13 +59,17 @@ HotStuff::~HotStuff() {
   }
 }
 
+int HotStuff::LeaderForView(int view) {
+  return proposal_manager_ != nullptr ? proposal_manager_->GetLeader(view)
+                                      : DefaultLeaderForView(view, total_num_);
+}
+
 int HotStuff::NextLeader(int view){
-  //LOG(ERROR)<<" view:"<<view<<" next leader:"<<(view+1)%total_num_ + 1;
-  return (view+1)%total_num_ + 1;
+  return LeaderForView(view + 1);
 }
 
 bool HotStuff::IsLeader(int view){
-  return (view % total_num_)+1 == id_;
+  return LeaderForView(view) == id_;
 }
 
 bool HotStuff::Ready() {
@@ -97,11 +120,24 @@ void HotStuff::AsyncSend() {
 
     std::unique_ptr<Proposal> proposal = nullptr;
     WeightPluginOutboundMessages weight_messages;
+    bool still_leader = true;
     {
       std::unique_lock<std::mutex> lk(mutex_);
       weight_messages = DrainWeightPlugin(proposal_manager_->CurrentView());
-      proposal = proposal_manager_ -> GenerateProposal(txns);
+      still_leader = IsLeader(proposal_manager_->CurrentView());
+      if (still_leader) {
+        proposal = proposal_manager_ -> GenerateProposal(txns);
+      }
       //LOG(ERROR)<<"propose view:"<<proposal->header().view();
+    }
+    if (!still_leader) {
+      for (auto& pending_txn : txns) {
+        if (pending_txn != nullptr) {
+          txns_.Push(std::move(pending_txn));
+        }
+      }
+      BroadcastWeightPluginMessages(weight_messages);
+      continue;
     }
     has_sent_ = true;
     BroadcastWeightPluginMessages(weight_messages);
@@ -134,6 +170,19 @@ bool HotStuff::ReceiveTransaction(std::unique_ptr<Transaction> txn) {
   return true;
 }
 
+int HotStuff::CurrentView() {
+  std::unique_lock<std::mutex> lk(mutex_);
+  return proposal_manager_ != nullptr ? proposal_manager_->CurrentView() : 0;
+}
+
+int HotStuff::CurrentLeader() {
+  std::unique_lock<std::mutex> lk(mutex_);
+  if (proposal_manager_ == nullptr) {
+    return 0;
+  }
+  return LeaderForView(proposal_manager_->CurrentView());
+}
+
 int64_t HotStuff::WeightForSigner(int signer, int view) const {
   if (weight_schedule_ != nullptr) {
     return weight_schedule_->WeightForSigner(signer, view);
@@ -159,6 +208,20 @@ std::vector<int> HotStuff::CertificateSigners(
   signers.reserve(certs.size());
   for (const auto& entry : certs) {
     signers.push_back(entry.first);
+  }
+  return signers;
+}
+
+std::vector<QcSignerInfo> HotStuff::CertificateSignerInfos(
+    const std::map<int, std::unique_ptr<Certificate>>& certs,
+    int view) const {
+  std::vector<QcSignerInfo> signers;
+  signers.reserve(certs.size());
+  for (const auto& entry : certs) {
+    const int64_t weight = WeightForSigner(entry.first, view);
+    if (weight > 0) {
+      signers.push_back({entry.first, weight});
+    }
   }
   return signers;
 }
@@ -209,18 +272,50 @@ bool HotStuff::InstallWeightUpdate(const InstallableWeightUpdate& update,
       update.old_weight_version != weight_schedule_->ActiveWeightVersion()) {
     return false;
   }
+  const uint64_t next_weight_version = update.old_weight_version + 1;
+  const int leader_activation_view =
+      leader_selection_schedule_ != nullptr
+          ? update.activation_view +
+                leader_selection_schedule_->profile_activation_delay_views()
+          : update.activation_view;
+  if (leader_selection_schedule_ != nullptr &&
+      leader_selection_schedule_->enabled() &&
+      leader_selection_schedule_->dynamic_updates_enabled() &&
+      !leader_selection_schedule_->ValidateProfile(
+          leader_activation_view, next_weight_version, update.leader_weights,
+          update.leader_weight_root, update.leader_params_version,
+          update.leader_randomness_ref)) {
+    LOG(ERROR) << "reject TD-Hotstuff weight update with invalid leader profile";
+    return false;
+  }
   if (!weight_schedule_->ScheduleUpdate(update.activation_view,
                                         update.next_weights,
                                         update.old_weight_root,
                                         update.old_weight_version)) {
     return false;
   }
+  if (leader_selection_schedule_ != nullptr &&
+      leader_selection_schedule_->enabled() &&
+      leader_selection_schedule_->dynamic_updates_enabled() &&
+      !leader_selection_schedule_->ScheduleUpdate(
+          leader_activation_view, next_weight_version, update.leader_weights,
+          update.leader_weight_root, update.leader_params_version,
+          update.leader_randomness_ref)) {
+    LOG(ERROR) << "failed to schedule TD-Hotstuff leader profile";
+    return false;
+  }
   weight_schedule_->ActivateUpTo(current_view);
+  if (leader_selection_schedule_ != nullptr) {
+    leader_selection_schedule_->ActivateUpTo(current_view);
+  }
   SyncReputationWeightsToActiveSchedule();
   LOG(ERROR) << "activated TD-Hotstuff weight update version:"
              << weight_schedule_->ActiveWeightVersion()
              << " view:" << current_view
-             << " root:" << weight_schedule_->ActiveWeightRoot();
+             << " root:" << weight_schedule_->ActiveWeightRoot()
+             << " active_weights:"
+             << WeightsForLog(weight_schedule_->ActiveWeights())
+             << " leader_profile_activation_view:" << leader_activation_view;
   return true;
 }
 
@@ -283,6 +378,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     int view = proposal->header().view();
     std::unique_ptr<Certificate> cert = nullptr;
     WeightPluginOutboundMessages weight_messages;
+    bool proposal_valid = true;
   {
     // LOG(ERROR)<<"RECEIVE proposer view:"<<proposal->header().view() << " from: " << proposal->sender();
     std::unique_lock<std::mutex> lk(mutex_);
@@ -291,46 +387,63 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
       proposal_received_ = true;
     }
 
+    // Install any pending profile/weight update before checking proposal
+    // leader context for this view.
+    weight_messages = DrainWeightPlugin(view);
     if(!proposal_manager_->Verify(*proposal)){
       LOG(ERROR)<<" proposal invalid";
-      return false;
+      proposal_valid = false;
     }
 
-    if (qc_evidence_recorder_ != nullptr) {
-      const QC& qc = proposal->header().qc();
-      const int qc_view = qc.view();
-      const int leader_id = qc_view > 0 ? proposal_manager_->GetLeader(qc_view) : 0;
-      const uint64_t weight_version = weight_schedule_ != nullptr
-                                          ? weight_schedule_->WeightVersionForView(qc_view)
-                                          : 0;
-      const std::string active_weight_root = weight_schedule_ != nullptr
-                                                 ? weight_schedule_->WeightRootForView(qc_view)
-                                                 : std::string();
-      qc_evidence_recorder_->RecordQc(qc_view, qc.hash(), qc.signer_bitmap(),
-                                      leader_id, weight_version,
-                                      active_weight_root);
-    }
-    weight_messages = DrainWeightPlugin(view);
+    if (proposal_valid) {
+      if (qc_evidence_recorder_ != nullptr) {
+        const QC& qc = proposal->header().qc();
+        const int qc_view = qc.view();
+        const int leader_id = qc_view > 0 ? proposal_manager_->GetLeader(qc_view) : 0;
+        const uint64_t weight_version = weight_schedule_ != nullptr
+                                            ? weight_schedule_->WeightVersionForView(qc_view)
+                                            : 0;
+        const std::string active_weight_root = weight_schedule_ != nullptr
+                                                   ? weight_schedule_->WeightRootForView(qc_view)
+                                                   : std::string();
+        qc_evidence_recorder_->RecordQc(qc_view, qc.hash(), qc.signer_bitmap(),
+                                        leader_id, weight_version,
+                                        active_weight_root);
+      }
+      WeightPluginOutboundMessages post_verify_messages = DrainWeightPlugin(view);
+      weight_messages.candidates.insert(weight_messages.candidates.end(),
+                                        post_verify_messages.candidates.begin(),
+                                        post_verify_messages.candidates.end());
+      weight_messages.votes.insert(weight_messages.votes.end(),
+                                   post_verify_messages.votes.begin(),
+                                   post_verify_messages.votes.end());
+      weight_messages.certs.insert(weight_messages.certs.end(),
+                                   post_verify_messages.certs.begin(),
+                                   post_verify_messages.certs.end());
 
-    cert = GenerateCertificate(*proposal);
-    assert(cert != nullptr);
+      cert = GenerateCertificate(*proposal);
+      assert(cert != nullptr);
 
-    std::vector<std::unique_ptr<Proposal>> committed_p_list = proposal_manager_->AddProposal(std::move(proposal));
-    for (int i=committed_p_list.size()-1; i>=0; i--) {
-      // LOG(ERROR) << "commit view: " << committed_p_list[i]->header().view();
-      CommitProposal(std::move(committed_p_list[i]));
-    }
+      std::vector<std::unique_ptr<Proposal>> committed_p_list = proposal_manager_->AddProposal(std::move(proposal));
+      for (int i=committed_p_list.size()-1; i>=0; i--) {
+        // LOG(ERROR) << "commit view: " << committed_p_list[i]->header().view();
+        CommitProposal(std::move(committed_p_list[i]));
+      }
 
-    //LOG(ERROR)<<"send cert view:"<<view<<" to:"<<NextLeader(view);
-    if (qc_formed_) {
-      // LOG(ERROR) << "after proposal recieeved";
-      proposal_manager_->AddQC(std::move(formed_qc_));
-      StartNewRound();
-      qc_formed_ = proposal_received_ = false;
+      //LOG(ERROR)<<"send cert view:"<<view<<" to:"<<NextLeader(view);
+      if (qc_formed_) {
+        // LOG(ERROR) << "after proposal recieeved";
+        proposal_manager_->AddQC(std::move(formed_qc_));
+        StartNewRound();
+        qc_formed_ = proposal_received_ = false;
+      }
     }
   }
 
   BroadcastWeightPluginMessages(weight_messages);
+  if (!proposal_valid) {
+    return false;
+  }
   auto next_leader = proposal_manager_->GetLeader(view+1);
 
   SendMessage(MessageType::Vote, *cert, next_leader);
@@ -358,6 +471,10 @@ bool HotStuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
   {
     std::unique_lock<std::mutex> lk(mutex_);
     //LOG(ERROR)<<"RECEIVE proposer cert :"<<cert->view()<<" from:"<<cert->signer();
+    int view = cert->view();
+    // Install any pending weight update before checking a vote for a view that
+    // may already belong to the new weight schedule.
+    weight_messages = DrainWeightPlugin(view);
     bool valid = proposal_manager_->VerifyCert(*cert);
     if(!valid){
       LOG(ERROR) << "Verify message fail";
@@ -365,7 +482,6 @@ bool HotStuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
       return false;
     }
 
-    int view = cert->view();
     std::string hash = cert->hash();
     auto& certs = receive_[view][hash];
     int64_t previous_weight = CertificateWeight(certs, view);
@@ -375,14 +491,26 @@ bool HotStuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
     //LOG(ERROR)<<"RECEIVE proposer cert :"<<view<<" weight:"<<current_weight;
     const int64_t quorum_weight = weight_schedule_->QuorumWeightForView(view);
     if(previous_weight < quorum_weight && current_weight >= quorum_weight){
+      const std::vector<QcSignerInfo> signer_infos =
+          CertificateSignerInfos(certs, view);
+      std::vector<int> selected_signers =
+          qc_signer_cooldown_.SelectSignersForQc(
+              signer_infos, quorum_weight, static_cast<uint64_t>(view));
+      if (selected_signers.empty()) {
+        selected_signers = CertificateSigners(certs);
+      }
       std::unique_ptr<QC> qc = std::make_unique<QC>();
       qc->set_hash(hash);
       qc->set_view(view);
-      qc->set_signer_bitmap(BuildSignerBitmap(CertificateSigners(certs), total_num_));
+      qc->set_signer_bitmap(BuildSignerBitmap(selected_signers, total_num_));
 
-      for(auto & it: certs){
-        *qc->add_signatures() = it.second->sign();
+      for(int signer : selected_signers){
+        auto it = certs.find(signer);
+        if (it != certs.end()) {
+          *qc->add_signatures() = it->second->sign();
+        }
       }
+      qc_signer_cooldown_.RecordQcSigners(selected_signers);
 
       qc_formed_ = true;
       if (proposal_received_) {
@@ -395,7 +523,16 @@ bool HotStuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
       }
 
     }
-    weight_messages = DrainWeightPlugin(view);
+    WeightPluginOutboundMessages post_cert_messages = DrainWeightPlugin(view);
+    weight_messages.candidates.insert(weight_messages.candidates.end(),
+                                      post_cert_messages.candidates.begin(),
+                                      post_cert_messages.candidates.end());
+    weight_messages.votes.insert(weight_messages.votes.end(),
+                                 post_cert_messages.votes.begin(),
+                                 post_cert_messages.votes.end());
+    weight_messages.certs.insert(weight_messages.certs.end(),
+                                 post_cert_messages.certs.begin(),
+                                 post_cert_messages.certs.end());
   }
   BroadcastWeightPluginMessages(weight_messages);
   return true;

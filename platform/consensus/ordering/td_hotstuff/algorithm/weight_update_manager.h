@@ -18,7 +18,7 @@ namespace td_hotstuff {
 struct WeightUpdateConfig {
   bool enabled = false;
   int epoch_views = 4096;
-  int activation_epoch_delay = 1;
+  int activation_epoch_delay = 2;
 };
 
 struct WeightSnapshot {
@@ -40,6 +40,10 @@ struct InstallableWeightUpdate {
   std::string old_weight_root;
   uint64_t old_weight_version = 0;
   std::vector<int64_t> next_weights;
+  std::vector<int64_t> leader_weights;
+  std::string leader_weight_root;
+  uint64_t leader_params_version = 1;
+  std::string leader_randomness_ref;
   WeightUpdateCert cert;
 };
 
@@ -50,6 +54,8 @@ WeightSnapshot MakeWeightSnapshot(const WeightSchedule& schedule,
                                   int current_view);
 
 std::vector<int64_t> CandidateNextWeights(
+    const CandidateWeightUpdate& update);
+std::vector<int64_t> CandidateLeaderWeights(
     const CandidateWeightUpdate& update);
 CandidateWeightUpdate BuildCandidateWeightUpdate(
     const VoteScoreCandidate& candidate);

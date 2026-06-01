@@ -26,11 +26,17 @@
 #pragma once
 
 #include <future>
+#include <memory>
 
+#include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/common/framework/performance_manager.h"
 
 namespace resdb {
 namespace td_hotstuff {
+
+bool BenchmarkDynamicRoutingEnabled(const LeaderSelectionConfig& config,
+                                    const char* env_override);
+int BenchmarkRouteForView(int view, int replica_num, int observed_primary);
 
 class HotStuffPerformanceManager : public common::PerformanceManager {
  public:
@@ -42,9 +48,13 @@ protected:
   comm::CollectorResultCode AddResponseMsg(
       std::unique_ptr<Request> request,
       std::function<void(std::unique_ptr<BatchUserResponse>)> call_back) override;
+  void SendMessage(const Request& request) override;
   int GetPrimary() override;
 
   int count_ = 0;
+  int last_primary_view_ = 0;
+  bool dynamic_benchmark_routing_enabled_ = false;
+  std::unique_ptr<LeaderSelectionSchedule> leader_selection_schedule_;
 };
 
 }  // namespace td_hotstuff

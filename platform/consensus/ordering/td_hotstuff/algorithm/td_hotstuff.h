@@ -12,6 +12,7 @@
 #include "platform/common/queue/lock_free_queue.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/qc_evidence_recorder.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/qc_signer_selector.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
 #include "platform/consensus/ordering/common/algorithm/protocol_base.h"
@@ -32,6 +33,9 @@ class HotStuff: public common::ProtocolBase {
   bool ReceiveWeightUpdateCandidate(std::unique_ptr<CandidateWeightUpdate> candidate);
   bool ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote);
   bool ReceiveWeightUpdateCert(std::unique_ptr<WeightUpdateCert> cert);
+  int CurrentView();
+  int LeaderForView(int view);
+  int CurrentLeader();
 
 
   private:
@@ -52,6 +56,9 @@ class HotStuff: public common::ProtocolBase {
         int view) const;
     std::vector<int> CertificateSigners(
         const std::map<int, std::unique_ptr<Certificate>>& certs) const;
+    std::vector<QcSignerInfo> CertificateSignerInfos(
+        const std::map<int, std::unique_ptr<Certificate>>& certs,
+        int view) const;
     WeightSnapshot CurrentWeightSnapshot(int current_view) const;
     WeightPluginOutboundMessages DrainWeightPlugin(int current_view);
     bool InstallWeightUpdate(const InstallableWeightUpdate& update,
@@ -88,14 +95,16 @@ class HotStuff: public common::ProtocolBase {
   bool qc_formed_, proposal_received_;
   std::unique_ptr<QC> formed_qc_;
 
-  uint64_t crash_num_ = 0;
+  int crash_num_ = 0;
 
   uint64_t timer_length_;
   std::vector<int64_t> replica_weights_;
   int64_t quorum_weight_;
   std::shared_ptr<WeightSchedule> weight_schedule_;
+  std::shared_ptr<LeaderSelectionSchedule> leader_selection_schedule_;
   std::unique_ptr<WeightUpdateManager> weight_update_manager_;
   std::unique_ptr<AsyncQcEvidenceRecorder> qc_evidence_recorder_;
+  QcSignerCooldownTracker qc_signer_cooldown_;
   std::mutex weight_plugin_broadcast_mutex_;
   std::condition_variable weight_plugin_broadcast_cv_;
   std::deque<WeightPluginOutboundMessages> weight_plugin_broadcast_queue_;

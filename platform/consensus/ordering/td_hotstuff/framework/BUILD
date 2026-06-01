@@ -24,5 +24,15 @@ cc_library(
     hdrs = ["performance_manager.h"],
     deps = [
         "//platform/consensus/ordering/common/framework:performance_manager",
+        "//platform/consensus/ordering/td_hotstuff/algorithm:leader_selection_schedule",
+    ],
+)
+
+cc_test(
+    name = "performance_manager_test",
+    srcs = ["performance_manager_test.cpp"],
+    deps = [
+        ":performance_manager",
+        "//common/test:test_main",
     ],
 )

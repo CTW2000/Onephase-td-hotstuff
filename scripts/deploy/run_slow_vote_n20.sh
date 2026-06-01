@@ -94,7 +94,8 @@ run_single_experiment() {
 
   local log_files=$(ls result_*_log 2>/dev/null)
   if [ -n "$log_files" ]; then
-    python3 performance/calculate_result.py $log_files > "$result_file" 2>&1
+    TD_HS_BAD_NODE_COUNT="${num_slow:-0}" \
+      python3 performance/calculate_result.py $log_files > "$result_file" 2>&1
     local tps=$(grep "^[0-9]" "$result_file" | head -1)
     local lat=$(grep "^[0-9]" "$result_file" | tail -1)
     echo "  >> Throughput: $tps txn/s | Latency: $lat s"

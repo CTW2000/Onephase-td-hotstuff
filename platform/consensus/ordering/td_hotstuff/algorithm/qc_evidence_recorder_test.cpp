@@ -96,7 +96,7 @@ TEST(QcEvidenceRecorderTest, ReputationOnlyModeDispatchesWithoutEvidenceJson) {
   recorder->Stop();
 
   const std::string data = ReadFile(reputation_file);
-  EXPECT_NE(data.find("\"schema\":\"td_hotstuff_reputation_bayes_v2\""),
+  EXPECT_NE(data.find("\"schema\":\"td_hotstuff_reputation_bayes_v3\""),
             std::string::npos);
   EXPECT_NE(data.find("\"event_count\":1"), std::string::npos);
 

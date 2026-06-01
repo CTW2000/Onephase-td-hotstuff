@@ -92,7 +92,16 @@ run_single_experiment() {
 
   local log_files=$(ls result_*_log 2>/dev/null)
   if [ -n "$log_files" ]; then
-    python3 performance/calculate_result.py $log_files > "$result_file" 2>&1
+    local bad_node_ids=""
+    for ((bad_idx=0; bad_idx<num_slow; bad_idx++)); do
+      local bad_id=$((bad_idx * 3 + 1))
+      if [ -n "$bad_node_ids" ]; then
+        bad_node_ids="${bad_node_ids},"
+      fi
+      bad_node_ids="${bad_node_ids}${bad_id}"
+    done
+    TD_HS_BAD_NODE_COUNT="${num_slow:-0}" TD_HS_BAD_NODE_IDS="$bad_node_ids" \
+      python3 performance/calculate_result.py $log_files > "$result_file" 2>&1
     local tps=$(grep "^[0-9]" "$result_file" | head -1)
     local lat=$(grep "^[0-9]" "$result_file" | tail -1)
     echo "  >> Throughput: $tps txn/s | Latency: $lat s"

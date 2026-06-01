@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h"
 #include "common/crypto/signature_verifier.h"
 #include "platform/statistic/stats.h"
@@ -21,7 +22,7 @@ bool SignerBitmapMatchesSignatures(const QC& qc, int total_num);
 
 class ProposalManager {
  public:
-  ProposalManager(int32_t id, int limit_count, SignatureVerifier* verifier, int total_num, int non_responsive_num, int fork_tail_num, const std::vector<int64_t>& replica_weights = {}, int64_t quorum_weight = 0, std::shared_ptr<WeightSchedule> weight_schedule = nullptr);
+  ProposalManager(int32_t id, int limit_count, SignatureVerifier* verifier, int total_num, int non_responsive_num, int fork_tail_num, const std::vector<int64_t>& replica_weights = {}, int64_t quorum_weight = 0, std::shared_ptr<WeightSchedule> weight_schedule = nullptr, std::shared_ptr<LeaderSelectionSchedule> leader_schedule = nullptr);
 
   std::unique_ptr<Proposal> GenerateProposal(const std::vector<std::unique_ptr<Transaction>>& txns);
   bool Verify(const Proposal& proposal);
@@ -41,6 +42,7 @@ class ProposalManager {
     bool SafeNode(const Proposal& proposal);
     bool VerifyQC(const QC& qc);
     bool VerifyHash(const Proposal& proposal);
+    bool VerifyLeader(const Proposal& proposal);
     int64_t WeightForSigner(int signer, int view) const;
     int64_t QuorumWeightForView(int view) const;
   std::unique_ptr<Proposal> FetchProposal(const std::string& hash);
@@ -55,6 +57,7 @@ class ProposalManager {
   std::vector<int64_t> replica_weights_;
   int64_t quorum_weight_;
   std::shared_ptr<WeightSchedule> weight_schedule_;
+  std::shared_ptr<LeaderSelectionSchedule> leader_schedule_;
 
   std::mutex txn_mutex_;
   std::map<std::string, std::unique_ptr<Proposal> > local_block_;
