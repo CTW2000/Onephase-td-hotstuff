@@ -9,17 +9,38 @@ DEPLOY_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DEPLOY_DIR"
 
 . ./script/env.sh
+. ./td_hotstuff_stable_env.sh
 
 RESULT_DIR="$DEPLOY_DIR/experiment_results/slow_vote_n20"
 mkdir -p "$RESULT_DIR"
 
 LOCAL_IP="10.10.131.205"
 SERVERS="10.10.131.224 10.10.131.247 10.10.131.86 10.10.131.125 10.10.131.83"
-SLEEP_TIME=25
-PROTOCOLS=("HS-1" "HS-2" "HS" "HS-1-SLOT" "TD-Hotstuff")
-SLOW_VOTE_COUNTS=(0 1 4 6)
+SLEEP_TIME="${SLEEP_TIME:-150}"
+if [ -n "${PROTOCOLS_OVERRIDE:-}" ]; then
+  read -r -a PROTOCOLS <<< "${PROTOCOLS_OVERRIDE}"
+else
+  PROTOCOLS=("HS-1" "HS-2" "HS" "HS-1-SLOT" "TD-Hotstuff")
+fi
+if [ -n "${SLOW_VOTE_COUNTS_OVERRIDE:-}" ]; then
+  read -r -a SLOW_VOTE_COUNTS <<< "${SLOW_VOTE_COUNTS_OVERRIDE}"
+else
+  SLOW_VOTE_COUNTS=(0 1 4 6)
+fi
 MEAN_DELAY_MS=10
 N=20
+
+CONFIG_FILES_TO_RESTORE=(
+  "config/hs1.config"
+  "config/hs2.config"
+  "config/hs.config"
+  "config/slot_hs1.config"
+  "config/td_hotstuff.config"
+  "config/performance.conf"
+)
+. ./script/generated_config_restore.sh
+backup_generated_configs
+trap restore_generated_configs EXIT
 
 kill_nodes() {
   killall -9 kv_server_performance 2>/dev/null || true
