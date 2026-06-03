@@ -47,10 +47,6 @@ bool SetError(std::string* error, const std::string& message) {
 
 bool ValidWeight(int64_t weight) { return weight >= 1 && weight <= 100; }
 
-bool IsWarmupCandidate(const CandidateWeightUpdate& update) {
-  return update.window_index() == 0;
-}
-
 bool CandidateChangesWeights(const CandidateWeightUpdate& update,
                              const WeightSnapshot& snapshot) {
   if (update.validators_size() != static_cast<int>(snapshot.weights.size())) {
@@ -64,10 +60,26 @@ bool CandidateChangesWeights(const CandidateWeightUpdate& update,
   return false;
 }
 
+bool CandidateChangesLeaderProfile(const CandidateWeightUpdate& update,
+                                   const WeightSnapshot& snapshot) {
+  if (snapshot.leader_weights.empty() ||
+      update.leader_validators_size() !=
+          static_cast<int>(snapshot.leader_weights.size())) {
+    return false;
+  }
+  for (int i = 0; i < update.leader_validators_size(); ++i) {
+    if (update.leader_validators(i).leader_weight() !=
+        snapshot.leader_weights[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool CandidateHasCanonicalEpochWindow(const CandidateWeightUpdate& update,
                                       int epoch_views) {
-  if (epoch_views <= 0 || update.event_count() !=
-                              static_cast<uint64_t>(epoch_views)) {
+  if (epoch_views <= 0 || update.event_count() == 0 ||
+      update.event_count() > static_cast<uint64_t>(epoch_views)) {
     return false;
   }
   return update.end_qc_view() > 0 &&
@@ -79,14 +91,8 @@ bool CandidateShouldEnterConsensus(const CandidateWeightUpdate& update,
                                    const WeightSnapshot& snapshot,
                                    int epoch_views) {
   return CandidateHasCanonicalEpochWindow(update, epoch_views) &&
-         !IsWarmupCandidate(update) && CandidateChangesWeights(update, snapshot);
-}
-
-bool SameWeightVersion(const VoteScoreCandidate& candidate,
-                       const CandidateWeightUpdate& update) {
-  return candidate.old_weight_root_hex == update.old_weight_root() &&
-         static_cast<int64_t>(candidate.old_weight_version) ==
-             update.old_weight_version();
+         (CandidateChangesWeights(update, snapshot) ||
+          CandidateChangesLeaderProfile(update, snapshot));
 }
 
 int CandidateBroadcaster(const CandidateWeightUpdate& update,
@@ -105,6 +111,9 @@ WeightSnapshot SnapshotForScheduleView(const WeightSchedule& schedule,
   snapshot.weight_version = schedule.ActiveWeightVersion();
   snapshot.quorum_weight = CalculateWeightQuorum(snapshot.weights);
   snapshot.current_view = current_view;
+  snapshot.leader_weights = snapshot.weights;
+  snapshot.leader_weight_root = LeaderWeightRootHex(snapshot.leader_weights);
+  snapshot.leader_weight_version = snapshot.weight_version;
   return snapshot;
 }
 
@@ -125,7 +134,10 @@ int ComputeWeightUpdateActivationView(int end_qc_view, int epoch_views,
     return 0;
   }
   const int delay = std::max(activation_epoch_delay, 1);
-  return ((end_qc_view / epoch_views) + delay) * epoch_views;
+  // The evidence window ends with a QC at the epoch boundary. That QC was
+  // formed under the old schedule, so the new schedule starts at the first
+  // following view.
+  return ((end_qc_view / epoch_views) + delay) * epoch_views + 1;
 }
 
 WeightSnapshot MakeWeightSnapshot(const WeightSchedule& schedule,
@@ -224,15 +236,14 @@ void WeightUpdateManager::AddLocalCandidates(
     if (!CandidateShouldEnterConsensus(update, snapshot, config_.epoch_views)) {
       continue;
     }
-    if (has_latest_local_weight_candidate_ &&
-        SameWeightVersion(latest_local_weight_candidate_, update)) {
+    const std::string candidate_digest = update.candidate_digest();
+    if (!local_weight_candidates_.emplace(candidate_digest, local_candidate)
+             .second) {
       continue;
     }
-    latest_local_weight_candidate_ = local_candidate;
-    has_latest_local_weight_candidate_ = true;
     if (CandidateBroadcaster(update, total_replicas_) == node_id_) {
-      weight_update_candidates_[update.candidate_digest()] = update;
-      if (broadcast_candidate_digests_.insert(update.candidate_digest()).second) {
+      weight_update_candidates_[candidate_digest] = update;
+      if (broadcast_candidate_digests_.insert(candidate_digest).second) {
         outbound_messages_.candidates.push_back(update);
       }
     }
@@ -479,8 +490,7 @@ bool WeightUpdateManager::VerifyCandidateWithSnapshot(
   if (update.candidate_digest() != local_candidate.candidate_digest_hex) {
     return SetError(error, "local recomputation mismatch");
   }
-  if (update.metric_root() != local_candidate.metric_root_hex ||
-      update.next_weight_root() != local_candidate.next_weight_root_hex ||
+  if (update.next_weight_root() != local_candidate.next_weight_root_hex ||
       update.leader_weight_root() != local_candidate.leader_weight_root_hex ||
       update.leader_params_version() !=
           local_candidate.leader_params_version ||
@@ -564,12 +574,13 @@ bool WeightUpdateManager::VerifyCertWithSnapshot(
 
 void WeightUpdateManager::TryVoteForCandidate(
     const CandidateWeightUpdate& candidate, const WeightSnapshot& snapshot) {
-  if (!has_latest_local_weight_candidate_ ||
+  auto local_it = local_weight_candidates_.find(candidate.candidate_digest());
+  if (local_it == local_weight_candidates_.end() ||
       voted_weight_candidate_digests_.count(candidate.candidate_digest()) > 0) {
     return;
   }
-  std::unique_ptr<WeightUpdateVote> vote = CreateVoteWithSnapshot(
-      candidate, latest_local_weight_candidate_, snapshot);
+  std::unique_ptr<WeightUpdateVote> vote =
+      CreateVoteWithSnapshot(candidate, local_it->second, snapshot);
   if (vote == nullptr) {
     return;
   }
@@ -623,8 +634,7 @@ void WeightUpdateManager::TryFormWeightUpdateCert(
 }
 
 void WeightUpdateManager::ClearPluginState() {
-  has_latest_local_weight_candidate_ = false;
-  latest_local_weight_candidate_ = VoteScoreCandidate();
+  local_weight_candidates_.clear();
   weight_update_candidates_.clear();
   weight_update_votes_.clear();
   pending_weight_update_certs_.clear();

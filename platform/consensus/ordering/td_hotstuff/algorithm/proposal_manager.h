@@ -7,6 +7,7 @@
 
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/timeout_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h"
 #include "common/crypto/signature_verifier.h"
 #include "platform/statistic/stats.h"
@@ -29,6 +30,10 @@ class ProposalManager {
   bool VerifyCert(const Certificate& cert);
 
   int CurrentView();
+  const QC& HighQC() const;
+  const TimeoutCert& HighestTimeoutCert() const;
+  bool AdvanceToViewByTimeout(const TimeoutCert& cert);
+  bool VerifyTimeoutCert(const TimeoutCert& cert);
 
   void AddQC(std::unique_ptr<QC> qc);
   std::vector<std::unique_ptr<Proposal>> AddProposal(std::unique_ptr<Proposal> proposal);
@@ -43,6 +48,7 @@ class ProposalManager {
     bool VerifyQC(const QC& qc);
     bool VerifyHash(const Proposal& proposal);
     bool VerifyLeader(const Proposal& proposal);
+    bool VerifyTimeoutJustification(const Proposal& proposal);
     int64_t WeightForSigner(int signer, int view) const;
     int64_t QuorumWeightForView(int view) const;
   std::unique_ptr<Proposal> FetchProposal(const std::string& hash);
@@ -63,6 +69,7 @@ class ProposalManager {
   std::map<std::string, std::unique_ptr<Proposal> > local_block_;
 
   QC generic_qc_, lock_qc_;
+  TimeoutCert highest_timeout_cert_;
   SignatureVerifier* verifier_;
   Stats* global_stats_ = nullptr;
 };

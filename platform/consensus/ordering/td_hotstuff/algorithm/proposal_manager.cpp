@@ -194,10 +194,10 @@ bool ProposalManager::Verify(const Proposal& proposal) {
     return true;
   }
 
-  if(!SafeNode(proposal)){
-    return false;
+  if (SafeNode(proposal)) {
+    return VerifyQC(proposal.header().qc());
   }
-  return VerifyQC(proposal.header().qc());
+  return VerifyTimeoutJustification(proposal);
 }
 
 std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
@@ -214,6 +214,11 @@ std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
       proposal->mutable_header()->set_prehash(generic_qc_.hash());
       *proposal->mutable_header()->mutable_qc() = generic_qc_;
     }
+    if (highest_timeout_cert_.view() > 0 &&
+        highest_timeout_cert_.view() + 1 == round_) {
+      *proposal->mutable_header()->mutable_timeout_cert() =
+          highest_timeout_cert_;
+    }
 
     proposal->mutable_header()->set_view(round_);
     if (leader_schedule_ != nullptr) {
@@ -229,6 +234,71 @@ std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
 
 int ProposalManager::CurrentView(){
   return round_;
+}
+
+const QC& ProposalManager::HighQC() const {
+  return generic_qc_;
+}
+
+const TimeoutCert& ProposalManager::HighestTimeoutCert() const {
+  return highest_timeout_cert_;
+}
+
+bool ProposalManager::VerifyTimeoutCert(const TimeoutCert& cert) {
+  TimeoutManager verifier(id_, total_num_, verifier_, weight_schedule_);
+  std::string error;
+  if (!verifier.VerifyTimeoutCert(cert, &error)) {
+    LOG(ERROR) << "invalid TD-Hotstuff timeout cert: " << error;
+    return false;
+  }
+  return true;
+}
+
+bool ProposalManager::VerifyTimeoutJustification(const Proposal& proposal) {
+  if (!proposal.header().has_timeout_cert()) {
+    LOG(ERROR) << "proposal is not safe and has no timeout cert";
+    return false;
+  }
+  const TimeoutCert& cert = proposal.header().timeout_cert();
+  if (cert.view() + 1 != proposal.header().view()) {
+    LOG(ERROR) << "proposal timeout cert view mismatch, proposal view:"
+               << proposal.header().view() << " tc view:" << cert.view();
+    return false;
+  }
+  if (!VerifyTimeoutCert(cert)) {
+    return false;
+  }
+  if (cert.high_qc().view() < lock_qc_.view()) {
+    LOG(ERROR) << "timeout cert high qc is behind local lock qc";
+    return false;
+  }
+  if (cert.high_qc().hash().empty()) {
+    return lock_qc_.view() == 0;
+  }
+  if (proposal.header().qc().view() != cert.high_qc().view() ||
+      proposal.header().qc().hash() != cert.high_qc().hash() ||
+      proposal.header().qc().signer_bitmap() != cert.high_qc().signer_bitmap()) {
+    LOG(ERROR) << "proposal qc does not match timeout cert high qc";
+    return false;
+  }
+  return VerifyQC(proposal.header().qc());
+}
+
+bool ProposalManager::AdvanceToViewByTimeout(const TimeoutCert& cert) {
+  if (!VerifyTimeoutCert(cert)) {
+    return false;
+  }
+  const int next_view = cert.view() + 1;
+  if (next_view <= round_) {
+    return false;
+  }
+  if (!cert.high_qc().hash().empty() &&
+      generic_qc_.view() < cert.high_qc().view()) {
+    generic_qc_ = cert.high_qc();
+  }
+  highest_timeout_cert_ = cert;
+  round_ = next_view;
+  return true;
 }
 
 void ProposalManager::AddQC(std::unique_ptr<QC> qc){
@@ -248,6 +318,7 @@ std::vector<std::unique_ptr<Proposal>> ProposalManager::AddProposal(std::unique_
   std::unique_lock<std::mutex> lk(txn_mutex_);
   if(generic_qc_.view() < proposal->header().qc().view()){
     generic_qc_ = proposal->header().qc();
+    round_ = std::max(round_, generic_qc_.view() + 1);
   }
 
   std::vector<std::unique_ptr<Proposal>> commit_ready_proposals_;

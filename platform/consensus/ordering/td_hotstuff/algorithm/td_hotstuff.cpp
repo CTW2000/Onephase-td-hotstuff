@@ -1,6 +1,10 @@
 #include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.h"
 
 #include <glog/logging.h>
+#include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <set>
 #include <sstream>
 #include "common/utils/utils.h"
 
@@ -8,6 +12,36 @@
 namespace resdb {
 namespace td_hotstuff {
 namespace {
+
+std::set<int> ParseSilentLeaderIdsFromEnv() {
+  std::set<int> ids;
+  const char* raw = std::getenv("TD_HS_SILENT_LEADER_IDS");
+  if (raw == nullptr || std::string(raw).empty()) {
+    return ids;
+  }
+  std::stringstream input(raw);
+  std::string item;
+  while (std::getline(input, item, ',')) {
+    if (!item.empty()) {
+      ids.insert(std::stoi(item));
+    }
+  }
+  return ids;
+}
+
+
+int PositiveIntFromEnv(const char* name, int default_value) {
+  const char* raw = std::getenv(name);
+  if (raw == nullptr || std::string(raw).empty()) {
+    return default_value;
+  }
+  try {
+    const int value = std::stoi(raw);
+    return value > 0 ? value : default_value;
+  } catch (...) {
+    return default_value;
+  }
+}
 
 std::string WeightsForLog(const std::vector<int64_t>& weights) {
   std::ostringstream out;
@@ -25,7 +59,7 @@ std::string WeightsForLog(const std::vector<int64_t>& weights) {
 }  // namespace
 
 HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier * verifier, int non_responsive_num, int fork_tail_num, uint64_t timer_length, const std::vector<int64_t>& replica_weights, int64_t quorum_weight)
-  : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), timer_length_(timer_length), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), weight_schedule_(std::make_shared<WeightSchedule>(total_num, replica_weights_)), qc_signer_cooldown_(QcSignerDiversityConfigFromEnv()) {
+  : ProtocolBase(id, f, total_num), verifier_(verifier), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), timer_length_(timer_length), timeout_config_(TimeoutConfigFromEnv()), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), weight_schedule_(std::make_shared<WeightSchedule>(total_num, replica_weights_)), qc_signer_cooldown_(QcSignerDiversityConfigFromEnv()) {
 
     LOG(ERROR)<<"id:"<<id<<" f:"<<f<<" total:"<<total_num_;
 
@@ -33,19 +67,33 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier * verifier, i
   leader_selection_schedule_ = std::make_shared<LeaderSelectionSchedule>(
       total_num_, replica_weights_, LeaderSelectionConfigFromEnv());
   proposal_manager_ = std::make_unique<ProposalManager>(id, 2*f_+1, verifier, total_num, non_responsive_num, fork_tail_num, replica_weights_, quorum_weight_, weight_schedule_, leader_selection_schedule_);
+  silent_leader_ids_ = ParseSilentLeaderIdsFromEnv();
+  if (timeout_config_.enabled && !silent_leader_ids_.empty()) {
+    timeout_manager_ = std::make_unique<TimeoutManager>(
+        id_, total_num_, verifier_, weight_schedule_);
+  }
   weight_update_manager_ = std::make_unique<WeightUpdateManager>(id_, total_num_, verifier_, WeightUpdateConfigFromEnv());
   qc_evidence_recorder_ = AsyncQcEvidenceRecorder::CreateFromEnv(id_, total_num_, weight_schedule_->ActiveWeights());
+  weight_plugin_drain_interval_views_ = PositiveIntFromEnv(
+      "TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS", 256);
   SyncReputationWeightsToActiveSchedule();
   has_sent_ = false;
     send_thread_ = std::thread(&HotStuff::AsyncSend, this);
     commit_thread_ = std::thread(&HotStuff::AsyncCommit, this);
     weight_plugin_broadcast_thread_ =
         std::thread(&HotStuff::AsyncBroadcastWeightPluginMessages, this);
+    if (timeout_manager_ != nullptr) {
+      timeout_thread_ = std::thread(&HotStuff::AsyncTimeout, this);
+    }
     batch_size_ = 1;
   qc_formed_ = proposal_received_ = false;
 }
 
 HotStuff::~HotStuff() {
+  stop_timeout_.store(true);
+  if (timeout_thread_.joinable()) {
+    timeout_thread_.join();
+  }
   {
     std::unique_lock<std::mutex> lk(weight_plugin_broadcast_mutex_);
     stop_weight_plugin_broadcast_ = true;
@@ -72,6 +120,10 @@ bool HotStuff::IsLeader(int view){
   return LeaderForView(view) == id_;
 }
 
+bool HotStuff::IsSilentLeaderForExperiment() const {
+  return silent_leader_ids_.find(id_) != silent_leader_ids_.end();
+}
+
 bool HotStuff::Ready() {
   int view = proposal_manager_->CurrentView();
   return IsLeader(view) && !has_sent_;
@@ -84,27 +136,185 @@ void HotStuff::StartNewRound() {
   //LOG(ERROR)<<" start new round";
 }
 
-void HotStuff::AsyncSend() {
-  while (!IsStop()) {
-    auto txn = txns_.Pop();
-    if(txn == nullptr){
+void HotStuff::AsyncTimeout() {
+  int watched_view = 0;
+  auto view_started_at = std::chrono::steady_clock::now();
+  auto last_vote_at = std::chrono::steady_clock::time_point::min();
+  const auto timeout_interval =
+      std::chrono::milliseconds(timeout_config_.timeout_ms);
+  const auto poll_interval = std::chrono::milliseconds(
+      std::max(1, std::min(timeout_config_.timeout_ms, 50)));
+  const auto startup_grace_interval = std::chrono::milliseconds(
+      std::max(timeout_config_.timeout_ms * 2, 1500));
+  auto public_keys_ready_at = std::chrono::steady_clock::time_point::min();
+  uint64_t observed_progress_epoch = 0;
+  auto last_weight_plugin_drain_at = std::chrono::steady_clock::time_point::min();
+  const auto weight_plugin_drain_interval = std::chrono::milliseconds(50);
+
+  while (!IsStop() && !stop_timeout_.load()) {
+    std::this_thread::sleep_for(poll_interval);
+    if (IsStop() || stop_timeout_.load() || timeout_manager_ == nullptr) {
+      continue;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (verifier_ != nullptr &&
+        verifier_->GetPublicKeysSize() < static_cast<size_t>(total_num_)) {
+      watched_view = 0;
+      view_started_at = now;
+      last_vote_at = std::chrono::steady_clock::time_point::min();
+      public_keys_ready_at = std::chrono::steady_clock::time_point::min();
+      continue;
+    }
+    if (public_keys_ready_at ==
+        std::chrono::steady_clock::time_point::min()) {
+      public_keys_ready_at = now;
+      watched_view = 0;
+      view_started_at = now;
+      last_vote_at = std::chrono::steady_clock::time_point::min();
+      continue;
+    }
+    if (now - public_keys_ready_at < startup_grace_interval) {
+      watched_view = 0;
+      view_started_at = now;
+      last_vote_at = std::chrono::steady_clock::time_point::min();
       continue;
     }
 
-    while(!IsStop()){
-      std::unique_lock<std::mutex> lk(n_mutex_);
-      vote_cv_.wait_for(lk, std::chrono::microseconds(1000),
-          [&] { return Ready(); });
-      if(Ready()){
-        break;
+    WeightPluginOutboundMessages periodic_weight_messages;
+    if (last_weight_plugin_drain_at ==
+            std::chrono::steady_clock::time_point::min() ||
+        now - last_weight_plugin_drain_at >= weight_plugin_drain_interval) {
+      {
+        std::unique_lock<std::mutex> lk(mutex_);
+        periodic_weight_messages =
+            DrainWeightPlugin(proposal_manager_->CurrentView());
+      }
+      BroadcastWeightPluginMessages(periodic_weight_messages);
+      last_weight_plugin_drain_at = now;
+    }
+
+    TimeoutVote vote;
+    TimeoutCert cert;
+    bool has_vote = false;
+    bool has_cert = false;
+    bool advanced = false;
+    {
+      std::unique_lock<std::mutex> lk(mutex_);
+      if (timeout_progress_epoch_ != observed_progress_epoch) {
+        observed_progress_epoch = timeout_progress_epoch_;
+        watched_view = 0;
+        view_started_at = now;
+        last_vote_at = std::chrono::steady_clock::time_point::min();
+        continue;
+      }
+      const int local_view = proposal_manager_->CurrentView();
+      const int view = std::max(local_view, last_valid_proposal_view_ + 1);
+      const QC& high_qc = proposal_manager_->HighQC();
+      const int watched_leader = LeaderForView(view);
+      if (silent_leader_ids_.find(watched_leader) ==
+          silent_leader_ids_.end()) {
+        watched_view = 0;
+        view_started_at = now;
+        last_vote_at = std::chrono::steady_clock::time_point::min();
+        continue;
+      }
+      if (!high_qc.hash().empty() && high_qc.view() >= view) {
+        watched_view = 0;
+        view_started_at = now;
+        last_vote_at = std::chrono::steady_clock::time_point::min();
+        continue;
+      }
+      if (!ShouldTimeoutView(view, last_valid_proposal_view_)) {
+        watched_view = 0;
+        view_started_at = now;
+        last_vote_at = std::chrono::steady_clock::time_point::min();
+        continue;
+      }
+      if (view != watched_view) {
+        watched_view = view;
+        view_started_at = now;
+        last_vote_at = std::chrono::steady_clock::time_point::min();
+        continue;
+      }
+      if (now - view_started_at < timeout_interval) {
+        continue;
+      }
+      if (last_vote_at != std::chrono::steady_clock::time_point::min() &&
+          now - last_vote_at < timeout_interval) {
+        continue;
+      }
+      std::unique_ptr<TimeoutVote> local_vote =
+          timeout_manager_->CreateTimeoutVote(view, high_qc);
+      if (local_vote == nullptr) {
+        continue;
+      }
+      last_vote_at = now;
+      vote = *local_vote;
+      has_vote = true;
+      std::unique_ptr<TimeoutCert> formed_cert =
+          timeout_manager_->AddVote(*local_vote);
+      if (formed_cert != nullptr) {
+        cert = *formed_cert;
+        has_cert = true;
+        advanced = ApplyTimeoutCertLocked(cert);
+        if (advanced) {
+          watched_view = proposal_manager_->CurrentView();
+          view_started_at = now;
+          last_vote_at = std::chrono::steady_clock::time_point::min();
+        }
       }
     }
-    if(IsStop()){
-      return;
+    if (has_vote) {
+      BroadcastTimeoutVote(vote);
+    }
+    if (has_cert) {
+      BroadcastTimeoutCert(cert);
+    }
+    if (advanced) {
+      StartNewRound();
+    }
+  }
+}
+
+void HotStuff::AsyncSend() {
+  while (!IsStop()) {
+    const bool timeout_active = timeout_manager_ != nullptr;
+    std::unique_ptr<Transaction> txn = txns_.Pop(timeout_active ? std::max(1, timeout_config_.timeout_ms - 10) : 100);
+    if (txn == nullptr) {
+      if (!timeout_active) {
+        continue;
+      }
+      std::unique_lock<std::mutex> lk(n_mutex_);
+      vote_cv_.wait_for(lk, std::chrono::microseconds(1000),
+                        [&] { return Ready(); });
+      if (!Ready()) {
+        continue;
+      }
+      {
+        std::unique_lock<std::mutex> hs_lk(mutex_);
+        if (proposal_manager_->CurrentView() >
+            timeout_empty_proposal_until_view_) {
+          continue;
+        }
+      }
+    } else {
+      while(!IsStop()){
+        std::unique_lock<std::mutex> lk(n_mutex_);
+        vote_cv_.wait_for(lk, std::chrono::microseconds(1000),
+            [&] { return Ready(); });
+        if(Ready()){
+          break;
+        }
+      }
+      if(IsStop()){
+        return;
+      }
     }
 
     std::vector<std::unique_ptr<Transaction> > txns;
-    txns.push_back(std::move(txn));
+    if (txn != nullptr) {
+      txns.push_back(std::move(txn));
+    }
     for(int i = 1; i < batch_size_; ++i){
       auto txn = txns_.Pop();
       if(txn == nullptr){
@@ -121,16 +331,30 @@ void HotStuff::AsyncSend() {
     std::unique_ptr<Proposal> proposal = nullptr;
     WeightPluginOutboundMessages weight_messages;
     bool still_leader = true;
+    bool silent_leader = false;
     {
       std::unique_lock<std::mutex> lk(mutex_);
       weight_messages = DrainWeightPlugin(proposal_manager_->CurrentView());
       still_leader = IsLeader(proposal_manager_->CurrentView());
-      if (still_leader) {
-        proposal = proposal_manager_ -> GenerateProposal(txns);
+      if (still_leader && IsSilentLeaderForExperiment()) {
+        silent_leader = true;
+        has_sent_ = true;
+      } else if (still_leader) {
+        if (txns.empty() && proposal_manager_->CurrentView() >
+                                timeout_empty_proposal_until_view_) {
+          still_leader = false;
+        } else {
+          proposal = proposal_manager_ -> GenerateProposal(txns);
+          if (proposal != nullptr) {
+            last_valid_proposal_view_ = std::max(
+                last_valid_proposal_view_, proposal->header().view());
+          }
+          ++timeout_progress_epoch_;
+        }
       }
       //LOG(ERROR)<<"propose view:"<<proposal->header().view();
     }
-    if (!still_leader) {
+    if (!still_leader || silent_leader) {
       for (auto& pending_txn : txns) {
         if (pending_txn != nullptr) {
           txns_.Push(std::move(pending_txn));
@@ -237,13 +461,34 @@ void HotStuff::SyncReputationWeightsToActiveSchedule() {
 }
 
 WeightSnapshot HotStuff::CurrentWeightSnapshot(int current_view) const {
-  return MakeWeightSnapshot(*weight_schedule_, current_view);
+  WeightSnapshot snapshot = MakeWeightSnapshot(*weight_schedule_, current_view);
+  if (leader_selection_schedule_ != nullptr &&
+      leader_selection_schedule_->enabled()) {
+    snapshot.leader_weights =
+        leader_selection_schedule_->LeaderWeightsForView(current_view);
+    snapshot.leader_weight_root =
+        leader_selection_schedule_->LeaderWeightRootForView(current_view);
+    snapshot.leader_weight_version =
+        leader_selection_schedule_->WeightVersionForView(current_view);
+  }
+  return snapshot;
 }
 
-WeightPluginOutboundMessages HotStuff::DrainWeightPlugin(int current_view) {
+WeightPluginOutboundMessages HotStuff::DrainWeightPlugin(int current_view,
+                                                            bool force) {
   WeightPluginOutboundMessages messages;
   if (weight_update_manager_ == nullptr || !weight_update_manager_->enabled()) {
     return messages;
+  }
+  if (!force && weight_plugin_drain_interval_views_ > 0 &&
+      current_view < next_weight_plugin_drain_view_) {
+    return messages;
+  }
+  if (!force && weight_plugin_drain_interval_views_ > 0) {
+    next_weight_plugin_drain_view_ =
+        std::max(current_view + weight_plugin_drain_interval_views_,
+                 next_weight_plugin_drain_view_ +
+                     weight_plugin_drain_interval_views_);
   }
 
   WeightSnapshot snapshot = CurrentWeightSnapshot(current_view);
@@ -379,6 +624,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     std::unique_ptr<Certificate> cert = nullptr;
     WeightPluginOutboundMessages weight_messages;
     bool proposal_valid = true;
+    bool stale_proposal = false;
   {
     // LOG(ERROR)<<"RECEIVE proposer view:"<<proposal->header().view() << " from: " << proposal->sender();
     std::unique_lock<std::mutex> lk(mutex_);
@@ -390,12 +636,20 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     // Install any pending profile/weight update before checking proposal
     // leader context for this view.
     weight_messages = DrainWeightPlugin(view);
-    if(!proposal_manager_->Verify(*proposal)){
+    if (proposal->header().has_timeout_cert()) {
+      ApplyTimeoutCertLocked(proposal->header().timeout_cert());
+    }
+    if (view < proposal_manager_->CurrentView()) {
+      stale_proposal = true;
+      proposal_valid = false;
+    } else if(!proposal_manager_->Verify(*proposal)){
       LOG(ERROR)<<" proposal invalid";
       proposal_valid = false;
     }
 
     if (proposal_valid) {
+      last_valid_proposal_view_ = std::max(last_valid_proposal_view_, view);
+      ++timeout_progress_epoch_;
       if (qc_evidence_recorder_ != nullptr) {
         const QC& qc = proposal->header().qc();
         const int qc_view = qc.view();
@@ -441,6 +695,9 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   }
 
   BroadcastWeightPluginMessages(weight_messages);
+  if (stale_proposal) {
+    return true;
+  }
   if (!proposal_valid) {
     return false;
   }
@@ -491,12 +748,17 @@ bool HotStuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
     //LOG(ERROR)<<"RECEIVE proposer cert :"<<view<<" weight:"<<current_weight;
     const int64_t quorum_weight = weight_schedule_->QuorumWeightForView(view);
     if(previous_weight < quorum_weight && current_weight >= quorum_weight){
+      ++timeout_progress_epoch_;
       const std::vector<QcSignerInfo> signer_infos =
           CertificateSignerInfos(certs, view);
       std::vector<int> selected_signers =
           qc_signer_cooldown_.SelectSignersForQc(
               signer_infos, quorum_weight, static_cast<uint64_t>(view));
-      if (selected_signers.empty()) {
+      int64_t selected_weight = 0;
+      for (int signer : selected_signers) {
+        selected_weight += WeightForSigner(signer, view);
+      }
+      if (selected_signers.empty() || selected_weight < quorum_weight) {
         selected_signers = CertificateSigners(certs);
       }
       std::unique_ptr<QC> qc = std::make_unique<QC>();
@@ -538,6 +800,84 @@ bool HotStuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
   return true;
 }
 
+bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
+  if (vote == nullptr || timeout_manager_ == nullptr ||
+      !timeout_config_.enabled) {
+    return false;
+  }
+  TimeoutCert cert;
+  bool formed_cert = false;
+  bool advanced = false;
+  {
+    std::unique_lock<std::mutex> lk(mutex_);
+    if (vote->view() < proposal_manager_->CurrentView()) {
+      return true;
+    }
+    std::unique_ptr<TimeoutCert> maybe_cert = timeout_manager_->AddVote(*vote);
+    if (maybe_cert != nullptr) {
+      cert = *maybe_cert;
+      formed_cert = true;
+      advanced = ApplyTimeoutCertLocked(cert);
+    }
+  }
+  if (formed_cert) {
+    BroadcastTimeoutCert(cert);
+  }
+  if (advanced) {
+    StartNewRound();
+  }
+  return true;
+}
+
+bool HotStuff::ReceiveTimeoutCert(std::unique_ptr<TimeoutCert> cert) {
+  if (cert == nullptr || timeout_manager_ == nullptr ||
+      !timeout_config_.enabled) {
+    return false;
+  }
+  bool advanced = false;
+  {
+    std::unique_lock<std::mutex> lk(mutex_);
+    advanced = ApplyTimeoutCertLocked(*cert);
+  }
+  if (advanced) {
+    StartNewRound();
+  }
+  return advanced;
+}
+
+void HotStuff::BroadcastTimeoutVote(const TimeoutVote& vote) {
+  if (broadcast_call_ != nullptr) {
+    broadcast_call_(MessageType::TimeoutVoteMsg, vote);
+  }
+}
+
+void HotStuff::BroadcastTimeoutCert(const TimeoutCert& cert) {
+  if (broadcast_call_ != nullptr) {
+    broadcast_call_(MessageType::TimeoutCertMsg, cert);
+  }
+}
+
+bool HotStuff::ApplyTimeoutCertLocked(const TimeoutCert& cert) {
+  if (timeout_manager_ == nullptr ||
+      !timeout_manager_->VerifyTimeoutCert(cert)) {
+    return false;
+  }
+  if (!proposal_manager_->AdvanceToViewByTimeout(cert)) {
+    return false;
+  }
+  qc_formed_ = false;
+  proposal_received_ = false;
+  formed_qc_.reset();
+  has_sent_ = false;
+  ++timeout_progress_epoch_;
+  timeout_empty_proposal_until_view_ = proposal_manager_->CurrentView();
+  timeout_manager_->ResetBelowView(proposal_manager_->CurrentView());
+  LOG_EVERY_N(INFO, 1000) << "TD-Hotstuff timeout advanced to view:"
+                          << proposal_manager_->CurrentView()
+                          << " by tc view:" << cert.view();
+  return true;
+}
+
 bool HotStuff::ReceiveWeightUpdateCandidate(
     std::unique_ptr<CandidateWeightUpdate> candidate) {
   if (candidate == nullptr || weight_update_manager_ == nullptr ||
@@ -550,7 +890,7 @@ bool HotStuff::ReceiveWeightUpdateCandidate(
     const int current_view = proposal_manager_->CurrentView();
     weight_update_manager_->HandleCandidate(
         *candidate, CurrentWeightSnapshot(current_view));
-    weight_messages = DrainWeightPlugin(current_view);
+    weight_messages = DrainWeightPlugin(current_view, /*force=*/true);
   }
   BroadcastWeightPluginMessages(weight_messages);
   return true;
@@ -566,7 +906,7 @@ bool HotStuff::ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote) {
     std::unique_lock<std::mutex> lk(mutex_);
     const int current_view = proposal_manager_->CurrentView();
     weight_update_manager_->HandleVote(*vote, CurrentWeightSnapshot(current_view));
-    weight_messages = DrainWeightPlugin(current_view);
+    weight_messages = DrainWeightPlugin(current_view, /*force=*/true);
   }
   BroadcastWeightPluginMessages(weight_messages);
   return true;
@@ -582,7 +922,7 @@ bool HotStuff::ReceiveWeightUpdateCert(std::unique_ptr<WeightUpdateCert> cert) {
     std::unique_lock<std::mutex> lk(mutex_);
     const int current_view = proposal_manager_->CurrentView();
     weight_update_manager_->HandleCert(*cert, CurrentWeightSnapshot(current_view));
-    weight_messages = DrainWeightPlugin(current_view);
+    weight_messages = DrainWeightPlugin(current_view, /*force=*/true);
   }
   BroadcastWeightPluginMessages(weight_messages);
   return true;

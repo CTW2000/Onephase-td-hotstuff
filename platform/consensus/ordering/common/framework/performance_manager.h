@@ -53,6 +53,7 @@ class PerformanceManager {
 
   protected:
   virtual void SendMessage(const Request& request);
+  virtual void MaybeReleaseStalledInflight();
   
 
  protected:

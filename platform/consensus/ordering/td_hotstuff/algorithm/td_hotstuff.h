@@ -1,10 +1,12 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -13,6 +15,7 @@
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/qc_evidence_recorder.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/qc_signer_selector.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/timeout_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
 #include "platform/consensus/ordering/common/algorithm/protocol_base.h"
@@ -33,6 +36,8 @@ class HotStuff: public common::ProtocolBase {
   bool ReceiveWeightUpdateCandidate(std::unique_ptr<CandidateWeightUpdate> candidate);
   bool ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote);
   bool ReceiveWeightUpdateCert(std::unique_ptr<WeightUpdateCert> cert);
+  bool ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote);
+  bool ReceiveTimeoutCert(std::unique_ptr<TimeoutCert> cert);
   int CurrentView();
   int LeaderForView(int view);
   int CurrentLeader();
@@ -43,6 +48,7 @@ class HotStuff: public common::ProtocolBase {
     void StartNewRound();
     void AsyncSend();
     void AsyncCommit();
+    void AsyncTimeout();
 
     std::unique_ptr<Certificate> GenerateCertificate(const Proposal& proposal);
 
@@ -60,7 +66,8 @@ class HotStuff: public common::ProtocolBase {
         const std::map<int, std::unique_ptr<Certificate>>& certs,
         int view) const;
     WeightSnapshot CurrentWeightSnapshot(int current_view) const;
-    WeightPluginOutboundMessages DrainWeightPlugin(int current_view);
+    WeightPluginOutboundMessages DrainWeightPlugin(int current_view,
+                                                    bool force = false);
     bool InstallWeightUpdate(const InstallableWeightUpdate& update,
                              int current_view);
     void BroadcastWeightPluginMessages(
@@ -69,6 +76,10 @@ class HotStuff: public common::ProtocolBase {
     void BroadcastWeightPluginMessagesNow(
         const WeightPluginOutboundMessages& messages);
     void SyncReputationWeightsToActiveSchedule();
+    void BroadcastTimeoutVote(const TimeoutVote& vote);
+    void BroadcastTimeoutCert(const TimeoutCert& cert);
+    bool ApplyTimeoutCertLocked(const TimeoutCert& cert);
+    bool IsSilentLeaderForExperiment() const;
 
  private:
   LockFreeQueue<Transaction> txns_;
@@ -98,18 +109,28 @@ class HotStuff: public common::ProtocolBase {
   int crash_num_ = 0;
 
   uint64_t timer_length_;
+  TimeoutConfig timeout_config_;
   std::vector<int64_t> replica_weights_;
   int64_t quorum_weight_;
   std::shared_ptr<WeightSchedule> weight_schedule_;
   std::shared_ptr<LeaderSelectionSchedule> leader_selection_schedule_;
   std::unique_ptr<WeightUpdateManager> weight_update_manager_;
   std::unique_ptr<AsyncQcEvidenceRecorder> qc_evidence_recorder_;
+  std::unique_ptr<TimeoutManager> timeout_manager_;
   QcSignerCooldownTracker qc_signer_cooldown_;
   std::mutex weight_plugin_broadcast_mutex_;
   std::condition_variable weight_plugin_broadcast_cv_;
   std::deque<WeightPluginOutboundMessages> weight_plugin_broadcast_queue_;
   std::thread weight_plugin_broadcast_thread_;
+  std::thread timeout_thread_;
   bool stop_weight_plugin_broadcast_ = false;
+  std::atomic<bool> stop_timeout_{false};
+  int timeout_empty_proposal_until_view_ = 0;
+  int weight_plugin_drain_interval_views_ = 64;
+  int next_weight_plugin_drain_view_ = 0;
+  uint64_t timeout_progress_epoch_ = 0;
+  int last_valid_proposal_view_ = 0;
+  std::set<int> silent_leader_ids_;
 };
 
 }  // namespace td_hotstuff

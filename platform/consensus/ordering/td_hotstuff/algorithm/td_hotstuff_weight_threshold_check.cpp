@@ -45,6 +45,29 @@ QC MakeQC(const std::vector<int>& signers, int total_num) {
   return qc;
 }
 
+TimeoutVote MakeTimeoutVote(int view, int signer, const QC& high_qc) {
+  TimeoutVote vote;
+  vote.set_view(view);
+  vote.set_signer(signer);
+  *vote.mutable_high_qc() = high_qc;
+  vote.mutable_signature()->set_node_id(signer);
+  vote.mutable_signature()->set_signature("timeout-signature");
+  return vote;
+}
+
+TimeoutCert MakeTimeoutCert(int view, const std::vector<int>& signers,
+                            const QC& high_qc) {
+  TimeoutCert cert;
+  cert.set_view(view);
+  *cert.mutable_high_qc() = high_qc;
+  cert.set_signer_bitmap(BuildSignerBitmap(signers, 4));
+  cert.set_quorum_rule_id(kTimeoutQuorumRuleId);
+  for (int signer : signers) {
+    *cert.add_votes() = MakeTimeoutVote(view, signer, high_qc);
+  }
+  return cert;
+}
+
 
 TEST(TdHotstuffWeightedQCTest, DefaultWeightsPreserveClassicQuorum) {
   MockSignatureVerifier verifier;
@@ -102,6 +125,42 @@ TEST(TdHotstuffWeightedQCTest, RejectsBitmapThatDoesNotMatchSignatures) {
   qc.set_signer_bitmap(BuildSignerBitmap({1, 3}, 4));
 
   EXPECT_FALSE(manager.VerifyQC(qc));
+}
+
+TEST(TdHotstuffTimeoutTest,
+     AdvanceToViewByTimeoutMovesToNextViewAndGeneratedProposalCarriesTc) {
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+
+  TestProposalManager manager(/*node_id=*/3, &verifier, nullptr);
+  TimeoutCert cert = MakeTimeoutCert(/*view=*/1, {1, 2, 3}, QC());
+
+  EXPECT_TRUE(manager.AdvanceToViewByTimeout(cert));
+  EXPECT_EQ(manager.CurrentView(), 2);
+
+  std::vector<std::unique_ptr<Transaction>> txns;
+  std::unique_ptr<Proposal> proposal = manager.GenerateProposal(txns);
+
+  ASSERT_TRUE(proposal->header().has_timeout_cert());
+  EXPECT_EQ(proposal->header().timeout_cert().view(), 1);
+  EXPECT_TRUE(manager.Verify(*proposal));
+}
+
+TEST(TdHotstuffTimeoutTest, RejectsProposalWithInvalidTimeoutCert) {
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+
+  TestProposalManager manager(/*node_id=*/3, &verifier, nullptr);
+  TimeoutCert cert = MakeTimeoutCert(/*view=*/1, {1, 2, 3}, QC());
+  ASSERT_TRUE(manager.AdvanceToViewByTimeout(cert));
+
+  std::vector<std::unique_ptr<Transaction>> txns;
+  std::unique_ptr<Proposal> proposal = manager.GenerateProposal(txns);
+  proposal->mutable_header()->mutable_timeout_cert()->set_signer_bitmap(
+      BuildSignerBitmap({1, 3, 4}, 4));
+  proposal->set_hash(manager.GetHash(*proposal));
+
+  EXPECT_FALSE(manager.Verify(*proposal));
 }
 
 TEST(TdHotstuffLeaderSelectionTest,

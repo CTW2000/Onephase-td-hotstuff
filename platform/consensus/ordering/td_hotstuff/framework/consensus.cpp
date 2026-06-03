@@ -28,6 +28,7 @@
 #include <glog/logging.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <sstream>
 #include <string>
@@ -66,6 +67,15 @@ std::vector<int64_t> ParseReplicaWeightsFromEnv(int total_replicas) {
                << " does not match replica num:" << total_replicas;
   }
   return parsed_weights;
+}
+
+int RequestViewLookahead(const ResDBConfig& config) {
+  const char* raw = std::getenv("TD_HS_REQUEST_VIEW_LOOKAHEAD");
+  if (raw != nullptr && std::string(raw).size() > 0) {
+    return std::max(0, std::stoi(raw));
+  }
+  return std::max(static_cast<int>(config.GetReplicaNum()),
+                  static_cast<int>(config.GetMaxProcessTxn()));
 }
 
 }  // namespace
@@ -151,6 +161,24 @@ int Consensus::ProcessCustomConsensus(std::unique_ptr<Request> request) {
     }
     hs_->ReceiveWeightUpdateCert(std::move(cert));
   }
+  else if(request->user_type() == MessageType::TimeoutVoteMsg) {
+    std::unique_ptr<TimeoutVote> vote = std::make_unique<TimeoutVote>();
+    if (!vote->ParseFromString(request->data())) {
+      LOG(ERROR) << "parse timeout vote fail";
+      assert(1 == 0);
+      return -1;
+    }
+    hs_->ReceiveTimeoutVote(std::move(vote));
+  }
+  else if(request->user_type() == MessageType::TimeoutCertMsg) {
+    std::unique_ptr<TimeoutCert> cert = std::make_unique<TimeoutCert>();
+    if (!cert->ParseFromString(request->data())) {
+      LOG(ERROR) << "parse timeout cert fail";
+      assert(1 == 0);
+      return -1;
+    }
+    hs_->ReceiveTimeoutCert(std::move(cert));
+  }
   return 0;
 }
 
@@ -158,11 +186,16 @@ int Consensus::ProcessNewTransaction(std::unique_ptr<Request> request) {
   if (request == nullptr) {
     return -1;
   }
-  if (hs_ != nullptr && replica_communicator_ != nullptr &&
-      request->next_primary() == 0) {
-    const int request_view =
+  if (hs_ != nullptr && replica_communicator_ != nullptr) {
+    int request_view =
         request->current_view() > 0 ? request->current_view()
                                     : hs_->CurrentView();
+    const int current_view = hs_->CurrentView();
+    const int lookahead = RequestViewLookahead(config_);
+    if (request_view < current_view ||
+        request_view > current_view + lookahead) {
+      request_view = current_view;
+    }
     const int leader = hs_->LeaderForView(request_view);
     if (leader > 0 && leader != config_.GetSelfInfo().id()) {
       Request forwarded(*request);

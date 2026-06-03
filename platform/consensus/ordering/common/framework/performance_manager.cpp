@@ -242,9 +242,12 @@ int PerformanceManager::BatchProposeMsg() {
   bool start = false;
   while (!stop_) {
     if (send_num_ > 0 && send_num_ >= config_.GetMaxProcessTxn()) {
-      // LOG(ERROR)<<"wait send num:"<<send_num_ << " and " << config_.GetMaxProcessTxn();
-      usleep(100);
-      continue;
+      MaybeReleaseStalledInflight();
+      if (send_num_ > 0 && send_num_ >= config_.GetMaxProcessTxn()) {
+        // LOG(ERROR)<<"wait send num:"<<send_num_ << " and " << config_.GetMaxProcessTxn();
+        usleep(100);
+        continue;
+      }
     }
     if (batch_req.size() < config_.ClientBatchNum()) {
       std::unique_ptr<QueueItem> item =
@@ -325,6 +328,8 @@ int PerformanceManager::DoBatch(
   global_stats_->IncClientCall();
   return 0;
 }
+
+void PerformanceManager::MaybeReleaseStalledInflight() {}
 
 void PerformanceManager::SendMessage(const Request& request){
   int primary = GetPrimary();

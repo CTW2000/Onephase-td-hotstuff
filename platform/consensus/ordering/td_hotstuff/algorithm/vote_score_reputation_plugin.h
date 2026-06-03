@@ -21,6 +21,7 @@ struct ReputationRecoveryConfig {
   int64_t min_weight = 1;
   int64_t max_weight = 100;
   uint64_t min_decay_opportunities = 1;
+  bool penalize_missing_leader = false;
 };
 
 struct ReputationQcEvent {
@@ -38,7 +39,6 @@ struct ValidatorVoteScore {
   uint64_t inclusions = 0;
   int vote_score = 0;
   uint64_t leader_certified_count = 0;
-  uint64_t leader_gap_count = 0;
   int leader_score = 100;
   int leader_diversity_score = 100;
   int reputation_score = 100;

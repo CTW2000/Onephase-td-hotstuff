@@ -27,6 +27,9 @@ struct WeightSnapshot {
   uint64_t weight_version = 0;
   int64_t quorum_weight = 0;
   int current_view = 0;
+  std::vector<int64_t> leader_weights;
+  std::string leader_weight_root;
+  uint64_t leader_weight_version = 0;
 };
 
 struct WeightPluginOutboundMessages {
@@ -128,8 +131,7 @@ class WeightUpdateManager {
   SignatureVerifier* verifier_;
   WeightUpdateConfig config_;
 
-  bool has_latest_local_weight_candidate_ = false;
-  VoteScoreCandidate latest_local_weight_candidate_;
+  std::map<std::string, VoteScoreCandidate> local_weight_candidates_;
   std::map<std::string, CandidateWeightUpdate> weight_update_candidates_;
   std::map<std::string, std::map<int, WeightUpdateVote>> weight_update_votes_;
   std::map<int, WeightUpdateCert> pending_weight_update_certs_;

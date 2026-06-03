@@ -6,12 +6,25 @@ cc_library(
     hdrs = ["proposal_manager.h"],
     deps = [
         ":leader_selection_schedule",
+        ":timeout_manager",
         ":weight_schedule",
         "//common:comm",
         "//common/crypto:signature_verifier",
         "//common/utils",
         "//platform/consensus/ordering/td_hotstuff/proto:proposal_cc_proto",
         "//platform/statistic:stats",
+    ],
+)
+
+cc_library(
+    name = "timeout_manager",
+    srcs = ["timeout_manager.cpp"],
+    hdrs = ["timeout_manager.h"],
+    deps = [
+        ":weight_schedule",
+        "//common:glog",
+        "//common/crypto:signature_verifier",
+        "//platform/consensus/ordering/td_hotstuff/proto:proposal_cc_proto",
     ],
 )
 
@@ -85,6 +98,7 @@ cc_library(
         ":proposal_manager",
         ":qc_evidence_recorder",
         ":qc_signer_selector",
+        ":timeout_manager",
         ":weight_update_manager",
         "//common:comm",
         "//platform/common/queue:lock_free_queue",
@@ -99,6 +113,17 @@ cc_test(
     srcs = ["td_hotstuff_weight_threshold_check.cpp"],
     deps = [
         ":leader_selection_schedule",
+        ":proposal_manager",
+        "//common/crypto:mock_signature_verifier",
+        "//common/test:test_main",
+    ],
+)
+
+cc_test(
+    name = "timeout_manager_test",
+    srcs = ["timeout_manager_test.cpp"],
+    deps = [
+        ":timeout_manager",
         ":proposal_manager",
         "//common/crypto:mock_signature_verifier",
         "//common/test:test_main",

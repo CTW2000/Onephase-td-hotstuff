@@ -15,9 +15,12 @@ TEST(HotStuffPerformanceManagerTest,
 
 TEST(HotStuffPerformanceManagerTest,
      DynamicRouteUsesObservedPrimaryFromResponses) {
-  EXPECT_EQ(BenchmarkRouteForView(/*view=*/1, /*replica_num=*/5,
-                                  /*observed_primary=*/5),
-            5);
+  EXPECT_EQ(BenchmarkRouteForView(/*view=*/ 1, /*replica_num=*/ 5,
+                                  /*observed_primary=*/ 5),
+            1);
+  EXPECT_EQ(BenchmarkRouteForView(/*view=*/ 3, /*replica_num=*/ 5,
+                                  /*observed_primary=*/ 5),
+            3);
 }
 
 TEST(HotStuffPerformanceManagerTest,
@@ -25,6 +28,14 @@ TEST(HotStuffPerformanceManagerTest,
   EXPECT_EQ(BenchmarkRouteForView(/*view=*/5, /*replica_num=*/5,
                                   /*observed_primary=*/9),
             DefaultLeaderForView(/*view=*/5, /*total_replicas=*/5));
+}
+
+
+TEST(HotStuffPerformanceManagerTest, BenchmarkRetryTimeoutDoesNotUseConsensusTimeoutByDefault) {
+  EXPECT_EQ(BenchmarkRetryTimeoutUsForEnv(/*raw_request_timeout_ms=*/nullptr),
+            500000);
+  EXPECT_EQ(BenchmarkRetryTimeoutUsForEnv(/*raw_request_timeout_ms=*/"250"),
+            250000);
 }
 
 TEST(HotStuffPerformanceManagerTest,

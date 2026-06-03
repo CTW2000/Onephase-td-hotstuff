@@ -36,6 +36,7 @@ namespace td_hotstuff {
 
 bool BenchmarkDynamicRoutingEnabled(const LeaderSelectionConfig& config,
                                     const char* env_override);
+uint64_t BenchmarkRetryTimeoutUsForEnv(const char* raw_request_timeout_ms);
 int BenchmarkRouteForView(int view, int replica_num, int observed_primary);
 
 class HotStuffPerformanceManager : public common::PerformanceManager {
@@ -49,6 +50,7 @@ protected:
       std::unique_ptr<Request> request,
       std::function<void(std::unique_ptr<BatchUserResponse>)> call_back) override;
   void SendMessage(const Request& request) override;
+  void MaybeReleaseStalledInflight() override;
   int GetPrimary() override;
 
   int count_ = 0;

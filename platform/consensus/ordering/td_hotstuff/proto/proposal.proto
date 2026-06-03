@@ -37,6 +37,21 @@ message QC {
   bytes signer_bitmap = 5;
 }
 
+message TimeoutVote {
+  int32 view = 1;
+  int32 signer = 2;
+  QC high_qc = 3;
+  SignatureInfo signature = 4;
+}
+
+message TimeoutCert {
+  int32 view = 1;
+  QC high_qc = 2;
+  bytes signer_bitmap = 3;
+  repeated TimeoutVote votes = 4;
+  string quorum_rule_id = 5;
+}
+
 message Header {
   int32 proposer_id = 1;
   int32 proposal_id = 2;
@@ -45,6 +60,7 @@ message Header {
   bytes prehash = 5;
   int32 slot = 6;
   bytes leader_context_hash = 7;
+  TimeoutCert timeout_cert = 8;
 }
 
 message Proposal {
@@ -107,4 +123,6 @@ enum MessageType {
   WeightUpdateCandidateMsg = 2;
   WeightUpdateVoteMsg = 3;
   WeightUpdateCertMsg = 4;
+  TimeoutVoteMsg = 5;
+  TimeoutCertMsg = 6;
 };

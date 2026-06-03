@@ -10,6 +10,13 @@ Codex 改代码，但不提交 commit；我在 Cursor 的 Git 面板里审查 di
 
 
 
+## End-to-end pipeline checks
+
+- When adding a new function or changing existing behavior, check the whole live pipeline before experiments: consensus protocol logic, reputation plugin logic, client request routing, benchmark deployment scripts, and metric parsing/summary code.
+- Do not assume a performance drop is caused by the new protocol idea until the client pipeline, benchmark routing, generated configs, environment propagation, and result parser have been checked against the active leader/weight/timeout rules.
+- In normal no-Byzantine 20-replica + 1-client experiments, throughput should recover to the normal baseline, usually around `82000+`, unless the new mechanism intentionally adds unavoidable work. If no-Byzantine throughput stays far below that level, treat it as a bug or pipeline mismatch and find the source before running larger Byzantine experiments.
+- Before interpreting Byzantine results, verify that metric logic reports both aggregate and post-activation behavior, including latency, throughput, protocol mismatch counters, active weights, leader eligibility, and benchmark routing decisions.
+
 ## Server version synchronization
 
 - For any change that can affect build output, runtime behavior, deployment scripts, experiment configs, or dependencies, keep all six server checkouts synchronized before redeploying or running experiments.
