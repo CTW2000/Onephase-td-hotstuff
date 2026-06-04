@@ -13,17 +13,25 @@
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
-# under the License.    
+# under the License.
 
-import math
+import datetime
 import json
+import math
 import os
 import re
 import sys
 
-total = 0
-
 WEIGHT_RE = re.compile(r"active_weights:\[([^\]]*)\]")
+LEADER_WEIGHT_RE = re.compile(r"leader_weights:\[([^\]]*)\]")
+GLOG_TIME_RE = re.compile(
+    r"^[A-Z](\d{8})\s+(\d{2}:\d{2}:\d{2})(?:\.(\d+))?")
+TXN_RE = re.compile(r"(?:^|\s)txn:(\d+)(?:\s|$)")
+LATENCY_RE = re.compile(r"%s\s*:([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)")
+
+MAX_LATENCY_SECONDS = float(os.environ.get("TD_HS_RESULT_MAX_LATENCY_SECONDS", "300"))
+STEADY_AFTER_THRESHOLD_GRACE_SECONDS = float(
+    os.environ.get("TD_HS_RESULT_STEADY_GRACE_SECONDS", "10"))
 
 class ParsedLog:
     def __init__(self):
@@ -34,7 +42,13 @@ class ParsedLog:
         self.lat4 = []
         self.before_threshold_tps = []
         self.after_threshold_tps = []
+        self.before_threshold_lat = []
+        self.after_threshold_lat = []
+        self.steady_after_threshold_tps = []
+        self.steady_after_threshold_lat = []
         self.threshold_seen = False
+        self.final_weights = None
+        self.final_leader_weights = None
 
     def __iter__(self):
         yield self.tps
@@ -46,15 +60,31 @@ class ParsedLog:
 def valid_positive_number(value):
     return math.isfinite(value) and value > 0
 
-def parse_positive_float(raw):
+def parse_positive_float(raw, max_value=None):
     try:
         value = float(raw)
     except (TypeError, ValueError):
         return None
-    return value if valid_positive_number(value) else None
+    if not valid_positive_number(value):
+        return None
+    if max_value is not None and value > max_value:
+        return None
+    return value
 
-def parse_active_weights(line):
-    match = WEIGHT_RE.search(line)
+def parse_timestamp(line):
+    match = GLOG_TIME_RE.match(line)
+    if not match:
+        return None
+    date_part, time_part, micros = match.groups()
+    micros = (micros or "0")[:6].ljust(6, "0")
+    try:
+        dt = datetime.datetime.strptime(
+            f"{date_part} {time_part}.{micros}", "%Y%m%d %H:%M:%S.%f")
+    except ValueError:
+        return None
+    return dt.timestamp()
+
+def parse_weights_from_match(match):
     if not match:
         return None
     weights = []
@@ -67,6 +97,12 @@ def parse_active_weights(line):
         except ValueError:
             return None
     return weights
+
+def parse_active_weights(line):
+    return parse_weights_from_match(WEIGHT_RE.search(line))
+
+def parse_leader_weights(line):
+    return parse_weights_from_match(LEADER_WEIGHT_RE.search(line))
 
 def all_bad_nodes_below_threshold(weights, bad_node_count, eligible_min_weight,
                                   bad_node_ids=None):
@@ -116,9 +152,9 @@ def bad_node_count_from_env_or_config():
     if explicit is not None:
         return explicit
     best = 0
-    for path in ("config/td_hotstuff.config", "config/template_active.config"):
+    for cfg_path in ("config/td_hotstuff.config", "config/template_active.config"):
         try:
-            with open(path) as config_file:
+            with open(cfg_path) as config_file:
                 data = json.load(config_file)
         except (OSError, json.JSONDecodeError):
             continue
@@ -128,165 +164,217 @@ def bad_node_count_from_env_or_config():
             continue
     return best
 
-def read_tps(file, bad_node_count=None, eligible_min_weight=10,
-             bad_node_ids=None):
-    parsed = ParsedLog()
-    threshold_reached = False
-    with open(file) as f:
-        for l in f.readlines():
-            weights = parse_active_weights(l)
-            if all_bad_nodes_below_threshold(
-                    weights, bad_node_count, eligible_min_weight,
-                    bad_node_ids=bad_node_ids):
-                threshold_reached = True
-                parsed.threshold_seen = True
-            s = l.split()
-            for r in s:
-                try:
-                  if(r.split(':')[0] == 'txn'):
-                      value = int(r.split(':')[1])
-                      parsed.tps.append(value)
-                      if threshold_reached:
-                          parsed.after_threshold_tps.append(value)
-                      else:
-                          parsed.before_threshold_tps.append(value)
-                except:
-                  print("s:",s)
-            if l.find("req client latency") > 0:
-                print("get lat:",s)
-                value = parse_positive_float(s[-1].split(':')[-1])
-                if value is not None:
-                    parsed.lat.append(value)
-            if l.find("consensus latency :") > 0 and l.find("consensus latency :-nan") == -1:
-                print("get consensus latency:",s[-10])
-                value = parse_positive_float(s[-7].split(':')[-1])
-                if value is not None:
-                    parsed.lat2.append(value)
-            if l.find("propose latency :") > 0 and l.find("propose latency :-nan") == -1:
-                print("get propose latency:",s[-7])
-                value = parse_positive_float(s[-4].split(':')[-1])
-                if value is not None:
-                    parsed.lat3.append(value)
-            if l.find("reply latency:") > 0:
-                print("get reply latency:",s[-1])
-                value = parse_positive_float(s[-1].split(':')[-1])
-                if value is not None:
-                    parsed.lat4.append(value)
+def threshold_weights_for_line(line):
+    leader_weights = parse_leader_weights(line)
+    if leader_weights is not None:
+        return leader_weights
+    return parse_active_weights(line)
 
-                 
+def find_global_threshold_time(files, bad_node_count, eligible_min_weight,
+                               bad_node_ids=None):
+    threshold_time = None
+    for file in files:
+        try:
+            fh = open(file)
+        except OSError:
+            continue
+        with fh:
+            for line in fh:
+                weights = threshold_weights_for_line(line)
+                if not all_bad_nodes_below_threshold(
+                        weights, bad_node_count, eligible_min_weight,
+                        bad_node_ids=bad_node_ids):
+                    continue
+                line_time = parse_timestamp(line)
+                if line_time is None:
+                    continue
+                if threshold_time is None or line_time < threshold_time:
+                    threshold_time = line_time
+    return threshold_time
+
+def classify_window(line_time, threshold_time):
+    if threshold_time is None or line_time is None:
+        return "before"
+    return "after" if line_time >= threshold_time else "before"
+
+def is_steady_after_threshold(line_time, threshold_time):
+    return (threshold_time is not None and line_time is not None and
+            line_time >= threshold_time + STEADY_AFTER_THRESHOLD_GRACE_SECONDS)
+
+def parse_line_latency(line, label):
+    match = LATENCY_RE.pattern % re.escape(label)
+    found = re.search(match, line)
+    if not found:
+        return None
+    return parse_positive_float(found.group(1), MAX_LATENCY_SECONDS)
+
+def read_tps(file, threshold_time=None, bad_node_count=None,
+             eligible_min_weight=11, bad_node_ids=None):
+    parsed = ParsedLog()
+    last_timestamp = None
+    with open(file) as f:
+        for line in f:
+            parsed_time = parse_timestamp(line)
+            if parsed_time is not None:
+                last_timestamp = parsed_time
+            line_time = parsed_time if parsed_time is not None else last_timestamp
+            weights = parse_active_weights(line)
+            if weights is not None:
+                parsed.final_weights = weights
+            leader_weights = parse_leader_weights(line)
+            if leader_weights is not None:
+                parsed.final_leader_weights = leader_weights
+            if all_bad_nodes_below_threshold(
+                    threshold_weights_for_line(line), bad_node_count,
+                    eligible_min_weight, bad_node_ids=bad_node_ids):
+                parsed.threshold_seen = True
+            window = classify_window(line_time, threshold_time)
+            steady = is_steady_after_threshold(line_time, threshold_time)
+
+            for match in TXN_RE.finditer(line):
+                value = int(match.group(1))
+                parsed.tps.append(value)
+                if window == "after":
+                    parsed.after_threshold_tps.append(value)
+                    if steady:
+                        parsed.steady_after_threshold_tps.append(value)
+                else:
+                    parsed.before_threshold_tps.append(value)
+
+            value = parse_line_latency(line, "req client latency")
+            if value is not None:
+                parsed.lat.append(value)
+                if window == "after":
+                    parsed.after_threshold_lat.append(value)
+                    if steady:
+                        parsed.steady_after_threshold_lat.append(value)
+                else:
+                    parsed.before_threshold_lat.append(value)
+
+            value = parse_line_latency(line, "consensus latency")
+            if value is not None:
+                parsed.lat2.append(value)
+            value = parse_line_latency(line, "propose latency")
+            if value is not None:
+                parsed.lat3.append(value)
+            value = parse_line_latency(line, "reply latency")
+            if value is not None:
+                parsed.lat4.append(value)
     return parsed
+
+def percentile(sorted_values, pct):
+    if not sorted_values:
+        return 0
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    rank = (len(sorted_values) - 1) * pct / 100.0
+    lower = int(math.floor(rank))
+    upper = int(math.ceil(rank))
+    if lower == upper:
+        return sorted_values[lower]
+    fraction = rank - lower
+    return sorted_values[lower] * (1.0 - fraction) + sorted_values[upper] * fraction
 
 def cal_tps(tps, tot, label=""):
     tps_sum = []
     tps_max = 0
     prefix = f"{label} " if label else ""
-
-    for v in tps:
-        if v <= 0:
+    for value in tps:
+        if value <= 0:
             continue
-        tps_max = max(tps_max, v)
-        tps_sum.append(v) 
-
+        tps_max = max(tps_max, value)
+        tps_sum.append(value)
     tps_sum.sort()
     trimmed_tps = tps_sum[tot:] if tot > 0 else tps_sum
     if len(trimmed_tps) == 0 and len(tps_sum) > 0:
-        # Tail-forking can produce only one positive sample per replica. In
-        # that case, dropping one warmup sample per log deletes all evidence
-        # and turns a low-throughput run into a parser crash.
         trimmed_tps = tps_sum
     print(prefix + "tsp:", trimmed_tps)
     if len(trimmed_tps) == 0:
         print(prefix + "average throughput:", 0)
         return tps_max, 0
-    # print("max throughput:",tps_max)
     avg_tps = sum(trimmed_tps) / len(trimmed_tps)
     print(prefix + "average throughput:", avg_tps)
     return tps_max, avg_tps
 
-def cal_lat(lat, tot):
+def cal_lat(lat, tot, label=""):
     lat_sum = []
     lat_max = 0
-    for v in lat:
-        if not valid_positive_number(v):
+    for value in lat:
+        if not valid_positive_number(value):
             continue
-        lat_max = max(lat_max, v)
-        lat_sum.append(v) 
-
-    # tot = int(tot)
-    # lat_sum = lat_sum[:-tot]
-    # print("max latency:",lat_max)
+        lat_max = max(lat_max, value)
+        lat_sum.append(value)
+    prefix = f"{label} " if label else ""
     if len(lat_sum) == 0:
-        print("average latency:", 0)
+        print(prefix + "latency samples:", 0)
+        print(prefix + "average latency:", 0)
         return 0, 0
-    print("average latency:",sum(lat_sum)/len(lat_sum))
-    return lat_max, sum(lat_sum)/len(lat_sum)
+    lat_sum.sort()
+    print(prefix + "latency samples:", len(lat_sum))
+    print(prefix + "max latency:", lat_max)
+    print(prefix + "p50 latency:", percentile(lat_sum, 50))
+    print(prefix + "p95 latency:", percentile(lat_sum, 95))
+    avg = sum(lat_sum) / len(lat_sum)
+    print(prefix + "average latency:", avg)
+    return lat_max, avg
 
 def cal_lat2(lat, tot):
-    lat_sum = []
-    lat_max = 0
-    for v in lat:
-        if not valid_positive_number(v):
-            continue
-        lat_max = max(lat_max, v)
-        lat_sum.append(v) 
-
-    tot = int(tot)
-    # lat_sum = lat_sum[:-tot]
-    if len(lat_sum) == 0:
-        print("max consensus latency:", 0)
-        print("average consensus latency:", 0)
-        return 0, 0
-    print("max consensus latency:",lat_max)
-    print("average consensus latency:",sum(lat_sum)/len(lat_sum))
-    return lat_max, sum(lat_sum)/len(lat_sum)
+    return cal_named_latency(lat, "consensus")
 
 def cal_lat3(lat, tot):
-    if len(lat) == 0: 
-        return 0, 0
-    lat_sum = []
-    lat_max = 0
-    for v in lat:
-        if not valid_positive_number(v):
-            continue
-        lat_max = max(lat_max, v)
-        lat_sum.append(v) 
-
-    tot = int(tot)
-    # lat_sum = lat_sum[:-tot]
-    if len(lat_sum) == 0:
-        print("max propose latency:", 0)
-        print("average propose latency:", 0)
-        return 0, 0
-    print("max propose latency:",lat_max)
-    print("average propose latency:",sum(lat_sum)/len(lat_sum))
-    return lat_max, sum(lat_sum)/len(lat_sum)
-
+    return cal_named_latency(lat, "propose")
 
 def cal_lat4(lat, tot):
-    if len(lat) == 0: 
-        return 0, 0
-    lat_sum = []
-    lat_max = 0
-    for v in lat:
-        if not valid_positive_number(v):
-            continue
-        lat_max = max(lat_max, v)
-        lat_sum.append(v) 
+    return cal_named_latency(lat, "reply")
 
-    tot = int(tot)
-    # lat_sum = lat_sum[:-tot]
-    if len(lat_sum) == 0:
-        print("max reply latency:", 0)
-        print("average reply latency:", 0)
+def cal_named_latency(lat, name):
+    lat_sum = [v for v in lat if valid_positive_number(v)]
+    if not lat_sum:
+        print(f"{name} latency samples:", 0)
+        print(f"max {name} latency:", 0)
+        print(f"average {name} latency:", 0)
         return 0, 0
-    print("max reply latency:",lat_max)
-    print("average reply latency:",sum(lat_sum)/len(lat_sum))
-    return lat_max, sum(lat_sum)/len(lat_sum)
+    lat_sum.sort()
+    print(f"{name} latency samples:", len(lat_sum))
+    print(f"max {name} latency:", max(lat_sum))
+    print(f"p50 {name} latency:", percentile(lat_sum, 50))
+    print(f"p95 {name} latency:", percentile(lat_sum, 95))
+    avg = sum(lat_sum) / len(lat_sum)
+    print(f"average {name} latency:", avg)
+    return max(lat_sum), avg
+
+def print_final_weight_summary(final_weights_by_log, final_leader_weights_by_log,
+                               bad_node_count, bad_node_ids):
+    if not final_weights_by_log:
+        return
+    final_weights = final_weights_by_log[-1]
+    if bad_node_ids:
+        bad_indexes = [node_id - 1 for node_id in bad_node_ids
+                       if 1 <= node_id <= len(final_weights)]
+    else:
+        bad_indexes = list(range(min(bad_node_count, len(final_weights))))
+    bad_index_set = set(bad_indexes)
+    bad_weights = [final_weights[i] for i in bad_indexes]
+    honest_weights = [weight for i, weight in enumerate(final_weights)
+                      if i not in bad_index_set]
+    print("final active weights:", ",".join(str(v) for v in final_weights))
+    print("bad node final weights:", ",".join(str(v) for v in bad_weights))
+    if final_leader_weights_by_log:
+        final_leader_weights = final_leader_weights_by_log[-1]
+        print("final active leader weights:",
+              ",".join(str(v) for v in final_leader_weights))
+        leader_bad_weights = [final_leader_weights[i] for i in bad_indexes
+                              if i < len(final_leader_weights)]
+        print("bad node final leader weights:",
+              ",".join(str(v) for v in leader_bad_weights))
+    if honest_weights:
+        honest_avg = sum(honest_weights) / len(honest_weights)
+        print("honest final weights min/avg/max:", min(honest_weights),
+              honest_avg, max(honest_weights))
 
 if __name__ == '__main__':
     files = sys.argv[1:]
-    print("calculate results, number of nodes:",len(files))
-
+    print("calculate results, number of nodes:", len(files))
 
     tps = []
     lat = []
@@ -295,24 +383,43 @@ if __name__ == '__main__':
     lat4 = []
     before_threshold_tps = []
     after_threshold_tps = []
+    steady_after_threshold_tps = []
+    before_threshold_lat = []
+    after_threshold_lat = []
+    steady_after_threshold_lat = []
+    final_weights_by_log = []
+    final_leader_weights_by_log = []
     threshold_seen = False
     bad_node_count = bad_node_count_from_env_or_config()
     bad_node_ids = parse_bad_node_ids(os.environ.get("TD_HS_BAD_NODE_IDS"))
-    eligible_min_weight = int_from_env("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT", 10)
-    total = len(files)
-    for f in files:
-        parsed = read_tps(f, bad_node_count=bad_node_count,
+    eligible_min_weight = int_from_env("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT", 11)
+    threshold_time = None
+    if bad_node_count > 0 or bad_node_ids:
+        threshold_time = find_global_threshold_time(
+            files, bad_node_count, eligible_min_weight,
+            bad_node_ids=bad_node_ids)
+
+    for file in files:
+        parsed = read_tps(file, threshold_time=threshold_time,
+                          bad_node_count=bad_node_count,
                           eligible_min_weight=eligible_min_weight,
                           bad_node_ids=bad_node_ids)
-        t, l, l2, l3, l4=parsed
-        # print(t)
-        tps += t
-        lat += l
-        lat2 += l2
-        lat3 += l3
-        lat4 += l4
+        parsed_tps, parsed_lat, parsed_lat2, parsed_lat3, parsed_lat4 = parsed
+        tps += parsed_tps
+        lat += parsed_lat
+        lat2 += parsed_lat2
+        lat3 += parsed_lat3
+        lat4 += parsed_lat4
         before_threshold_tps += parsed.before_threshold_tps
         after_threshold_tps += parsed.after_threshold_tps
+        steady_after_threshold_tps += parsed.steady_after_threshold_tps
+        before_threshold_lat += parsed.before_threshold_lat
+        after_threshold_lat += parsed.after_threshold_lat
+        steady_after_threshold_lat += parsed.steady_after_threshold_lat
+        if parsed.final_weights is not None:
+            final_weights_by_log.append(parsed.final_weights)
+        if parsed.final_leader_weights is not None:
+            final_leader_weights_by_log.append(parsed.final_leader_weights)
         threshold_seen = threshold_seen or parsed.threshold_seen
 
     max_tps, avg_tps = cal_tps(tps, len(files))
@@ -320,12 +427,20 @@ if __name__ == '__main__':
         print("bad-node threshold split: bad_node_count:",
               bad_node_count, "eligible_min_weight:", eligible_min_weight,
               "bad_node_ids:", ",".join(str(v) for v in bad_node_ids),
-              "found:", int(threshold_seen))
+              "found:", int(threshold_time is not None or threshold_seen),
+              "threshold_time:", threshold_time if threshold_time is not None else "n/a")
         cal_tps(before_threshold_tps, 0, "before bad-node threshold")
         cal_tps(after_threshold_tps, 0, "after bad-node threshold")
-    max_lat, avg_lat = cal_lat(lat, len(files)/2)
+        cal_tps(steady_after_threshold_tps, 0,
+                "steady after bad-node threshold")
+        cal_lat(before_threshold_lat, 0, "before bad-node threshold")
+        cal_lat(after_threshold_lat, 0, "after bad-node threshold")
+        cal_lat(steady_after_threshold_lat, 0,
+                "steady after bad-node threshold")
+        print_final_weight_summary(final_weights_by_log,
+                                   final_leader_weights_by_log,
+                                   bad_node_count, bad_node_ids)
+    max_lat, avg_lat = cal_lat(lat, len(files) / 2)
+    cal_lat4(lat4, len(files) / 2)
     print(avg_tps)
     print(avg_lat)
-    # max_lat3, avg_lat3 = cal_lat3(lat3, len(files)/2)
-    # max_lat2, avg_lat2 = cal_lat2(lat2, len(files)/2)
-    # max_lat4, avg_lat4 = cal_lat4(lat4, len(files)/2)

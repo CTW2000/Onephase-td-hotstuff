@@ -27,8 +27,7 @@ bool EnvEnabled(const char* env_name) {
   return value != nullptr && std::string(value) == "1";
 }
 
-uint64_t PositiveUint64FromEnv(const char* env_name,
-                               uint64_t default_value) {
+uint64_t PositiveUint64FromEnv(const char* env_name, uint64_t default_value) {
   const char* value = std::getenv(env_name);
   if (value == nullptr || std::string(value).empty()) {
     return default_value;
@@ -117,11 +116,12 @@ LeaderSelectionConfig LeaderSelectionConfigFromEnv() {
   LeaderSelectionConfig config;
   config.enabled = EnvEnabled(kLeaderSelectionEnableEnv);
   config.dynamic_updates_enabled = EnvEnabled(kLeaderProfileUpdateEnableEnv);
-  config.eligible_min_weight =
-      static_cast<int64_t>(PositiveUint64FromEnv(kLeaderEligibleMinWeightEnv,
-                                                 10));
-  config.profile_activation_delay_views =
-      static_cast<int>(PositiveUint64FromEnv(kWeightUpdateEpochViewsEnv, 4096));
+  config.eligible_min_weight = static_cast<int64_t>(
+      PositiveUint64FromEnv(kLeaderEligibleMinWeightEnv, 10));
+  // Candidate leader_weights already describe the previous active schedule.
+  // Activating them at the candidate activation view gives the intended
+  // one-epoch lag without delaying leader exclusion by another epoch.
+  config.profile_activation_delay_views = 0;
   return config;
 }
 
@@ -132,31 +132,6 @@ int DefaultLeaderForView(int view, int total_replicas) {
   return (view % total_replicas) + 1;
 }
 
-std::vector<int64_t> NormalizeLeaderWeights(
-    const std::vector<int64_t>& weights, int total_replicas) {
-  return NormalizeWeightPoints(weights, total_replicas);
-}
-
-std::string LeaderWeightRootHex(const std::vector<int64_t>& leader_weights) {
-  std::ostringstream out;
-  out << "td_hotstuff_leader_weight_root_v1|" << leader_weights.size();
-  for (size_t i = 0; i < leader_weights.size(); ++i) {
-    out << '|' << (i + 1) << ':' << leader_weights[i];
-  }
-  return HashHexForTesting(out.str());
-}
-
-std::string LeaderRandomnessRefHex(const std::string& old_weight_root,
-                                   uint64_t old_weight_version,
-                                   int activation_view,
-                                   const std::string& leader_weight_root) {
-  std::ostringstream out;
-  out << "td_hotstuff_leader_randomness_ref_v1|" << old_weight_root << '|'
-      << old_weight_version << '|' << activation_view << '|'
-      << leader_weight_root;
-  return HashHexForTesting(out.str());
-}
-
 LeaderSelectionSchedule::LeaderSelectionSchedule(
     int total_replicas, const std::vector<int64_t>& leader_weights,
     LeaderSelectionConfig config)
@@ -165,8 +140,8 @@ LeaderSelectionSchedule::LeaderSelectionSchedule(
   record.activation_view = 0;
   record.weight_version = 0;
   record.leader_params_version = kLeaderParamsVersionV1;
-  record.leader_weights = NormalizeLeaderWeights(leader_weights,
-                                                 total_replicas_);
+  record.leader_weights =
+      NormalizeLeaderWeights(leader_weights, total_replicas_);
   record.leader_weight_root = LeaderWeightRootHex(record.leader_weights);
   record.leader_randomness_ref = LeaderRandomnessRefHex(
       WeightRootHex(record.leader_weights), record.weight_version,
@@ -185,6 +160,10 @@ uint64_t LeaderSelectionSchedule::ActiveWeightVersion() const {
   return ActiveRecord().weight_version;
 }
 
+int LeaderSelectionSchedule::ActiveActivationView() const {
+  return ActiveRecord().activation_view;
+}
+
 const std::string& LeaderSelectionSchedule::ActiveLeaderWeightRoot() const {
   return ActiveRecord().leader_weight_root;
 }
@@ -198,13 +177,17 @@ const LeaderSelectionSchedule::Record& LeaderSelectionSchedule::RecordForView(
     int view) const {
   const Record* selected = &records_.front();
   for (const Record& record : records_) {
-    if (record.activation_view <= view) {
+    if (record.activation_view < view) {
       selected = &record;
     } else {
       break;
     }
   }
   return *selected;
+}
+
+int LeaderSelectionSchedule::ActivationViewForView(int view) const {
+  return RecordForView(view).activation_view;
 }
 
 uint64_t LeaderSelectionSchedule::WeightVersionForView(int view) const {
@@ -243,9 +226,9 @@ int LeaderSelectionSchedule::LeaderForView(int view) const {
     return DefaultLeaderForView(view, total_replicas_);
   }
   const int64_t offset =
-      record.activation_view == 0 ? static_cast<int64_t>(view) - 1
-                                  : static_cast<int64_t>(view) -
-                                        record.activation_view;
+      record.activation_view == 0
+          ? static_cast<int64_t>(view) - 1
+          : static_cast<int64_t>(view) - record.activation_view;
   if (offset < 0) {
     return DefaultLeaderForView(view, total_replicas_);
   }
@@ -281,6 +264,19 @@ bool LeaderSelectionSchedule::ScheduleUpdate(
                        leader_randomness_ref)) {
     return false;
   }
+  for (size_t i = active_index_ + 1; i < records_.size(); ++i) {
+    const Record& pending = records_[i];
+    if (pending.activation_view == activation_view &&
+        pending.weight_version == weight_version &&
+        pending.leader_params_version == leader_params_version &&
+        pending.leader_weights == leader_weights &&
+        pending.leader_weight_root == leader_weight_root &&
+        pending.leader_randomness_ref == leader_randomness_ref) {
+      return true;
+    }
+    return false;
+  }
+
   Record record;
   record.activation_view = activation_view;
   record.weight_version = weight_version;
@@ -301,7 +297,7 @@ bool LeaderSelectionSchedule::ScheduleUpdate(
 bool LeaderSelectionSchedule::ActivateUpTo(int current_view) {
   size_t selected = active_index_;
   for (size_t i = active_index_; i < records_.size(); ++i) {
-    if (records_[i].activation_view <= current_view) {
+    if (records_[i].activation_view < current_view) {
       selected = i;
     }
   }

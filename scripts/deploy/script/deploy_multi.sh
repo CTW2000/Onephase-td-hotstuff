@@ -24,7 +24,7 @@ server_path=${server_path:1}
 server_name=`echo "$server" | awk -F':' '{print $NF}'`
 server_bin=${server_name}
 
-local_server_env=()
+local_server_env=(env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT)
 remote_server_env=""
 td_env_names=(
   TD_HS_WEIGHTS
@@ -41,7 +41,7 @@ td_env_names=(
   TD_HS_REPUTATION_BONUS_PER_EPOCH
   TD_HS_REPUTATION_MIN_WEIGHT
   TD_HS_REPUTATION_MAX_WEIGHT
-  TD_HS_REPUTATION_LEADER_MISS_PENALTY_ENABLE
+  TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES
   TD_HS_WEIGHT_UPDATE_ENABLE
   TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS
   TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY
@@ -52,19 +52,17 @@ td_env_names=(
   TD_HS_BENCHMARK_RETRY_ENABLE
   TD_HS_BENCHMARK_REQUEST_TIMEOUT_MS
   TD_HS_REQUEST_VIEW_LOOKAHEAD
+  TD_HS_TX_FORWARD_LOOKAHEAD
   TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS
   TD_HS_QC_DIVERSITY_ENABLE
   TD_HS_QC_SIGNER_COOLDOWN_ROUNDS
   TD_HS_TIMEOUT_ENABLE
   TD_HS_TIMEOUT_MS
-  TD_HS_SILENT_LEADER_IDS
+  TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS
 )
 for env_name in "${td_env_names[@]}"; do
   env_value="${!env_name:-}"
   if [ -n "${env_value}" ]; then
-    if [ ${#local_server_env[@]} -eq 0 ]; then
-      local_server_env=(env)
-    fi
     local_server_env+=("${env_name}=${env_value}")
     env_value_escaped=$(printf "%q" "${env_value}")
     remote_server_env="${remote_server_env}${env_name}=${env_value_escaped} "
@@ -73,6 +71,25 @@ done
 if [ -n "${remote_server_env}" ]; then
   remote_server_env="env ${remote_server_env}"
 fi
+
+is_silent_leader_node() {
+  local node_id="$1"
+  local raw_ids=",${TD_HS_SILENT_LEADER_IDS:-},"
+  [[ "$raw_ids" == *",${node_id},"* ]]
+}
+
+remote_env_for_node() {
+  local node_id="$1"
+  local env_prefix="${remote_server_env}"
+  if is_silent_leader_node "$node_id"; then
+    if [ -n "${env_prefix}" ]; then
+      env_prefix="${env_prefix}TD_HS_SILENT_LEADER=1 "
+    else
+      env_prefix="env TD_HS_SILENT_LEADER=1 "
+    fi
+  fi
+  printf '%s' "${env_prefix}"
+}
 
 bin_path=${BAZEL_WORKSPACE_PATH}/bazel-bin/${server_path}
 output_path=${script_path}/deploy/config_out
@@ -166,14 +183,22 @@ echo "Phase 3: Start nodes..."
       for n in "${nodes[@]}"; do
         node_dir="${script_path}/deploy/resilientdb_app/${n}"
         # setsid -f: new session + fork → fully detached from shell job control
-        (cd "${node_dir}" && "${local_server_env[@]}" setsid -f ./${server_bin} server.config cert/node_${n}.key.pri cert/cert_${n}.cert 0.0.0.0:${grafana_port} > ${server_bin}.log 2>&1 < /dev/null)
+        node_local_env=("${local_server_env[@]}")
+        if is_silent_leader_node "$n"; then
+          if [ ${#node_local_env[@]} -eq 0 ]; then
+            node_local_env=(env)
+          fi
+          node_local_env+=("TD_HS_SILENT_LEADER=1")
+        fi
+        (cd "${node_dir}" && "${node_local_env[@]}" setsid -f ./${server_bin} server.config cert/node_${n}.key.pri cert/cert_${n}.cert 0.0.0.0:${grafana_port} > ${server_bin}.log 2>&1 < /dev/null)
         ((grafana_port++))
       done
     else
       # Build startup script content
       start_cmds=""
       for n in "${nodes[@]}"; do
-        start_cmds="${start_cmds}cd ~/resilientdb_app/${n} && ${remote_server_env}nohup ./${server_bin} server.config cert/node_${n}.key.pri cert/cert_${n}.cert 0.0.0.0:${grafana_port} > ${server_bin}.log 2>&1 & "
+        node_remote_env=$(remote_env_for_node "$n")
+        start_cmds="${start_cmds}cd ~/resilientdb_app/${n} && ${node_remote_env}nohup ./${server_bin} server.config cert/node_${n}.key.pri cert/cert_${n}.cert 0.0.0.0:${grafana_port} > ${server_bin}.log 2>&1 & "
         ((grafana_port++))
       done
       # Use timeout to prevent SSH from hanging forever

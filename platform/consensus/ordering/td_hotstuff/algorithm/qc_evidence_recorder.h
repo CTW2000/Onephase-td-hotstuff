@@ -22,8 +22,10 @@ struct QcEvidenceRecord {
   int total_replicas = 0;
   int qc_view = 0;
   int leader_id = 0;
+  bool leader_opportunity = false;
   uint64_t weight_version = 0;
   std::string active_weight_root;
+  int64_t leader_eligible_min_weight = 0;
   std::string qc_hash;
   std::string signer_bitmap;
 };
@@ -52,11 +54,18 @@ class AsyncQcEvidenceRecorder {
                 const std::string& signer_bitmap);
   bool RecordQc(int qc_view, const std::string& qc_hash,
                 const std::string& signer_bitmap, int leader_id,
-                uint64_t weight_version, std::string active_weight_root);
+                uint64_t weight_version, std::string active_weight_root,
+                int64_t leader_eligible_min_weight = 0);
+  bool RecordLeaderOpportunity(int view, int leader_id,
+                               uint64_t weight_version,
+                               std::string active_weight_root,
+                               int64_t leader_eligible_min_weight = 0);
   std::vector<VoteScoreCandidate> TakeCompletedReputationCandidates();
   void UpdateReputationWeights(std::vector<int64_t> current_weights,
                                std::string old_weight_root_hex,
-                               uint64_t old_weight_version);
+                               uint64_t old_weight_version,
+                               std::vector<int64_t> leader_weights = {},
+                               int leader_profile_activation_view = 0);
 
   bool enabled() const { return enabled_; }
   uint64_t dropped_count() const { return dropped_count_.load(); }

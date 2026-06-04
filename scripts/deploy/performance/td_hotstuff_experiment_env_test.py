@@ -38,7 +38,7 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertEqual(values["TD_HS_LEADER_SELECTION_ENABLE"], "1")
         self.assertEqual(values["TD_HS_LEADER_PROFILE_UPDATE_ENABLE"], "1")
         self.assertEqual(values["TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT"], "10")
+        self.assertEqual(values["TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT"], "11")
         self.assertEqual(len(values["TD_HS_WEIGHTS"].split(",")), 20)
 
     def test_stable_env_preserves_explicit_overrides(self):
@@ -51,6 +51,24 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
 
         self.assertEqual(values["TD_HS_REPUTATION_WINDOW_SIZE"], "128")
         self.assertEqual(values["TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT"], "12")
+
+    def test_silent_leader_ids_are_not_shared_with_all_replicas_or_clients(self):
+        deploy_multi = os.path.join(REPO_ROOT, "scripts", "deploy", "script", "deploy_multi.sh")
+        with open(deploy_multi) as fp:
+            body = fp.read()
+        shared_env_block = body.split("td_env_names=(", 1)[1].split(")", 1)[0]
+        self.assertNotIn("TD_HS_SILENT_LEADER_IDS", shared_env_block)
+        self.assertIn("-u TD_HS_SILENT_LEADER_IDS", body)
+        self.assertIn("-u TD_HS_BAD_NODE_IDS", body)
+        self.assertIn("-u TD_HS_BAD_NODE_COUNT", body)
+        self.assertIn("TD_HS_SILENT_LEADER=1", body)
+        self.assertIn("is_silent_leader_node", body)
+
+        for script in ["run_slow_leader_n20.sh", "run_slow_vote_n20.sh"]:
+            with self.subTest(script=script):
+                with open(os.path.join(REPO_ROOT, "scripts", "deploy", script)) as fp:
+                    script_body = fp.read()
+                self.assertIn("env -u TD_HS_SILENT_LEADER_IDS", script_body)
 
     def test_slow_experiment_scripts_restore_shared_configs(self):
         scripts = [

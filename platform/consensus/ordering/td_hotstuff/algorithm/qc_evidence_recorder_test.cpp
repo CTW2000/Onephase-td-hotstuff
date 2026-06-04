@@ -32,6 +32,7 @@ TEST(QcEvidenceRecorderTest, FormatsCompactJsonWithoutSignatures) {
   record.leader_id = 4;
   record.weight_version = 2;
   record.active_weight_root = "root-2";
+  record.leader_eligible_min_weight = 11;
   record.qc_hash = std::string("\x01\xAB", 2);
   record.signer_bitmap = std::string("\x0D", 1);
 
@@ -40,7 +41,27 @@ TEST(QcEvidenceRecorderTest, FormatsCompactJsonWithoutSignatures) {
             "\"node_id\":3,\"total_replicas\":4,\"qc_view\":7,"
             "\"leader_id\":4,\"weight_version\":2,"
             "\"active_weight_root\":\"root-2\","
+            "\"leader_eligible_min_weight\":11,"
             "\"qc_hash_hex\":\"01ab\",\"signer_bitmap_hex\":\"0d\"}");
+}
+
+TEST(QcEvidenceRecorderTest, FormatsLeaderOpportunityJson) {
+  QcEvidenceRecord record;
+  record.node_id = 3;
+  record.total_replicas = 4;
+  record.qc_view = 9;
+  record.leader_id = 2;
+  record.leader_opportunity = true;
+  record.weight_version = 4;
+  record.active_weight_root = "root-4";
+  record.leader_eligible_min_weight = 11;
+
+  EXPECT_EQ(SerializeQcEvidenceRecord(record),
+            "{\"schema\":\"td_hotstuff_leader_opportunity_evidence_v1\","
+            "\"node_id\":3,\"total_replicas\":4,\"view\":9,"
+            "\"leader_id\":2,\"weight_version\":4,"
+            "\"active_weight_root\":\"root-4\","
+            "\"leader_eligible_min_weight\":11}");
 }
 
 TEST(QcEvidenceRecorderTest, DisabledRecorderDoesNotWriteFile) {
@@ -85,6 +106,7 @@ TEST(QcEvidenceRecorderTest, ReputationOnlyModeDispatchesWithoutEvidenceJson) {
   setenv("TD_HS_REPUTATION_OUTPUT_DIR", output_dir.c_str(), /*overwrite=*/1);
   setenv("TD_HS_REPUTATION_QUEUE_CAPACITY", "8", /*overwrite=*/1);
   setenv("TD_HS_REPUTATION_MAX_DELTA", "2", /*overwrite=*/1);
+  setenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS", "1", /*overwrite=*/1);
 
   std::unique_ptr<AsyncQcEvidenceRecorder> recorder =
       AsyncQcEvidenceRecorder::CreateFromEnv(
@@ -105,6 +127,7 @@ TEST(QcEvidenceRecorderTest, ReputationOnlyModeDispatchesWithoutEvidenceJson) {
   unsetenv("TD_HS_REPUTATION_OUTPUT_DIR");
   unsetenv("TD_HS_REPUTATION_QUEUE_CAPACITY");
   unsetenv("TD_HS_REPUTATION_MAX_DELTA");
+  unsetenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS");
 }
 
 

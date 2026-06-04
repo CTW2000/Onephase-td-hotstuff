@@ -38,6 +38,21 @@ int PositiveIntFromEnv(const char* env_name, int default_value) {
   }
 }
 
+int NonNegativeIntFromEnv(const char* env_name, int default_value) {
+  const char* raw = std::getenv(env_name);
+  if (raw == nullptr || std::string(raw).empty()) {
+    return default_value;
+  }
+  try {
+    const int value = std::stoi(raw);
+    return value >= 0 ? value : default_value;
+  } catch (const std::exception&) {
+    LOG(WARNING) << "invalid " << env_name << ":" << raw
+                 << ", use default:" << default_value;
+    return default_value;
+  }
+}
+
 bool SetError(std::string* error, const std::string& message) {
   if (error != nullptr) {
     *error = message;
@@ -82,6 +97,11 @@ bool CandidateHasCanonicalEpochWindow(const CandidateWeightUpdate& update,
       update.event_count() > static_cast<uint64_t>(epoch_views)) {
     return false;
   }
+  const uint64_t min_qc_evidence =
+      epoch_views <= 1 ? 1 : static_cast<uint64_t>(epoch_views / 2 + 1);
+  if (update.event_count() < min_qc_evidence) {
+    return false;
+  }
   return update.end_qc_view() > 0 &&
          update.end_qc_view() % epoch_views == 0 &&
          update.start_qc_view() == update.end_qc_view() - epoch_views + 1;
@@ -124,7 +144,7 @@ WeightUpdateConfig WeightUpdateConfigFromEnv() {
   const char* enabled = std::getenv(kEnableEnv);
   config.enabled = enabled != nullptr && std::string(enabled) == "1";
   config.epoch_views = PositiveIntFromEnv(kEpochViewsEnv, 4096);
-  config.activation_epoch_delay = PositiveIntFromEnv(kActivationDelayEnv, 2);
+  config.activation_epoch_delay = NonNegativeIntFromEnv(kActivationDelayEnv, 2);
   return config;
 }
 
@@ -133,7 +153,7 @@ int ComputeWeightUpdateActivationView(int end_qc_view, int epoch_views,
   if (end_qc_view <= 0 || epoch_views <= 0) {
     return 0;
   }
-  const int delay = std::max(activation_epoch_delay, 1);
+  const int delay = std::max(activation_epoch_delay, 0);
   // The evidence window ends with a QC at the epoch boundary. That QC was
   // formed under the old schedule, so the new schedule starts at the first
   // following view.
@@ -321,10 +341,6 @@ WeightUpdateManager::TakeInstallableUpdates(
   effective_snapshot.current_view = current_view;
   for (auto it = pending_weight_update_certs_.begin();
        it != pending_weight_update_certs_.end();) {
-    if (it->first > current_view) {
-      ++it;
-      continue;
-    }
     std::string error;
     if (!VerifyCertWithSnapshot(it->second, effective_snapshot, &error)) {
       LOG(WARNING) << "drop invalid pending weight update cert:" << error;
@@ -456,9 +472,6 @@ bool WeightUpdateManager::ValidateCandidateFields(
   }
   if (update.leader_weight_root() != LeaderWeightRootHex(leader_weights)) {
     return SetError(error, "leader weight root mismatch");
-  }
-  if (leader_weights != snapshot.weights) {
-    return SetError(error, "leader weights must match old weights");
   }
   if (update.leader_params_version() != 1 ||
       update.leader_randomness_ref().empty()) {

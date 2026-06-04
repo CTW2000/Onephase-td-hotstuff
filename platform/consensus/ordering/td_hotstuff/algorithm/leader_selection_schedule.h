@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_digest.h"
+
 namespace resdb {
 namespace td_hotstuff {
 
@@ -16,14 +18,6 @@ struct LeaderSelectionConfig {
 
 LeaderSelectionConfig LeaderSelectionConfigFromEnv();
 int DefaultLeaderForView(int view, int total_replicas);
-std::vector<int64_t> NormalizeLeaderWeights(
-    const std::vector<int64_t>& weights, int total_replicas);
-std::string LeaderWeightRootHex(const std::vector<int64_t>& leader_weights);
-std::string LeaderRandomnessRefHex(const std::string& old_weight_root,
-                                   uint64_t old_weight_version,
-                                   int activation_view,
-                                   const std::string& leader_weight_root);
-
 class LeaderSelectionSchedule {
  public:
   LeaderSelectionSchedule(int total_replicas,
@@ -37,10 +31,13 @@ class LeaderSelectionSchedule {
   int profile_activation_delay_views() const {
     return config_.profile_activation_delay_views;
   }
+  int64_t eligible_min_weight() const { return config_.eligible_min_weight; }
   uint64_t ActiveWeightVersion() const;
+  int ActiveActivationView() const;
   const std::string& ActiveLeaderWeightRoot() const;
   const std::vector<int64_t>& ActiveLeaderWeights() const;
 
+  int ActivationViewForView(int view) const;
   uint64_t WeightVersionForView(int view) const;
   const std::string& LeaderWeightRootForView(int view) const;
   const std::vector<int64_t>& LeaderWeightsForView(int view) const;

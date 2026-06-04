@@ -21,7 +21,7 @@ struct ReputationRecoveryConfig {
   int64_t min_weight = 1;
   int64_t max_weight = 100;
   uint64_t min_decay_opportunities = 1;
-  bool penalize_missing_leader = false;
+  int64_t leader_eligible_min_weight = 10;
 };
 
 struct ReputationQcEvent {
@@ -29,8 +29,11 @@ struct ReputationQcEvent {
   std::string qc_hash;
   std::string signer_bitmap;
   int leader_id = 0;
+  bool leader_opportunity = false;
   uint64_t weight_version = 0;
   std::string active_weight_root;
+  int64_t leader_eligible_min_weight = 0;
+  int leader_profile_activation_view = 0;
 };
 
 struct ValidatorVoteScore {
@@ -39,6 +42,7 @@ struct ValidatorVoteScore {
   uint64_t inclusions = 0;
   int vote_score = 0;
   uint64_t leader_certified_count = 0;
+  uint64_t leader_opportunity_count = 0;
   int leader_score = 100;
   int leader_diversity_score = 100;
   int reputation_score = 100;
@@ -128,11 +132,18 @@ class AsyncVoteScoreReputationPlugin {
                 const std::string& signer_bitmap);
   bool RecordQc(int qc_view, const std::string& qc_hash,
                 const std::string& signer_bitmap, int leader_id,
-                uint64_t weight_version, std::string active_weight_root);
+                uint64_t weight_version, std::string active_weight_root,
+                int64_t leader_eligible_min_weight = 0);
+  bool RecordLeaderOpportunity(int view, int leader_id,
+                               uint64_t weight_version,
+                               std::string active_weight_root,
+                               int64_t leader_eligible_min_weight = 0);
   std::vector<VoteScoreCandidate> TakeCompletedCandidates();
   void UpdateCurrentWeights(std::vector<int64_t> current_weights,
                             std::string old_weight_root_hex,
-                            uint64_t old_weight_version);
+                            uint64_t old_weight_version,
+                            std::vector<int64_t> leader_weights = {},
+                            int leader_profile_activation_view = 0);
 
   bool enabled() const { return enabled_; }
   uint64_t dropped_count() const { return dropped_count_.load(); }
@@ -145,12 +156,16 @@ class AsyncVoteScoreReputationPlugin {
                    uint64_t window_index,
                    std::vector<int64_t> current_weights,
                    std::string old_weight_root_hex,
-                   uint64_t old_weight_version);
+                   uint64_t old_weight_version,
+                   std::vector<int64_t> leader_weights,
+                   int leader_profile_activation_view);
   void DropRecord(int qc_view);
 
   int node_id_;
   int total_replicas_;
   std::vector<int64_t> current_weights_;
+  std::vector<int64_t> current_leader_weights_;
+  int leader_profile_activation_view_ = 0;
   std::string old_weight_root_hex_;
   uint64_t old_weight_version_ = 0;
   size_t epoch_views_ = 4096;
@@ -171,6 +186,8 @@ class AsyncVoteScoreReputationPlugin {
   bool started_ = false;
 
   uint64_t window_index_ = 0;
+  size_t output_records_since_flush_ = 0;
+  size_t current_window_qc_count_ = 0;
   std::vector<ReputationQcEvent> current_window_;
   std::deque<VoteScoreCandidate> completed_candidates_;
 };

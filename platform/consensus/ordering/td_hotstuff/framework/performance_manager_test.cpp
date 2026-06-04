@@ -7,25 +7,25 @@ namespace td_hotstuff {
 namespace {
 
 TEST(HotStuffPerformanceManagerTest,
-     DynamicRouteFallsBackToDefaultLeaderWithoutObservedPrimary) {
+     DynamicRoutePrefersPredictedLeader) {
   EXPECT_EQ(BenchmarkRouteForView(/*view=*/3, /*replica_num=*/5,
-                                  /*observed_primary=*/0),
+                                  /*predicted_primary=*/4,
+                                  /*observed_primary=*/2),
             4);
 }
 
 TEST(HotStuffPerformanceManagerTest,
-     DynamicRouteUsesObservedPrimaryFromResponses) {
-  EXPECT_EQ(BenchmarkRouteForView(/*view=*/ 1, /*replica_num=*/ 5,
-                                  /*observed_primary=*/ 5),
-            1);
-  EXPECT_EQ(BenchmarkRouteForView(/*view=*/ 3, /*replica_num=*/ 5,
-                                  /*observed_primary=*/ 5),
-            3);
+     DynamicRouteFallsBackToObservedPrimaryWithoutPrediction) {
+  EXPECT_EQ(BenchmarkRouteForView(/*view=*/1, /*replica_num=*/5,
+                                  /*predicted_primary=*/0,
+                                  /*observed_primary=*/5),
+            5);
 }
 
 TEST(HotStuffPerformanceManagerTest,
-     DynamicRouteIgnoresInvalidObservedPrimary) {
+     DynamicRouteIgnoresInvalidPredictionAndObservedPrimary) {
   EXPECT_EQ(BenchmarkRouteForView(/*view=*/5, /*replica_num=*/5,
+                                  /*predicted_primary=*/9,
                                   /*observed_primary=*/9),
             DefaultLeaderForView(/*view=*/5, /*total_replicas=*/5));
 }

@@ -49,6 +49,20 @@ kill_nodes() {
   sleep 1
 }
 
+
+derive_bad_node_ids() {
+  local count="$1"
+  local ids=""
+  for ((bad_idx=0; bad_idx<count; bad_idx++)); do
+    local bad_id=$((bad_idx * 3 + 1))
+    if [ -n "$ids" ]; then
+      ids="${ids},"
+    fi
+    ids="${ids}${bad_id}"
+  done
+  echo "$ids"
+}
+
 cleanup_all() {
   killall -9 kv_server_performance 2>/dev/null || true
   rm -rf $DEPLOY_DIR/resilientdb_app
@@ -60,16 +74,24 @@ cleanup_all() {
 }
 
 collect_logs() {
-  rm -rf result_*_log
+  rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
   for ip in $SERVERS; do
     for node_id in $(ssh -o StrictHostKeyChecking=no hyperchain@$ip "ls ~/resilientdb_app/ 2>/dev/null | grep -E '^[0-9]+$'" 2>/dev/null); do
       scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/kv_server_performance.log result_${node_id}_log 2>/dev/null &
+      if [ "${KEEP_EXPERIMENT_LOGS:-0}" = "1" ]; then
+        scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/'td_hotstuff_reputation_node_'*.jsonl result_${node_id}_reputation.jsonl 2>/dev/null || true &
+        scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/'td_hotstuff_qc_evidence_node_'*.jsonl result_${node_id}_qc_evidence.jsonl 2>/dev/null || true &
+      fi
     done
   done
   for d in $DEPLOY_DIR/resilientdb_app/*/; do
     local node_id=$(basename "$d")
     if [ -f "$d/kv_server_performance.log" ]; then
       cp "$d/kv_server_performance.log" result_${node_id}_log 2>/dev/null &
+      if [ "${KEEP_EXPERIMENT_LOGS:-0}" = "1" ]; then
+        cp "$d"/td_hotstuff_reputation_node_*.jsonl result_${node_id}_reputation.jsonl 2>/dev/null || true &
+        cp "$d"/td_hotstuff_qc_evidence_node_*.jsonl result_${node_id}_qc_evidence.jsonl 2>/dev/null || true &
+      fi
     fi
   done
   wait
@@ -102,7 +124,7 @@ run_single_experiment() {
   for((i=1;;i++)); do
     cf=$PWD/config_out/client${i}.config
     if [ ! -f "$cf" ]; then break; fi
-    ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
+    env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
   done
 
   echo "  Sleeping ${SLEEP_TIME}s..."
@@ -123,10 +145,16 @@ run_single_experiment() {
     done
     TD_HS_BAD_NODE_COUNT="${num_slow:-0}" TD_HS_BAD_NODE_IDS="$bad_node_ids" \
       python3 performance/calculate_result.py $log_files > "$result_file" 2>&1
+    if [ "${KEEP_EXPERIMENT_LOGS:-0}" = "1" ]; then
+      local log_dir="${result_file%.txt}_logs"
+      rm -rf "$log_dir"
+      mkdir -p "$log_dir"
+      cp result_* "$log_dir"/ 2>/dev/null || true
+    fi
     local tps=$(grep "^[0-9]" "$result_file" | head -1)
     local lat=$(grep "^[0-9]" "$result_file" | tail -1)
     echo "  >> Throughput: $tps txn/s | Latency: $lat s"
-    rm -rf result_*_log
+    rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
   else
     echo "  >> NO LOG FILES COLLECTED"
     echo "0" > "$result_file"
@@ -135,12 +163,15 @@ run_single_experiment() {
 }
 
 echo "=== Building all protocol binaries ==="
-bazel build //benchmark/protocols/hs1:kv_server_performance \
+if ! bazel build //benchmark/protocols/hs1:kv_server_performance \
             //benchmark/protocols/hs2:kv_server_performance \
             //benchmark/protocols/hs:kv_server_performance \
             //benchmark/protocols/slot_hs1:kv_server_performance \
             //benchmark/protocols/td_hotstuff:kv_server_performance \
-            //benchmark/protocols/pbft:kv_service_tools 2>&1 | tail -5
+            //benchmark/protocols/pbft:kv_service_tools 2>&1 | tail -5; then
+  echo "ERROR: build failed; aborting experiment"
+  exit 1
+fi
 
 echo ""
 echo "######################################################################"
@@ -157,20 +188,39 @@ for num_slow in "${SLOW_COUNTS[@]}"; do
       "TD-Hotstuff"|"TD-HotStuff"|"TD-HS") mpt=5; cfg="td_hotstuff";;
     esac
 
+    config_non_responsive_num=$num_slow
+    if [[ "$proto" == "TD-Hotstuff" || "$proto" == "TD-HotStuff" || "$proto" == "TD-HS" ]]; then
+      # TD-Hotstuff silent-leader experiments use per-node
+      # TD_HS_SILENT_LEADER=1 injection. Keep generic network-delay replicas
+      # disabled so the benchmark measures only silent leaders, not slow voters.
+      config_non_responsive_num=0
+    fi
+
     python3 -c "
 from leader_slowness_experiment import generate_config, generate_performance_server_conf
 generate_config(config_path='./config/${cfg}.config',
-                max_process_txn=$mpt, non_responsive_num=$num_slow, timer_length=$TIMER)
+                max_process_txn=$mpt, non_responsive_num=$config_non_responsive_num, timer_length=$TIMER)
 generate_performance_server_conf($N)
 "
     actual_slow=$(grep non_responsive_num ./config/${cfg}.config | grep -o '[0-9]\+')
-    if [ "$actual_slow" != "$num_slow" ]; then
-      echo "ERROR: ${cfg}.config has non_responsive_num=$actual_slow, expected $num_slow — ABORTING"
+    if [ "$actual_slow" != "$config_non_responsive_num" ]; then
+      echo "ERROR: ${cfg}.config has non_responsive_num=$actual_slow, expected $config_non_responsive_num — ABORTING"
       exit 1
+    fi
+
+    if [[ "$proto" == "TD-Hotstuff" || "$proto" == "TD-HotStuff" || "$proto" == "TD-HS" ]]; then
+      if [ "$num_slow" -gt 0 ]; then
+        export TD_HS_SILENT_LEADER_IDS="$(derive_bad_node_ids "$num_slow")"
+      else
+        unset TD_HS_SILENT_LEADER_IDS
+      fi
+    else
+      unset TD_HS_SILENT_LEADER_IDS
     fi
 
     result_file="$RESULT_DIR/${proto}_slow${num_slow}.txt"
     run_single_experiment "$proto" "SlowLeader slow=$num_slow timer=${TIMER}ms n=$N" "$result_file" "./config/performance.conf"
+    unset TD_HS_SILENT_LEADER_IDS
   done
 done
 

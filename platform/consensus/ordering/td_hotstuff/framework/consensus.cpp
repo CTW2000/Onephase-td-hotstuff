@@ -30,8 +30,10 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/utils/utils.h"
@@ -69,6 +71,15 @@ std::vector<int64_t> ParseReplicaWeightsFromEnv(int total_replicas) {
   return parsed_weights;
 }
 
+
+int TxForwardLookahead() {
+  const char* raw = std::getenv("TD_HS_TX_FORWARD_LOOKAHEAD");
+  if (raw != nullptr && std::string(raw).size() > 0) {
+    return std::max(0, std::stoi(raw));
+  }
+  return 4;
+}
+
 int RequestViewLookahead(const ResDBConfig& config) {
   const char* raw = std::getenv("TD_HS_REQUEST_VIEW_LOOKAHEAD");
   if (raw != nullptr && std::string(raw).size() > 0) {
@@ -85,6 +96,30 @@ std::unique_ptr<HotStuffPerformanceManager> Consensus::GetPerformanceManager() {
         ? std::make_unique<HotStuffPerformanceManager>(
           config_, GetBroadCastClient(), GetSignatureVerifier())
         : nullptr;
+}
+
+bool Consensus::ShouldForwardClientTransaction(const Request& request) const {
+  const int sender = request.sender_id();
+  return sender <= 0 || sender > static_cast<int>(config_.GetReplicaNum());
+}
+
+std::vector<std::pair<int, int>> Consensus::TransactionForwardTargets(
+    int request_view) {
+  std::vector<std::pair<int, int>> targets;
+  if (hs_ == nullptr) {
+    return targets;
+  }
+  std::set<int> seen_leaders;
+  const int lookahead = TxForwardLookahead();
+  for (int offset = 0; offset <= lookahead; ++offset) {
+    const int view = request_view + offset;
+    const int leader = hs_->LeaderForView(view);
+    if (leader <= 0 || !seen_leaders.insert(leader).second) {
+      continue;
+    }
+    targets.push_back({leader, view});
+  }
+  return targets;
 }
 
 Consensus::Consensus(const ResDBConfig& config,
@@ -186,32 +221,43 @@ int Consensus::ProcessNewTransaction(std::unique_ptr<Request> request) {
   if (request == nullptr) {
     return -1;
   }
-  if (hs_ != nullptr && replica_communicator_ != nullptr) {
-    int request_view =
-        request->current_view() > 0 ? request->current_view()
-                                    : hs_->CurrentView();
-    const int current_view = hs_->CurrentView();
-    const int lookahead = RequestViewLookahead(config_);
-    if (request_view < current_view ||
-        request_view > current_view + lookahead) {
-      request_view = current_view;
-    }
-    const int leader = hs_->LeaderForView(request_view);
-    if (leader > 0 && leader != config_.GetSelfInfo().id()) {
-      Request forwarded(*request);
-      forwarded.set_current_view(request_view);
-      forwarded.set_next_primary(leader);
-      forwarded.set_sender_id(config_.GetSelfInfo().id());
-      replica_communicator_->SendMessage(forwarded, leader);
-      return 0;
-    }
+  if (hs_ == nullptr) {
+    return -1;
   }
+
+  int request_view = request->current_view() > 0 ? request->current_view()
+                                               : hs_->CurrentView();
+  const int current_view = hs_->CurrentView();
+  const int lookahead = RequestViewLookahead(config_);
+  if (request_view < current_view ||
+      request_view > current_view + lookahead) {
+    request_view = current_view;
+  }
+
   std::unique_ptr<Transaction> txn = std::make_unique<Transaction>();
   txn->set_data(request->data());
   txn->set_hash(request->hash());
   txn->set_proxy_id(request->proxy_id());
   txn->set_user_seq(request->user_seq());
-  return hs_->ReceiveTransaction(std::move(txn));
+  hs_->ReceiveTransactionForView(std::move(txn), request_view);
+
+  if (replica_communicator_ != nullptr &&
+      ShouldForwardClientTransaction(*request)) {
+    const int self = config_.GetSelfInfo().id();
+    for (const auto& target : TransactionForwardTargets(request_view)) {
+      const int leader = target.first;
+      const int view = target.second;
+      if (leader <= 0 || leader == self) {
+        continue;
+      }
+      Request forwarded(*request);
+      forwarded.set_current_view(view);
+      forwarded.set_next_primary(leader);
+      forwarded.set_sender_id(self);
+      replica_communicator_->SendMessage(forwarded, leader);
+    }
+  }
+  return 0;
 }
 
 int Consensus::CommitMsg(const google::protobuf::Message& msg) {
@@ -225,6 +271,7 @@ int Consensus::CommitMsgInternal(const Transaction& txn) {
   request->set_seq(txn.id());
   request->set_proxy_id(txn.proxy_id());
   request->set_primary_id(txn.proposer());
+  request->set_commit_time(GetCurrentTime());
   transaction_executor_->AddExecuteMessage(std::move(request));
   return 0;
 }

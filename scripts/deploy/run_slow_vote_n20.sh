@@ -62,7 +62,7 @@ cleanup_all() {
 }
 
 collect_logs() {
-  rm -rf result_*_log
+  rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
   for ip in $SERVERS; do
     for node_id in $(ssh -o StrictHostKeyChecking=no hyperchain@$ip "ls ~/resilientdb_app/ 2>/dev/null | grep -E '^[0-9]+$'" 2>/dev/null); do
       scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/kv_server_performance.log result_${node_id}_log 2>/dev/null &
@@ -104,7 +104,7 @@ run_single_experiment() {
   for((i=1;;i++)); do
     cf=$PWD/config_out/client${i}.config
     if [ ! -f "$cf" ]; then break; fi
-    ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
+    env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
   done
 
   echo "  Sleeping ${SLEEP_TIME}s..."
@@ -120,7 +120,7 @@ run_single_experiment() {
     local tps=$(grep "^[0-9]" "$result_file" | head -1)
     local lat=$(grep "^[0-9]" "$result_file" | tail -1)
     echo "  >> Throughput: $tps txn/s | Latency: $lat s"
-    rm -rf result_*_log
+    rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
   else
     echo "  >> NO LOG FILES COLLECTED"
     echo "0" > "$result_file"

@@ -29,10 +29,17 @@ cc_library(
 )
 
 cc_library(
+    name = "td_hotstuff_digest",
+    srcs = ["td_hotstuff_digest.cpp"],
+    hdrs = ["td_hotstuff_digest.h"],
+    deps = ["//common/crypto:hash"],
+)
+
+cc_library(
     name = "weight_schedule",
     srcs = ["weight_schedule.cpp"],
     hdrs = ["weight_schedule.h"],
-    deps = ["//common/crypto:hash"],
+    deps = [":td_hotstuff_digest"],
 )
 
 cc_library(
@@ -40,6 +47,7 @@ cc_library(
     srcs = ["leader_selection_schedule.cpp"],
     hdrs = ["leader_selection_schedule.h"],
     deps = [
+        ":td_hotstuff_digest",
         ":weight_schedule",
     ],
 )
@@ -55,8 +63,7 @@ cc_library(
     srcs = ["vote_score_reputation_plugin.cpp"],
     hdrs = ["vote_score_reputation_plugin.h"],
     deps = [
-        ":leader_selection_schedule",
-        ":weight_schedule",
+        ":td_hotstuff_digest",
         "//common:glog",
         "//common/crypto:hash",
     ],

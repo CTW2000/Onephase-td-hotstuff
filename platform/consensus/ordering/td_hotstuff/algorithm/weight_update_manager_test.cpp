@@ -65,7 +65,7 @@ VoteScoreCandidate MakeCandidate(const WeightSchedule& schedule,
 }
 
 TEST(WeightScheduleTest,
-     ReturnsOldWeightsForDelayedQcAndNewWeightsAfterActivation) {
+     KeepsOldWeightsAtActivationBoundaryAndNewWeightsAfterward) {
   WeightSchedule schedule(/*total_replicas=*/4, {10, 20, 30, 40});
 
   EXPECT_EQ(schedule.WeightForSigner(/*signer=*/4, /*view=*/9), 40);
@@ -79,9 +79,12 @@ TEST(WeightScheduleTest,
                                       /*old_weight_version=*/0));
 
   EXPECT_EQ(schedule.WeightForSigner(/*signer=*/4, /*view=*/9), 40);
-  EXPECT_EQ(schedule.WeightForSigner(/*signer=*/4, /*view=*/10), 38);
-  EXPECT_EQ(schedule.WeightVersionForView(/*view=*/10), 1);
-  EXPECT_EQ(schedule.QuorumWeightForView(/*view=*/10), 66);
+  EXPECT_EQ(schedule.WeightForSigner(/*signer=*/4, /*view=*/10), 40);
+  EXPECT_EQ(schedule.WeightVersionForView(/*view=*/10), 0);
+  EXPECT_EQ(schedule.QuorumWeightForView(/*view=*/10), 67);
+  EXPECT_EQ(schedule.WeightForSigner(/*signer=*/4, /*view=*/11), 38);
+  EXPECT_EQ(schedule.WeightVersionForView(/*view=*/11), 1);
+  EXPECT_EQ(schedule.QuorumWeightForView(/*view=*/11), 66);
 }
 
 TEST(WeightUpdateManagerTest, SignsVoteForMatchingFutureCandidate) {
@@ -141,7 +144,7 @@ TEST(WeightUpdateManagerTest, CandidateIncludesValidatedLeaderProfile) {
 }
 
 TEST(WeightUpdateManagerTest,
-     RejectsLeaderProfileThatDoesNotMatchOldWeightSnapshot) {
+     AcceptsCertifiedLeaderProfileDifferentFromVotingWeights) {
   WeightSchedule schedule(/*total_replicas=*/4, {10, 20, 30, 40});
   WeightUpdateConfig config;
   config.enabled = true;
@@ -149,30 +152,17 @@ TEST(WeightUpdateManagerTest,
   config.activation_epoch_delay = 1;
 
   VoteScoreCandidate local = MakeCandidate(schedule, 8192);
+  local.leader_weights = {9, 20, 30, 40};
+  RecomputeVoteScoreCandidateRoots(&local);
   UseNonWarmupWindow(&local);
-  CandidateWeightUpdate update = BuildCandidateWeightUpdate(local);
-  const std::vector<int64_t> next_weights = CandidateNextWeights(update);
-  update.clear_leader_validators();
-  for (size_t i = 0; i < next_weights.size(); ++i) {
-    CandidateLeaderWeight* validator = update.add_leader_validators();
-    validator->set_validator_id(static_cast<int>(i + 1));
-    validator->set_leader_weight(next_weights[i]);
-  }
-  update.set_leader_weight_root(LeaderWeightRootHex(next_weights));
-  update.set_candidate_digest(VoteScoreCandidateDigest(
-      update.total_replicas(), update.window_index(), update.start_qc_view(),
-      update.end_qc_view(), update.event_count(), update.old_weight_root(),
-      update.old_weight_version(), update.activation_view(),
-      update.metric_root(), update.next_weight_root(), next_weights,
-      update.leader_weight_root(), update.leader_params_version(),
-      update.leader_randomness_ref(), next_weights));
+  const CandidateWeightUpdate update = BuildCandidateWeightUpdate(local);
 
   MockSignatureVerifier verifier;
   WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
                               config);
   std::string error;
-  EXPECT_FALSE(manager.VerifyCandidate(update, local, schedule, &error));
-  EXPECT_NE(error.find("old weights"), std::string::npos);
+  EXPECT_TRUE(manager.VerifyCandidate(update, local, schedule, &error))
+      << error;
 }
 
 TEST(WeightUpdateManagerTest, RejectsNonCanonicalCertEvenWithQuorum) {
@@ -283,15 +273,14 @@ TEST(WeightUpdateManagerTest, CertInstallsWhenOldWeightQuorumSigns) {
                               config);
   std::string error;
   ASSERT_TRUE(manager.VerifyCert(cert, schedule, &error)) << error;
-  ASSERT_TRUE(schedule.ScheduleUpdate(update.activation_view(),
-                                      CandidateNextWeights(update),
-                                      update.old_weight_root(),
-                                      update.old_weight_version()));
+  ASSERT_TRUE(schedule.ScheduleUpdate(
+      update.activation_view(), CandidateNextWeights(update),
+      update.old_weight_root(), update.old_weight_version()));
 
   EXPECT_EQ(schedule.WeightVersionForView(8191), 0);
-  EXPECT_EQ(schedule.WeightVersionForView(8192), 1);
+  EXPECT_EQ(schedule.WeightVersionForView(8192), 0);
+  EXPECT_EQ(schedule.WeightVersionForView(8193), 1);
 }
-
 
 TEST(WeightUpdateManagerPluginTest,
      LeaderProfileCatchUpCandidateEntersWithoutVotingWeightChange) {
@@ -405,8 +394,7 @@ TEST(WeightUpdateManagerPluginTest,
   const WeightSnapshot activation_snapshot = MakeWeightSnapshot(schedule, 8192);
   manager.HandleVote(MakeVote(update, 2), activation_snapshot);
   WeightPluginOutboundMessages out =
-      manager.DrainOutboundMessages(/*current_view=*/8192,
-                                    activation_snapshot);
+      manager.DrainOutboundMessages(/*current_view=*/8192, activation_snapshot);
   ASSERT_EQ(out.certs.size(), 1);
   EXPECT_EQ(out.certs[0].candidate_update().candidate_digest(),
             update.candidate_digest());
@@ -511,8 +499,7 @@ TEST(WeightUpdateManagerPluginTest,
       BuildCandidateWeightUpdate(second);
   ASSERT_EQ(first_update.old_weight_version(),
             second_update.old_weight_version());
-  ASSERT_NE(first_update.candidate_digest(),
-            second_update.candidate_digest());
+  ASSERT_NE(first_update.candidate_digest(), second_update.candidate_digest());
 
   MockSignatureVerifier verifier;
   EXPECT_CALL(verifier, SignMessage(WeightUpdateVotePayload(first_update, 1)))
@@ -677,7 +664,6 @@ TEST(WeightUpdateManagerPluginTest, DoesNotVoteForConflictingCandidate) {
   EXPECT_TRUE(out.votes.empty());
   EXPECT_TRUE(out.certs.empty());
 }
-
 
 }  // namespace
 }  // namespace td_hotstuff

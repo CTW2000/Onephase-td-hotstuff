@@ -25,6 +25,8 @@
 
 #include "platform/consensus/ordering/common/framework/performance_manager.h"
 
+#include <vector>
+
 #include <glog/logging.h>
 
 #include "common/utils/utils.h"
@@ -94,6 +96,34 @@ std::unique_ptr<Request> PerformanceManager::GenerateUserRequest() {
 
 void PerformanceManager::SetDataFunc(std::function<std::string()> func) {
   data_func_ = std::move(func);
+}
+
+void PerformanceManager::TrackPendingResponse(uint64_t local_id) {
+  std::unique_lock<std::mutex> lk(pending_response_ids_mutex_);
+  pending_response_ids_.insert(static_cast<int64_t>(local_id));
+}
+
+void PerformanceManager::UntrackPendingResponse(uint64_t local_id) {
+  std::unique_lock<std::mutex> lk(pending_response_ids_mutex_);
+  pending_response_ids_.erase(static_cast<int64_t>(local_id));
+}
+
+int PerformanceManager::ExpirePendingResponses() {
+  std::vector<int64_t> ids;
+  {
+    std::unique_lock<std::mutex> lk(pending_response_ids_mutex_);
+    ids.reserve(pending_response_ids_.size());
+    for (int64_t id : pending_response_ids_) {
+      ids.push_back(id);
+    }
+    pending_response_ids_.clear();
+  }
+  for (int64_t id : ids) {
+    const int idx = id % response_set_size_;
+    std::unique_lock<std::mutex> lk(response_lock_[idx]);
+    response_[idx].erase(id);
+  }
+  return static_cast<int>(ids.size());
 }
 
 int PerformanceManager::StartEval() {
@@ -204,6 +234,7 @@ CollectorResultCode PerformanceManager::AddResponseMsg(
     }
   }
   if (done) {
+    UntrackPendingResponse(seq);
     response_call_back(std::move(batch_response));
     return CollectorResultCode::STATE_CHANGED;
   }
@@ -223,7 +254,11 @@ void PerformanceManager::SendResponseToClient(
       run_time += config_.MeanNetworkDelay();
     }
     global_stats_->AddLatency(run_time);
-    global_stats_->AddReplyLatency(GetCurrentTime() - batch_response.commit_time());
+    const uint64_t commit_time = batch_response.commit_time();
+    const uint64_t now = GetCurrentTime();
+    if (commit_time > 0 && now >= commit_time) {
+      global_stats_->AddReplyLatency(now - commit_time);
+    }
   } else {
   }
   //send_num_-=10;
@@ -295,6 +330,7 @@ int PerformanceManager::DoBatch(
     std::unique_lock<std::mutex> lk(response_lock_[idx]);
     response_[idx][batch_request.local_id()] = 0; // [DK] Why do we increase the value by 1 here?
   }
+  TrackPendingResponse(batch_request.local_id());
 
   batch_request.set_proxy_id(config_.GetSelfInfo().id());
   batch_request.set_createtime(GetCurrentTime());

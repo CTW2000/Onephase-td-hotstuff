@@ -26,6 +26,8 @@
 #pragma once
 
 #include <future>
+#include <mutex>
+#include <unordered_set>
 
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/ordering/common/framework/transaction_utils.h"
@@ -63,6 +65,9 @@ class PerformanceManager {
       std::unique_ptr<Request> request,
       std::function<void(std::unique_ptr<BatchUserResponse>)> call_back);
   virtual void SendResponseToClient(const BatchUserResponse& batch_response);
+  void TrackPendingResponse(uint64_t local_id);
+  void UntrackPendingResponse(uint64_t local_id);
+  int ExpirePendingResponses();
 
   struct QueueItem {
     std::unique_ptr<Context> context;
@@ -98,6 +103,8 @@ class PerformanceManager {
   static const int response_set_size_ = 6000000;
   std::map<int64_t, int> response_[response_set_size_];
   std::mutex response_lock_[response_set_size_];
+  std::mutex pending_response_ids_mutex_;
+  std::unordered_set<int64_t> pending_response_ids_;
  
  protected:
   int replica_num_;

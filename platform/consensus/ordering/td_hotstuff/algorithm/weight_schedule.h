@@ -4,14 +4,10 @@
 #include <string>
 #include <vector>
 
+#include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_digest.h"
+
 namespace resdb {
 namespace td_hotstuff {
-
-std::vector<int64_t> NormalizeWeightPoints(
-    const std::vector<int64_t>& weights, int total_replicas);
-int64_t CalculateWeightQuorum(const std::vector<int64_t>& weights);
-std::string WeightRootHex(const std::vector<int64_t>& weights);
-std::string HashHexForTesting(const std::string& data);
 
 class WeightSchedule {
  public:

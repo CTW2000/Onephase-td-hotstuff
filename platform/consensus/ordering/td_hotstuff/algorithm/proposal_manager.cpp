@@ -304,10 +304,7 @@ bool ProposalManager::AdvanceToViewByTimeout(const TimeoutCert& cert) {
 void ProposalManager::AddQC(std::unique_ptr<QC> qc){
   std::unique_lock<std::mutex> lk(txn_mutex_);
   if(generic_qc_.view() == 0 || generic_qc_.view() < qc->view()){
-    int leader = GetLeader(qc->view());
-    if(!(leader < 3 * fork_tail_num_ && leader % 3 ==1)) {
-      generic_qc_ = *qc;
-    }
+    generic_qc_ = *qc;
     round_ = qc->view()+1;
   //  LOG(ERROR)<<"get new round:"<<round_;
   }

@@ -37,7 +37,8 @@ namespace td_hotstuff {
 bool BenchmarkDynamicRoutingEnabled(const LeaderSelectionConfig& config,
                                     const char* env_override);
 uint64_t BenchmarkRetryTimeoutUsForEnv(const char* raw_request_timeout_ms);
-int BenchmarkRouteForView(int view, int replica_num, int observed_primary);
+int BenchmarkRouteForView(int view, int replica_num, int predicted_primary,
+                          int observed_primary);
 
 class HotStuffPerformanceManager : public common::PerformanceManager {
  public:

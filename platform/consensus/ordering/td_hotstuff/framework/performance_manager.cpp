@@ -113,13 +113,18 @@ bool BenchmarkDynamicRoutingEnabled(const LeaderSelectionConfig& config,
   return config.enabled && config.dynamic_updates_enabled;
 }
 
-int BenchmarkRouteForView(int view, int replica_num, int observed_primary) {
-  if (replica_num <= 0 || observed_primary <= 0 ||
-      observed_primary > replica_num) {
+int BenchmarkRouteForView(int view, int replica_num, int predicted_primary,
+                          int observed_primary) {
+  if (replica_num <= 0) {
     return DefaultLeaderForView(view, replica_num);
   }
-  const int offset = view > 0 ? view % replica_num : 0;
-  return ((observed_primary - 1 + offset) % replica_num) + 1;
+  if (predicted_primary > 0 && predicted_primary <= replica_num) {
+    return predicted_primary;
+  }
+  if (observed_primary > 0 && observed_primary <= replica_num) {
+    return observed_primary;
+  }
+  return DefaultLeaderForView(view, replica_num);
 }
 
 HotStuffPerformanceManager::HotStuffPerformanceManager(
@@ -137,7 +142,6 @@ HotStuffPerformanceManager::HotStuffPerformanceManager(
 
 int HotStuffPerformanceManager::GetPrimary(){
   int view, value;
-  int crash_num_ = 0;
   while (true) {
     view = primary_;
     primary_ += client_num_;
@@ -148,33 +152,16 @@ int HotStuffPerformanceManager::GetPrimary(){
     const int predicted_leader = value;
     if (dynamic_benchmark_routing_enabled_) {
       value = BenchmarkRouteForView(
-          view, replica_num_, static_cast<int>(last_response_.load()));
-    }
-    int next_leader = (view+1) % replica_num_ + 1;
-    if (crash_num_ > 0) {
-      if (next_leader % 3 == 1 && next_leader < 3 * crash_num_) {
-        send_num_-=2;
-      }
-      if (value % 3 == 1 && value < 3 * crash_num_) {
-        count_++;
-        send_num_--;
-      }
-      if ((replica_num_ == 3*crash_num_ + 1 && value == 2) || (value == 3*crash_num_ + 2)) {
-        send_num_ += 2*count_;
-        count_ = 0;
-      }
+          view, replica_num_, predicted_leader,
+          static_cast<int>(last_response_.load()));
     }
 
-    if (value % 3 == 1 &&
-        value < 3 * static_cast<int>(config_.GetForkTailNum())) {
-      send_num_--;
-    }
-    LOG(ERROR) << "Send to "<< value << " with send_num_: " << send_num_
-               << " count: " << count_
-               << " predicted_leader:" << predicted_leader
-               << " observed_primary:" << last_response_.load()
-               << " dynamic_benchmark_routing:"
-               << dynamic_benchmark_routing_enabled_;
+    VLOG(2) << "Send to " << value << " with send_num_: " << send_num_
+            << " count: " << count_
+            << " predicted_leader:" << predicted_leader
+            << " observed_primary:" << last_response_.load()
+            << " dynamic_benchmark_routing:"
+            << dynamic_benchmark_routing_enabled_;
     return value;
   }
 }
@@ -201,10 +188,13 @@ void HotStuffPerformanceManager::MaybeReleaseStalledInflight() {
     return;
   }
   const int old_send_num = send_num_.exchange(0);
-  last_response_ = 0;
+  const int expired_responses = ExpirePendingResponses();
+  const uint64_t observed_primary = last_response_.load();
   last_send_time_ = now;
   LOG(WARNING) << "release stalled TD-Hotstuff benchmark inflight: old_send_num="
-               << old_send_num << " retry_timeout_us=" << retry_timeout_us;
+               << old_send_num << " expired_responses=" << expired_responses
+               << " retry_timeout_us=" << retry_timeout_us
+               << " observed_primary=" << observed_primary;
 }
 
 CollectorResultCode HotStuffPerformanceManager::AddResponseMsg(
@@ -254,6 +244,7 @@ CollectorResultCode HotStuffPerformanceManager::AddResponseMsg(
   }
 
   if (done) {
+    UntrackPendingResponse(seq);
     response_call_back(std::move(batch_response));
     return CollectorResultCode::STATE_CHANGED;
   }

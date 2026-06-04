@@ -27,6 +27,12 @@
 
 #include "executor/common/transaction_manager.h"
 #include "platform/consensus/execution/transaction_executor.h"
+
+#include <mutex>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 #include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.h"
 #include "platform/consensus/ordering/common/framework/consensus.h"
 #include "platform/consensus/ordering/td_hotstuff/framework/performance_manager.h"
@@ -48,7 +54,11 @@ class Consensus : public common::Consensus{
 
   std::unique_ptr<HotStuffPerformanceManager> GetPerformanceManager();
 
-  private:
+ private:
+  std::vector<std::pair<int, int>> TransactionForwardTargets(int request_view);
+  bool ShouldForwardClientTransaction(const Request& request) const;
+
+ private:
     std::unique_ptr<HotStuff> hs_;
 };
 

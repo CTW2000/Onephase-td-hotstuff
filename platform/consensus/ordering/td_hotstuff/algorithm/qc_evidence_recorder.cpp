@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <utility>
+#include <vector>
 
 #include <glog/logging.h>
 
@@ -21,7 +22,7 @@ constexpr const char* kEnableEnv = "TD_HS_EVIDENCE_ENABLE";
 constexpr const char* kOutputDirEnv = "TD_HS_EVIDENCE_OUTPUT_DIR";
 constexpr const char* kQueueCapacityEnv = "TD_HS_EVIDENCE_QUEUE_CAPACITY";
 constexpr size_t kDefaultQueueCapacity = 65536;
-constexpr size_t kFlushEveryRecords = 64;
+constexpr size_t kFlushEveryRecords = 1024;
 
 bool EvidenceEnabledFromEnv() {
   const char* enabled = std::getenv(kEnableEnv);
@@ -72,6 +73,18 @@ std::string HexEncode(const std::string& data) {
 
 std::string SerializeQcEvidenceRecord(const QcEvidenceRecord& record) {
   std::ostringstream out;
+  if (record.leader_opportunity && record.qc_hash.empty()) {
+    out << "{\"schema\":\"td_hotstuff_leader_opportunity_evidence_v1\","
+        << "\"node_id\":" << record.node_id << ","
+        << "\"total_replicas\":" << record.total_replicas << ","
+        << "\"view\":" << record.qc_view << ","
+        << "\"leader_id\":" << record.leader_id << ","
+        << "\"weight_version\":" << record.weight_version << ","
+        << "\"active_weight_root\":\"" << record.active_weight_root << "\","
+        << "\"leader_eligible_min_weight\":"
+        << record.leader_eligible_min_weight << "}";
+    return out.str();
+  }
   out << "{\"schema\":\"td_hotstuff_qc_evidence_v1\","
       << "\"node_id\":" << record.node_id << ","
       << "\"total_replicas\":" << record.total_replicas << ","
@@ -79,6 +92,8 @@ std::string SerializeQcEvidenceRecord(const QcEvidenceRecord& record) {
       << "\"leader_id\":" << record.leader_id << ","
       << "\"weight_version\":" << record.weight_version << ","
       << "\"active_weight_root\":\"" << record.active_weight_root << "\","
+      << "\"leader_eligible_min_weight\":"
+      << record.leader_eligible_min_weight << ","
       << "\"qc_hash_hex\":\"" << HexEncode(record.qc_hash) << "\","
       << "\"signer_bitmap_hex\":\"" << HexEncode(record.signer_bitmap)
       << "\"}";
@@ -170,7 +185,7 @@ bool AsyncQcEvidenceRecorder::Enqueue(const QcEvidenceRecord& record) {
     return false;
   }
   queue_.push_back(record);
-  cv_.notify_one();
+  // Polling lets the worker batch QCs without waking it on every consensus event.
   return true;
 }
 
@@ -183,7 +198,8 @@ bool AsyncQcEvidenceRecorder::RecordQc(int qc_view, const std::string& qc_hash,
 bool AsyncQcEvidenceRecorder::RecordQc(int qc_view, const std::string& qc_hash,
                                        const std::string& signer_bitmap,
                                        int leader_id, uint64_t weight_version,
-                                       std::string active_weight_root) {
+                                       std::string active_weight_root,
+                                       int64_t leader_eligible_min_weight) {
   if (!enabled_ || qc_hash.empty()) {
     return false;
   }
@@ -194,8 +210,27 @@ bool AsyncQcEvidenceRecorder::RecordQc(int qc_view, const std::string& qc_hash,
   record.leader_id = leader_id;
   record.weight_version = weight_version;
   record.active_weight_root = std::move(active_weight_root);
+  record.leader_eligible_min_weight = leader_eligible_min_weight;
   record.qc_hash = qc_hash;
   record.signer_bitmap = signer_bitmap;
+  return Enqueue(record);
+}
+
+bool AsyncQcEvidenceRecorder::RecordLeaderOpportunity(
+    int view, int leader_id, uint64_t weight_version,
+    std::string active_weight_root, int64_t leader_eligible_min_weight) {
+  if (!enabled_ || view <= 0 || leader_id <= 0) {
+    return false;
+  }
+  QcEvidenceRecord record;
+  record.node_id = node_id_;
+  record.total_replicas = total_replicas_;
+  record.qc_view = view;
+  record.leader_id = leader_id;
+  record.leader_opportunity = true;
+  record.weight_version = weight_version;
+  record.active_weight_root = std::move(active_weight_root);
+  record.leader_eligible_min_weight = leader_eligible_min_weight;
   return Enqueue(record);
 }
 
@@ -209,13 +244,15 @@ AsyncQcEvidenceRecorder::TakeCompletedReputationCandidates() {
 
 void AsyncQcEvidenceRecorder::UpdateReputationWeights(
     std::vector<int64_t> current_weights, std::string old_weight_root_hex,
-    uint64_t old_weight_version) {
+    uint64_t old_weight_version, std::vector<int64_t> leader_weights,
+    int leader_profile_activation_view) {
   if (reputation_plugin_ == nullptr) {
     return;
   }
-  reputation_plugin_->UpdateCurrentWeights(std::move(current_weights),
-                                           std::move(old_weight_root_hex),
-                                           old_weight_version);
+  reputation_plugin_->UpdateCurrentWeights(
+      std::move(current_weights), std::move(old_weight_root_hex),
+      old_weight_version, std::move(leader_weights),
+      leader_profile_activation_view);
 }
 
 void AsyncQcEvidenceRecorder::DropRecord(int qc_view) {
@@ -272,10 +309,17 @@ void AsyncQcEvidenceRecorder::WorkerLoop() {
       }
     }
     if (reputation_plugin_ != nullptr) {
-      reputation_plugin_->RecordQc(record.qc_view, record.qc_hash,
-                                   record.signer_bitmap, record.leader_id,
-                                   record.weight_version,
-                                   record.active_weight_root);
+      if (record.leader_opportunity && record.qc_hash.empty()) {
+        reputation_plugin_->RecordLeaderOpportunity(
+            record.qc_view, record.leader_id, record.weight_version,
+            record.active_weight_root, record.leader_eligible_min_weight);
+      } else {
+        reputation_plugin_->RecordQc(record.qc_view, record.qc_hash,
+                                     record.signer_bitmap, record.leader_id,
+                                     record.weight_version,
+                                     record.active_weight_root,
+                                     record.leader_eligible_min_weight);
+      }
     }
   }
   if (write_json) {
