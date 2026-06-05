@@ -11,9 +11,7 @@ namespace td_hotstuff {
 
 struct LeaderSelectionConfig {
   bool enabled = false;
-  bool dynamic_updates_enabled = true;
   int64_t eligible_min_weight = 10;
-  int profile_activation_delay_views = 0;
 };
 
 LeaderSelectionConfig LeaderSelectionConfigFromEnv();
@@ -25,12 +23,6 @@ class LeaderSelectionSchedule {
                           LeaderSelectionConfig config);
 
   bool enabled() const { return config_.enabled; }
-  bool dynamic_updates_enabled() const {
-    return config_.dynamic_updates_enabled;
-  }
-  int profile_activation_delay_views() const {
-    return config_.profile_activation_delay_views;
-  }
   int64_t eligible_min_weight() const { return config_.eligible_min_weight; }
   uint64_t ActiveWeightVersion() const;
   int ActiveActivationView() const;
@@ -44,17 +36,9 @@ class LeaderSelectionSchedule {
   std::string ContextHashForView(int view) const;
   int LeaderForView(int view) const;
 
-  bool ValidateProfile(int activation_view, uint64_t weight_version,
-                       const std::vector<int64_t>& leader_weights,
-                       const std::string& leader_weight_root,
-                       uint64_t leader_params_version,
-                       const std::string& leader_randomness_ref) const;
-  bool ScheduleUpdate(int activation_view, uint64_t weight_version,
-                      const std::vector<int64_t>& leader_weights,
-                      const std::string& leader_weight_root,
-                      uint64_t leader_params_version,
-                      const std::string& leader_randomness_ref);
-  bool ActivateUpTo(int current_view);
+  bool InstallWeightSnapshot(int activation_view, uint64_t weight_version,
+                             const std::string& weight_root,
+                             const std::vector<int64_t>& weights);
 
  private:
   struct Record {
@@ -62,7 +46,6 @@ class LeaderSelectionSchedule {
     uint64_t weight_version = 0;
     uint64_t leader_params_version = 1;
     std::string leader_weight_root;
-    std::string leader_randomness_ref;
     std::vector<int64_t> leader_weights;
     std::vector<int> leader_sequence;
   };

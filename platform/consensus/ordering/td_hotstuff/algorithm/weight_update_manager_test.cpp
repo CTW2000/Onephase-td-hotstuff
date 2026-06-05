@@ -115,7 +115,7 @@ TEST(WeightUpdateManagerTest, SignsVoteForMatchingFutureCandidate) {
   EXPECT_EQ(vote->signature().node_id(), 1);
 }
 
-TEST(WeightUpdateManagerTest, CandidateIncludesValidatedLeaderProfile) {
+TEST(WeightUpdateManagerTest, CandidateLeavesLeaderProfileEmptyForWeightV1) {
   WeightSchedule schedule(/*total_replicas=*/4, {10, 20, 30, 40});
   WeightUpdateConfig config;
   config.enabled = true;
@@ -126,36 +126,11 @@ TEST(WeightUpdateManagerTest, CandidateIncludesValidatedLeaderProfile) {
   UseNonWarmupWindow(&local);
   const CandidateWeightUpdate update = BuildCandidateWeightUpdate(local);
 
-  ASSERT_EQ(update.leader_validators_size(), 4);
-  EXPECT_EQ(CandidateLeaderWeights(update), schedule.ActiveWeights());
-  EXPECT_NE(CandidateLeaderWeights(update), CandidateNextWeights(update));
-  EXPECT_EQ(update.leader_weight_root(),
-            LeaderWeightRootHex(CandidateLeaderWeights(update)));
-
-  CandidateWeightUpdate bad_order = update;
-  bad_order.mutable_leader_validators(0)->set_validator_id(2);
-
-  MockSignatureVerifier verifier;
-  WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
-                              config);
-  std::string error;
-  EXPECT_FALSE(manager.VerifyCandidate(bad_order, local, schedule, &error));
-  EXPECT_NE(error.find("leader validator order"), std::string::npos);
-}
-
-TEST(WeightUpdateManagerTest,
-     AcceptsCertifiedLeaderProfileDifferentFromVotingWeights) {
-  WeightSchedule schedule(/*total_replicas=*/4, {10, 20, 30, 40});
-  WeightUpdateConfig config;
-  config.enabled = true;
-  config.epoch_views = 2;
-  config.activation_epoch_delay = 1;
-
-  VoteScoreCandidate local = MakeCandidate(schedule, 8192);
-  local.leader_weights = {9, 20, 30, 40};
-  RecomputeVoteScoreCandidateRoots(&local);
-  UseNonWarmupWindow(&local);
-  const CandidateWeightUpdate update = BuildCandidateWeightUpdate(local);
+  EXPECT_EQ(update.leader_validators_size(), 0);
+  EXPECT_TRUE(CandidateLeaderWeights(update).empty());
+  EXPECT_TRUE(update.leader_weight_root().empty());
+  EXPECT_EQ(update.leader_params_version(), 0);
+  EXPECT_TRUE(update.leader_randomness_ref().empty());
 
   MockSignatureVerifier verifier;
   WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
@@ -163,6 +138,28 @@ TEST(WeightUpdateManagerTest,
   std::string error;
   EXPECT_TRUE(manager.VerifyCandidate(update, local, schedule, &error))
       << error;
+}
+
+TEST(WeightUpdateManagerTest, RejectsStaleLeaderProfileFields) {
+  WeightSchedule schedule(/*total_replicas=*/4, {10, 20, 30, 40});
+  WeightUpdateConfig config;
+  config.enabled = true;
+  config.epoch_views = 2;
+  config.activation_epoch_delay = 1;
+
+  VoteScoreCandidate local = MakeCandidate(schedule, 8192);
+  UseNonWarmupWindow(&local);
+  CandidateWeightUpdate update = BuildCandidateWeightUpdate(local);
+  CandidateLeaderWeight* leader = update.add_leader_validators();
+  leader->set_validator_id(1);
+  leader->set_leader_weight(9);
+
+  MockSignatureVerifier verifier;
+  WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
+                              config);
+  std::string error;
+  EXPECT_FALSE(manager.VerifyCandidate(update, local, schedule, &error));
+  EXPECT_NE(error.find("leader profile disabled"), std::string::npos);
 }
 
 TEST(WeightUpdateManagerTest, RejectsNonCanonicalCertEvenWithQuorum) {
@@ -283,7 +280,7 @@ TEST(WeightUpdateManagerTest, CertInstallsWhenOldWeightQuorumSigns) {
 }
 
 TEST(WeightUpdateManagerPluginTest,
-     LeaderProfileCatchUpCandidateEntersWithoutVotingWeightChange) {
+     LeaderProfileOnlyCandidateDoesNotEnterConsensus) {
   WeightSchedule schedule(/*total_replicas=*/4, {40, 40, 10, 1});
   WeightUpdateConfig config;
   config.enabled = true;
@@ -296,25 +293,21 @@ TEST(WeightUpdateManagerPluginTest,
     validator.next_weight = validator.current_weight;
   }
   RecomputeVoteScoreCandidateRoots(&local);
-  const CandidateWeightUpdate update = BuildCandidateWeightUpdate(local);
 
   MockSignatureVerifier verifier;
-  EXPECT_CALL(verifier, SignMessage(WeightUpdateVotePayload(update, 1)))
-      .WillOnce(Return(SignatureFrom(1)));
+  EXPECT_CALL(verifier, SignMessage(_)).Times(0);
   EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
 
   WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
                               config);
   WeightSnapshot snapshot = MakeWeightSnapshot(schedule, 4096);
-  snapshot.leader_weights = {40, 40, 10, 10};
-  snapshot.leader_weight_root = LeaderWeightRootHex(snapshot.leader_weights);
 
   manager.AddLocalCandidates({local}, snapshot);
   WeightPluginOutboundMessages out =
       manager.DrainOutboundMessages(/*current_view=*/4096, snapshot);
-  ASSERT_EQ(out.candidates.size(), 1);
-  ASSERT_EQ(out.votes.size(), 1);
-  EXPECT_EQ(out.candidates[0].candidate_digest(), update.candidate_digest());
+  EXPECT_TRUE(out.candidates.empty());
+  EXPECT_TRUE(out.votes.empty());
+  EXPECT_TRUE(out.certs.empty());
 }
 
 TEST(WeightUpdateManagerPluginTest,
@@ -551,7 +544,8 @@ TEST(WeightUpdateManagerPluginTest, SkipsNonCanonicalEpochWindow) {
   EXPECT_TRUE(out.certs.empty());
 }
 
-TEST(WeightUpdateManagerPluginTest, NonBroadcasterKeepsLocalCandidateSilent) {
+TEST(WeightUpdateManagerPluginTest,
+     BroadcastsLocalCandidateEvenWhenOldBroadcasterWouldDiffer) {
   WeightSchedule schedule(/*total_replicas=*/4, {40, 40, 10, 10});
   WeightUpdateConfig config;
   config.enabled = true;
@@ -560,8 +554,13 @@ TEST(WeightUpdateManagerPluginTest, NonBroadcasterKeepsLocalCandidateSilent) {
 
   VoteScoreCandidate local = MakeCandidate(schedule, 8192);
   UseNonBroadcasterWindow(&local);
+  const CandidateWeightUpdate update = BuildCandidateWeightUpdate(local);
 
   MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(WeightUpdateVotePayload(update, 1)))
+      .WillOnce(Return(SignatureFrom(1)));
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+
   WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
                               config);
   const WeightSnapshot snapshot = MakeWeightSnapshot(schedule, 4096);
@@ -569,9 +568,11 @@ TEST(WeightUpdateManagerPluginTest, NonBroadcasterKeepsLocalCandidateSilent) {
 
   WeightPluginOutboundMessages out =
       manager.DrainOutboundMessages(/*current_view=*/4096, snapshot);
-  EXPECT_TRUE(out.candidates.empty());
-  EXPECT_TRUE(out.votes.empty());
+  ASSERT_EQ(out.candidates.size(), 1);
+  ASSERT_EQ(out.votes.size(), 1);
   EXPECT_TRUE(out.certs.empty());
+  EXPECT_EQ(out.candidates[0].candidate_digest(), update.candidate_digest());
+  EXPECT_EQ(out.votes[0].candidate_digest(), update.candidate_digest());
 }
 
 TEST(WeightUpdateManagerPluginTest, BroadcastsChangingWarmupCandidate) {

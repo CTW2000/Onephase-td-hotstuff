@@ -26,6 +26,7 @@
 #include "platform/consensus/ordering/td_hotstuff/framework/performance_manager.h"
 
 #include <algorithm>
+#include <deque>
 #include <cstdlib>
 #include <sstream>
 #include <string>
@@ -111,7 +112,7 @@ bool BenchmarkDynamicRoutingEnabled(const LeaderSelectionConfig& config,
   if (env_override != nullptr) {
     return EnvFlagEnabled(env_override);
   }
-  return config.enabled && config.dynamic_updates_enabled;
+  return config.enabled;
 }
 
 int BenchmarkRouteForView(int view, int replica_num, int predicted_primary,
@@ -126,6 +127,35 @@ int BenchmarkRouteForView(int view, int replica_num, int predicted_primary,
     return observed_primary;
   }
   return DefaultLeaderForView(view, replica_num);
+}
+
+int BenchmarkRouteForObservedPrimaries(
+    int view, int replica_num, int predicted_primary,
+    const std::vector<int>& observed_primaries) {
+  if (replica_num <= 0 || observed_primaries.empty()) {
+    return BenchmarkRouteForView(view, replica_num, predicted_primary, 0);
+  }
+  std::vector<int> leaders;
+  leaders.reserve(observed_primaries.size());
+  for (int primary : observed_primaries) {
+    if (primary > 0 && primary <= replica_num &&
+        std::find(leaders.begin(), leaders.end(), primary) == leaders.end()) {
+      leaders.push_back(primary);
+    }
+  }
+  if (leaders.empty()) {
+    return BenchmarkRouteForView(view, replica_num, predicted_primary, 0);
+  }
+  std::sort(leaders.begin(), leaders.end());
+  if (predicted_primary > 0 && predicted_primary <= replica_num &&
+      std::find(leaders.begin(), leaders.end(), predicted_primary) !=
+          leaders.end()) {
+    return predicted_primary;
+  }
+  const int idx = ((view % static_cast<int>(leaders.size())) +
+                   static_cast<int>(leaders.size())) %
+                  static_cast<int>(leaders.size());
+  return leaders[idx];
 }
 
 HotStuffPerformanceManager::HotStuffPerformanceManager(
@@ -152,9 +182,12 @@ int HotStuffPerformanceManager::GetPrimary(){
                 : DefaultLeaderForView(view, replica_num_);
     const int predicted_leader = value;
     if (dynamic_benchmark_routing_enabled_) {
-      value = BenchmarkRouteForView(
-          view, replica_num_, predicted_leader,
-          static_cast<int>(last_response_.load()));
+      const int observed_route = ObservedRoutingPrimary(view, predicted_leader);
+      value = observed_route > 0
+                  ? observed_route
+                  : BenchmarkRouteForView(
+                        view, replica_num_, predicted_leader,
+                        static_cast<int>(last_response_.load()));
     }
 
     VLOG(2) << "Send to " << value << " with send_num_: " << send_num_
@@ -183,6 +216,53 @@ void HotStuffPerformanceManager::SendMessage(const Request& request) {
 void HotStuffPerformanceManager::UntrackPendingSendTime(uint64_t local_id) {
   std::unique_lock<std::mutex> lk(pending_send_times_mutex_);
   pending_send_times_.erase(local_id);
+}
+
+void HotStuffPerformanceManager::RecordObservedPrimary(int primary_id) {
+  if (primary_id <= 0 || primary_id > replica_num_) {
+    return;
+  }
+  const size_t window_limit =
+      static_cast<size_t>(std::max(32, replica_num_ * 10));
+  std::unique_lock<std::mutex> lk(observed_primary_mutex_);
+  observed_primary_window_.push_back(primary_id);
+  observed_primary_counts_[primary_id]++;
+  while (observed_primary_window_.size() > window_limit) {
+    const int old = observed_primary_window_.front();
+    observed_primary_window_.pop_front();
+    auto it = observed_primary_counts_.find(old);
+    if (it != observed_primary_counts_.end()) {
+      it->second--;
+      if (it->second <= 0) {
+        observed_primary_counts_.erase(it);
+      }
+    }
+  }
+}
+
+std::vector<int> HotStuffPerformanceManager::ObservedPrimarySet() const {
+  std::vector<int> primaries;
+  std::unique_lock<std::mutex> lk(observed_primary_mutex_);
+  primaries.reserve(observed_primary_counts_.size());
+  for (const auto& entry : observed_primary_counts_) {
+    if (entry.second > 0) {
+      primaries.push_back(entry.first);
+    }
+  }
+  std::sort(primaries.begin(), primaries.end());
+  return primaries;
+}
+
+int HotStuffPerformanceManager::ObservedRoutingPrimary(
+    int view, int predicted_primary) const {
+  std::vector<int> observed = ObservedPrimarySet();
+  const size_t min_observed =
+      static_cast<size_t>(std::max(3, replica_num_ / 2));
+  if (observed.size() < min_observed) {
+    return 0;
+  }
+  return BenchmarkRouteForObservedPrimaries(
+      view, replica_num_, predicted_primary, observed);
 }
 
 int HotStuffPerformanceManager::ExpireTimedOutPendingResponses(
@@ -278,11 +358,13 @@ CollectorResultCode HotStuffPerformanceManager::AddResponseMsg(
   }
 
   if (first) {
+    RecordObservedPrimary(batch_response->primary_id());
     response_call_back(std::move(batch_response));
     return CollectorResultCode::FIRST_RESPONSE;
   }
 
   if (done) {
+    RecordObservedPrimary(batch_response->primary_id());
     UntrackPendingResponse(seq);
     UntrackPendingSendTime(seq);
     response_call_back(std::move(batch_response));

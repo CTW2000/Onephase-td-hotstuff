@@ -9,7 +9,6 @@
 
 #include <glog/logging.h>
 
-#include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
 
 namespace resdb {
@@ -75,22 +74,6 @@ bool CandidateChangesWeights(const CandidateWeightUpdate& update,
   return false;
 }
 
-bool CandidateChangesLeaderProfile(const CandidateWeightUpdate& update,
-                                   const WeightSnapshot& snapshot) {
-  if (snapshot.leader_weights.empty() ||
-      update.leader_validators_size() !=
-          static_cast<int>(snapshot.leader_weights.size())) {
-    return false;
-  }
-  for (int i = 0; i < update.leader_validators_size(); ++i) {
-    if (update.leader_validators(i).leader_weight() !=
-        snapshot.leader_weights[i]) {
-      return true;
-    }
-  }
-  return false;
-}
-
 bool CandidateHasCanonicalEpochWindow(const CandidateWeightUpdate& update,
                                       int epoch_views) {
   if (epoch_views <= 0 || update.event_count() == 0 ||
@@ -111,16 +94,7 @@ bool CandidateShouldEnterConsensus(const CandidateWeightUpdate& update,
                                    const WeightSnapshot& snapshot,
                                    int epoch_views) {
   return CandidateHasCanonicalEpochWindow(update, epoch_views) &&
-         (CandidateChangesWeights(update, snapshot) ||
-          CandidateChangesLeaderProfile(update, snapshot));
-}
-
-int CandidateBroadcaster(const CandidateWeightUpdate& update,
-                         int total_replicas) {
-  if (total_replicas <= 0) {
-    return 0;
-  }
-  return static_cast<int>(update.window_index() % total_replicas) + 1;
+         CandidateChangesWeights(update, snapshot);
 }
 
 WeightSnapshot SnapshotForScheduleView(const WeightSchedule& schedule,
@@ -131,9 +105,6 @@ WeightSnapshot SnapshotForScheduleView(const WeightSchedule& schedule,
   snapshot.weight_version = schedule.ActiveWeightVersion();
   snapshot.quorum_weight = CalculateWeightQuorum(snapshot.weights);
   snapshot.current_view = current_view;
-  snapshot.leader_weights = snapshot.weights;
-  snapshot.leader_weight_root = LeaderWeightRootHex(snapshot.leader_weights);
-  snapshot.leader_weight_version = snapshot.weight_version;
   return snapshot;
 }
 
@@ -200,18 +171,10 @@ CandidateWeightUpdate BuildCandidateWeightUpdate(
   update.set_metric_root(candidate.metric_root_hex);
   update.set_next_weight_root(candidate.next_weight_root_hex);
   update.set_candidate_digest(candidate.candidate_digest_hex);
-  update.set_leader_weight_root(candidate.leader_weight_root_hex);
-  update.set_leader_params_version(candidate.leader_params_version);
-  update.set_leader_randomness_ref(candidate.leader_randomness_ref);
   for (size_t i = 0; i < candidate.next_weights.size(); ++i) {
     CandidateValidatorWeight* validator = update.add_validators();
     validator->set_validator_id(static_cast<int>(i + 1));
     validator->set_next_weight(candidate.next_weights[i]);
-  }
-  for (size_t i = 0; i < candidate.leader_weights.size(); ++i) {
-    CandidateLeaderWeight* validator = update.add_leader_validators();
-    validator->set_validator_id(static_cast<int>(i + 1));
-    validator->set_leader_weight(candidate.leader_weights[i]);
   }
   return update;
 }
@@ -261,11 +224,9 @@ void WeightUpdateManager::AddLocalCandidates(
              .second) {
       continue;
     }
-    if (CandidateBroadcaster(update, total_replicas_) == node_id_) {
-      weight_update_candidates_[candidate_digest] = update;
-      if (broadcast_candidate_digests_.insert(candidate_digest).second) {
-        outbound_messages_.candidates.push_back(update);
-      }
+    weight_update_candidates_[candidate_digest] = update;
+    if (broadcast_candidate_digests_.insert(candidate_digest).second) {
+      outbound_messages_.candidates.push_back(update);
     }
   }
   for (const auto& entry : weight_update_candidates_) {
@@ -353,10 +314,6 @@ WeightUpdateManager::TakeInstallableUpdates(
     installable.old_weight_root = update.old_weight_root();
     installable.old_weight_version = update.old_weight_version();
     installable.next_weights = CandidateNextWeights(update);
-    installable.leader_weights = CandidateLeaderWeights(update);
-    installable.leader_weight_root = update.leader_weight_root();
-    installable.leader_params_version = update.leader_params_version();
-    installable.leader_randomness_ref = update.leader_randomness_ref();
     installable.cert = it->second;
     updates.push_back(installable);
     it = pending_weight_update_certs_.erase(it);
@@ -455,35 +412,18 @@ bool WeightUpdateManager::ValidateCandidateFields(
   if (update.next_weight_root() != WeightRootHex(next_weights)) {
     return SetError(error, "next weight root mismatch");
   }
-  if (update.leader_validators_size() != total_replicas_) {
-    return SetError(error, "leader replica count mismatch");
-  }
-  std::vector<int64_t> leader_weights;
-  leader_weights.reserve(update.leader_validators_size());
-  for (int i = 0; i < update.leader_validators_size(); ++i) {
-    const CandidateLeaderWeight& validator = update.leader_validators(i);
-    if (validator.validator_id() != i + 1) {
-      return SetError(error, "leader validator order mismatch");
-    }
-    if (!ValidWeight(validator.leader_weight())) {
-      return SetError(error, "leader weight out of range");
-    }
-    leader_weights.push_back(validator.leader_weight());
-  }
-  if (update.leader_weight_root() != LeaderWeightRootHex(leader_weights)) {
-    return SetError(error, "leader weight root mismatch");
-  }
-  if (update.leader_params_version() != 1 ||
-      update.leader_randomness_ref().empty()) {
-    return SetError(error, "leader params mismatch");
+  if (update.leader_validators_size() != 0 ||
+      !update.leader_weight_root().empty() ||
+      update.leader_params_version() != 0 ||
+      !update.leader_randomness_ref().empty()) {
+    return SetError(error, "leader profile disabled for weight V1");
   }
   const std::string expected_digest = VoteScoreCandidateDigest(
       update.total_replicas(), update.window_index(), update.start_qc_view(),
       update.end_qc_view(), update.event_count(), update.old_weight_root(),
       update.old_weight_version(), update.activation_view(),
       update.metric_root(), update.next_weight_root(), next_weights,
-      update.leader_weight_root(), update.leader_params_version(),
-      update.leader_randomness_ref(), leader_weights);
+      "", 0, "", {});
   if (update.candidate_digest() != expected_digest) {
     return SetError(error, "candidate digest mismatch");
   }
@@ -504,11 +444,6 @@ bool WeightUpdateManager::VerifyCandidateWithSnapshot(
     return SetError(error, "local recomputation mismatch");
   }
   if (update.next_weight_root() != local_candidate.next_weight_root_hex ||
-      update.leader_weight_root() != local_candidate.leader_weight_root_hex ||
-      update.leader_params_version() !=
-          local_candidate.leader_params_version ||
-      update.leader_randomness_ref() !=
-          local_candidate.leader_randomness_ref ||
       update.activation_view() != local_candidate.activation_view ||
       update.old_weight_root() != local_candidate.old_weight_root_hex ||
       update.old_weight_version() !=

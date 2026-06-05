@@ -24,30 +24,22 @@ TEST(LeaderSelectionScheduleTest, DisabledModePreservesRoundRobinLeaders) {
   EXPECT_TRUE(schedule.ContextHashForView(1).empty());
 }
 
-TEST(LeaderSelectionScheduleTest, EnvKeepsDynamicProfileUpdatesOptIn) {
+TEST(LeaderSelectionScheduleTest, EnvReadsOnlyEnableAndEligibilityThreshold) {
   setenv("TD_HS_LEADER_SELECTION_ENABLE", "1", /*overwrite=*/1);
-  unsetenv("TD_HS_LEADER_PROFILE_UPDATE_ENABLE");
-  unsetenv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT");
-  unsetenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS");
-  LeaderSelectionConfig config = LeaderSelectionConfigFromEnv();
-  EXPECT_TRUE(config.enabled);
-  EXPECT_FALSE(config.dynamic_updates_enabled);
-  EXPECT_EQ(config.eligible_min_weight, 10);
-  EXPECT_EQ(config.profile_activation_delay_views, 0);
-
-  setenv("TD_HS_LEADER_PROFILE_UPDATE_ENABLE", "1", /*overwrite=*/1);
   setenv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT", "20", /*overwrite=*/1);
   setenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS", "64", /*overwrite=*/1);
-  config = LeaderSelectionConfigFromEnv();
+
+  LeaderSelectionConfig config = LeaderSelectionConfigFromEnv();
   EXPECT_TRUE(config.enabled);
-  EXPECT_TRUE(config.dynamic_updates_enabled);
   EXPECT_EQ(config.eligible_min_weight, 20);
-  EXPECT_EQ(config.profile_activation_delay_views, 0);
 
   unsetenv("TD_HS_LEADER_SELECTION_ENABLE");
-  unsetenv("TD_HS_LEADER_PROFILE_UPDATE_ENABLE");
   unsetenv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT");
   unsetenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS");
+
+  config = LeaderSelectionConfigFromEnv();
+  EXPECT_FALSE(config.enabled);
+  EXPECT_EQ(config.eligible_min_weight, 10);
 }
 
 TEST(LeaderSelectionScheduleTest, WeightedRoundRobinSelectionIsDeterministic) {
@@ -119,68 +111,80 @@ TEST(LeaderSelectionScheduleTest, EqualWeightsUseRoundRobinCompatibility) {
   for (int view = 1; view <= 20; ++view) {
     EXPECT_EQ(schedule.LeaderForView(view),
               DefaultLeaderForView(view, /*total_replicas=*/4));
+    EXPECT_TRUE(schedule.ContextHashForView(view).empty());
   }
 }
 
 TEST(LeaderSelectionScheduleTest,
-     EqualWeightProfileKeepsRoundRobinContextCompatibility) {
+     InstalledEqualWeightSnapshotKeepsRoundRobinContextCompatibility) {
   LeaderSelectionConfig config;
   config.enabled = true;
   LeaderSelectionSchedule schedule(/*total_replicas=*/4, {10, 10, 10, 10},
                                    config);
-  const std::vector<int64_t> equal_leader_weights = {10, 10, 10, 10};
+  const std::vector<int64_t> equal_weights = {20, 20, 20, 20};
 
-  ASSERT_TRUE(schedule.ContextHashForView(1).empty());
-  ASSERT_TRUE(schedule.ScheduleUpdate(
-      /*activation_view=*/10, /*weight_version=*/1, equal_leader_weights,
-      LeaderWeightRootHex(equal_leader_weights), /*leader_params_version=*/1,
-      /*leader_randomness_ref=*/"ref-v1"));
+  ASSERT_TRUE(schedule.InstallWeightSnapshot(
+      /*activation_view=*/10, /*weight_version=*/1, WeightRootHex(equal_weights),
+      equal_weights));
 
-  for (int view = 10; view <= 20; ++view) {
+  for (int view = 11; view <= 20; ++view) {
     EXPECT_EQ(schedule.LeaderForView(view),
               DefaultLeaderForView(view, /*total_replicas=*/4));
     EXPECT_TRUE(schedule.ContextHashForView(view).empty());
   }
 }
 
-TEST(LeaderSelectionScheduleTest, UsesOldProfileBeforeActivationBoundary) {
+TEST(LeaderSelectionScheduleTest, UsesOldSnapshotBeforeActivationBoundary) {
   LeaderSelectionConfig config;
   config.enabled = true;
   LeaderSelectionSchedule schedule(/*total_replicas=*/4, {10, 10, 10, 10},
                                    config);
   const std::string old_root = schedule.ActiveLeaderWeightRoot();
-  const std::vector<int64_t> next_leader_weights = {1, 1, 100, 1};
-  const std::string next_root = LeaderWeightRootHex(next_leader_weights);
+  const std::vector<int64_t> next_weights = {1, 1, 100, 1};
+  const std::string next_root = WeightRootHex(next_weights);
 
-  ASSERT_TRUE(schedule.ScheduleUpdate(/*activation_view=*/10,
-                                      /*weight_version=*/1, next_leader_weights,
-                                      next_root,
-                                      /*leader_params_version=*/1,
-                                      /*leader_randomness_ref=*/"ref-v1"));
+  ASSERT_TRUE(schedule.InstallWeightSnapshot(/*activation_view=*/10,
+                                             /*weight_version=*/1, next_root,
+                                             next_weights));
 
   EXPECT_EQ(schedule.LeaderWeightRootForView(9), old_root);
   EXPECT_EQ(schedule.LeaderWeightRootForView(10), old_root);
   EXPECT_EQ(schedule.LeaderWeightRootForView(11), next_root);
-  EXPECT_EQ(schedule.ActiveLeaderWeightRoot(), old_root);
-
-  EXPECT_FALSE(schedule.ActivateUpTo(10));
-  ASSERT_TRUE(schedule.ActivateUpTo(11));
   EXPECT_EQ(schedule.ActiveLeaderWeightRoot(), next_root);
   EXPECT_EQ(schedule.ActiveWeightVersion(), 1);
+  EXPECT_EQ(schedule.WeightVersionForView(10), 0);
+  EXPECT_EQ(schedule.WeightVersionForView(11), 1);
 }
 
-TEST(LeaderSelectionScheduleTest, RejectsInvalidLeaderProfileRoot) {
+TEST(LeaderSelectionScheduleTest, RejectsInvalidSnapshotRoot) {
   LeaderSelectionConfig config;
   config.enabled = true;
   LeaderSelectionSchedule schedule(/*total_replicas=*/4, {10, 10, 10, 10},
                                    config);
 
-  EXPECT_FALSE(schedule.ScheduleUpdate(/*activation_view=*/10,
-                                       /*weight_version=*/1,
-                                       /*leader_weights=*/{1, 1, 100, 1},
-                                       /*leader_weight_root=*/"wrong-root",
-                                       /*leader_params_version=*/1,
-                                       /*leader_randomness_ref=*/"ref-v1"));
+  EXPECT_FALSE(schedule.InstallWeightSnapshot(
+      /*activation_view=*/10, /*weight_version=*/1, /*weight_root=*/"wrong-root",
+      /*weights=*/{1, 1, 100, 1}));
+}
+
+TEST(LeaderSelectionScheduleTest, RejectsConflictingSnapshotForSameVersion) {
+  LeaderSelectionConfig config;
+  config.enabled = true;
+  LeaderSelectionSchedule schedule(/*total_replicas=*/4, {10, 10, 10, 10},
+                                   config);
+  const std::vector<int64_t> first = {1, 1, 100, 1};
+  const std::vector<int64_t> conflict = {100, 1, 1, 1};
+
+  ASSERT_TRUE(schedule.InstallWeightSnapshot(/*activation_view=*/10,
+                                             /*weight_version=*/1,
+                                             WeightRootHex(first), first));
+  EXPECT_TRUE(schedule.InstallWeightSnapshot(/*activation_view=*/10,
+                                             /*weight_version=*/1,
+                                             WeightRootHex(first), first));
+  EXPECT_FALSE(schedule.InstallWeightSnapshot(/*activation_view=*/12,
+                                              /*weight_version=*/1,
+                                              WeightRootHex(conflict),
+                                              conflict));
 }
 
 }  // namespace

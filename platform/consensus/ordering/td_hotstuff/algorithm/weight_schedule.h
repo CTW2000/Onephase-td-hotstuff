@@ -14,6 +14,7 @@ class WeightSchedule {
   WeightSchedule(int total_replicas, const std::vector<int64_t>& weights);
 
   int total_replicas() const { return total_replicas_; }
+  int ActiveActivationView() const;
   uint64_t ActiveWeightVersion() const;
   const std::string& ActiveWeightRoot() const;
   const std::vector<int64_t>& ActiveWeights() const;

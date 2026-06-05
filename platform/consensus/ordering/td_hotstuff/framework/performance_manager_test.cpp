@@ -7,7 +7,7 @@ namespace td_hotstuff {
 namespace {
 
 TEST(HotStuffPerformanceManagerTest,
-     DynamicRoutePrefersPredictedLeader) {
+     DynamicRoutePrefersPredictedPrimary) {
   EXPECT_EQ(BenchmarkRouteForView(/*view=*/3, /*replica_num=*/5,
                                   /*predicted_primary=*/4,
                                   /*observed_primary=*/2),
@@ -17,9 +17,9 @@ TEST(HotStuffPerformanceManagerTest,
 TEST(HotStuffPerformanceManagerTest,
      DynamicRouteFallsBackToObservedPrimaryWithoutPrediction) {
   EXPECT_EQ(BenchmarkRouteForView(/*view=*/1, /*replica_num=*/5,
-                                  /*predicted_primary=*/0,
-                                  /*observed_primary=*/5),
-            5);
+                                  /*predicted_primary=*/9,
+                                  /*observed_primary=*/2),
+            2);
 }
 
 TEST(HotStuffPerformanceManagerTest,
@@ -31,6 +31,22 @@ TEST(HotStuffPerformanceManagerTest,
 }
 
 
+TEST(HotStuffPerformanceManagerTest,
+     ObservedPrimarySetKeepsPredictionWhenStillActive) {
+  EXPECT_EQ(BenchmarkRouteForObservedPrimaries(
+                /*view=*/7, /*replica_num=*/5, /*predicted_primary=*/3,
+                {1, 2, 3, 4}),
+            3);
+}
+
+TEST(HotStuffPerformanceManagerTest,
+     ObservedPrimarySetSkipsMissingPredictedLeader) {
+  EXPECT_EQ(BenchmarkRouteForObservedPrimaries(
+                /*view=*/4, /*replica_num=*/5, /*predicted_primary=*/1,
+                {2, 3, 4, 5}),
+            2);
+}
+
 TEST(HotStuffPerformanceManagerTest, BenchmarkRetryTimeoutDoesNotUseConsensusTimeoutByDefault) {
   EXPECT_EQ(BenchmarkRetryTimeoutUsForEnv(/*raw_request_timeout_ms=*/nullptr),
             500000);
@@ -39,13 +55,12 @@ TEST(HotStuffPerformanceManagerTest, BenchmarkRetryTimeoutDoesNotUseConsensusTim
 }
 
 TEST(HotStuffPerformanceManagerTest,
-     DynamicRoutingDefaultsOnOnlyForLiveLeaderProfileUpdates) {
+     DynamicRoutingDefaultsOnWhenLeaderSelectionIsEnabled) {
   LeaderSelectionConfig config;
   config.enabled = true;
-  config.dynamic_updates_enabled = true;
   EXPECT_TRUE(BenchmarkDynamicRoutingEnabled(config, /*env_override=*/nullptr));
 
-  config.dynamic_updates_enabled = false;
+  config.enabled = false;
   EXPECT_FALSE(BenchmarkDynamicRoutingEnabled(config, /*env_override=*/nullptr));
 
   EXPECT_FALSE(BenchmarkDynamicRoutingEnabled(config, /*env_override=*/"0"));

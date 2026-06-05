@@ -14,12 +14,8 @@ namespace {
 
 constexpr const char* kLeaderSelectionEnableEnv =
     "TD_HS_LEADER_SELECTION_ENABLE";
-constexpr const char* kLeaderProfileUpdateEnableEnv =
-    "TD_HS_LEADER_PROFILE_UPDATE_ENABLE";
 constexpr const char* kLeaderEligibleMinWeightEnv =
     "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT";
-constexpr const char* kWeightUpdateEpochViewsEnv =
-    "TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS";
 constexpr uint64_t kLeaderParamsVersionV1 = 1;
 
 bool EnvEnabled(const char* env_name) {
@@ -101,12 +97,10 @@ std::vector<int> SmoothWeightedRoundRobinSequence(
 
 std::string LeaderContextCanonical(int view, uint64_t weight_version,
                                    const std::string& leader_weight_root,
-                                   uint64_t leader_params_version,
-                                   const std::string& leader_randomness_ref) {
+                                   uint64_t leader_params_version) {
   std::ostringstream out;
   out << "td_hotstuff_leader_context_v1|" << view << '|' << weight_version
-      << '|' << leader_weight_root << '|' << leader_params_version << '|'
-      << leader_randomness_ref;
+      << '|' << leader_weight_root << '|' << leader_params_version;
   return out.str();
 }
 
@@ -115,13 +109,8 @@ std::string LeaderContextCanonical(int view, uint64_t weight_version,
 LeaderSelectionConfig LeaderSelectionConfigFromEnv() {
   LeaderSelectionConfig config;
   config.enabled = EnvEnabled(kLeaderSelectionEnableEnv);
-  config.dynamic_updates_enabled = EnvEnabled(kLeaderProfileUpdateEnableEnv);
   config.eligible_min_weight = static_cast<int64_t>(
       PositiveUint64FromEnv(kLeaderEligibleMinWeightEnv, 10));
-  // Candidate leader_weights already describe the previous active schedule.
-  // Activating them at the candidate activation view gives the intended
-  // one-epoch lag without delaying leader exclusion by another epoch.
-  config.profile_activation_delay_views = 0;
   return config;
 }
 
@@ -142,10 +131,7 @@ LeaderSelectionSchedule::LeaderSelectionSchedule(
   record.leader_params_version = kLeaderParamsVersionV1;
   record.leader_weights =
       NormalizeLeaderWeights(leader_weights, total_replicas_);
-  record.leader_weight_root = LeaderWeightRootHex(record.leader_weights);
-  record.leader_randomness_ref = LeaderRandomnessRefHex(
-      WeightRootHex(record.leader_weights), record.weight_version,
-      record.activation_view, record.leader_weight_root);
+  record.leader_weight_root = WeightRootHex(record.leader_weights);
   record.leader_sequence = SmoothWeightedRoundRobinSequence(
       record.leader_weights, total_replicas_, config_.eligible_min_weight);
   records_.push_back(std::move(record));
@@ -175,6 +161,9 @@ const std::vector<int64_t>& LeaderSelectionSchedule::ActiveLeaderWeights()
 
 const LeaderSelectionSchedule::Record& LeaderSelectionSchedule::RecordForView(
     int view) const {
+  if (records_[active_index_].activation_view < view) {
+    return records_[active_index_];
+  }
   const Record* selected = &records_.front();
   for (const Record& record : records_) {
     if (record.activation_view < view) {
@@ -214,7 +203,7 @@ std::string LeaderSelectionSchedule::ContextHashForView(int view) const {
   }
   return HashHexForTesting(LeaderContextCanonical(
       view, record.weight_version, record.leader_weight_root,
-      record.leader_params_version, record.leader_randomness_ref));
+      record.leader_params_version));
 }
 
 int LeaderSelectionSchedule::LeaderForView(int view) const {
@@ -236,54 +225,51 @@ int LeaderSelectionSchedule::LeaderForView(int view) const {
                                 record.leader_sequence.size()];
 }
 
-bool LeaderSelectionSchedule::ValidateProfile(
+bool LeaderSelectionSchedule::InstallWeightSnapshot(
     int activation_view, uint64_t weight_version,
-    const std::vector<int64_t>& leader_weights,
-    const std::string& leader_weight_root, uint64_t leader_params_version,
-    const std::string& leader_randomness_ref) const {
+    const std::string& weight_root, const std::vector<int64_t>& weights) {
   if (activation_view <= 0 ||
-      leader_weights.size() != static_cast<size_t>(total_replicas_) ||
-      leader_params_version != kLeaderParamsVersionV1 ||
-      leader_randomness_ref.empty() || weight_version == 0) {
+      weights.size() != static_cast<size_t>(total_replicas_) ||
+      weight_version == 0) {
     return false;
   }
-  if (NormalizeLeaderWeights(leader_weights, total_replicas_) !=
-      leader_weights) {
+  if (weight_version < ActiveWeightVersion()) {
     return false;
   }
-  return leader_weight_root == LeaderWeightRootHex(leader_weights);
-}
-
-bool LeaderSelectionSchedule::ScheduleUpdate(
-    int activation_view, uint64_t weight_version,
-    const std::vector<int64_t>& leader_weights,
-    const std::string& leader_weight_root, uint64_t leader_params_version,
-    const std::string& leader_randomness_ref) {
-  if (!ValidateProfile(activation_view, weight_version, leader_weights,
-                       leader_weight_root, leader_params_version,
-                       leader_randomness_ref)) {
+  const std::vector<int64_t> normalized =
+      NormalizeLeaderWeights(weights, total_replicas_);
+  if (normalized != weights || weight_root != WeightRootHex(weights)) {
     return false;
   }
-  for (size_t i = active_index_ + 1; i < records_.size(); ++i) {
-    const Record& pending = records_[i];
-    if (pending.activation_view == activation_view &&
-        pending.weight_version == weight_version &&
-        pending.leader_params_version == leader_params_version &&
-        pending.leader_weights == leader_weights &&
-        pending.leader_weight_root == leader_weight_root &&
-        pending.leader_randomness_ref == leader_randomness_ref) {
-      return true;
+  for (const Record& existing : records_) {
+    if (existing.activation_view == activation_view ||
+        existing.weight_version == weight_version) {
+      if (existing.activation_view == activation_view &&
+          existing.weight_version == weight_version &&
+          existing.leader_weights == normalized &&
+          existing.leader_weight_root == weight_root) {
+        for (size_t i = 0; i < records_.size(); ++i) {
+          if (records_[i].activation_view == activation_view &&
+              records_[i].weight_version == weight_version) {
+            active_index_ = i;
+            break;
+          }
+        }
+        return true;
+      }
+      return false;
     }
+  }
+  if (weight_version <= ActiveWeightVersion()) {
     return false;
   }
 
   Record record;
   record.activation_view = activation_view;
   record.weight_version = weight_version;
-  record.leader_params_version = leader_params_version;
-  record.leader_weights = leader_weights;
-  record.leader_weight_root = leader_weight_root;
-  record.leader_randomness_ref = leader_randomness_ref;
+  record.leader_params_version = kLeaderParamsVersionV1;
+  record.leader_weights = normalized;
+  record.leader_weight_root = weight_root;
   record.leader_sequence = SmoothWeightedRoundRobinSequence(
       record.leader_weights, total_replicas_, config_.eligible_min_weight);
   records_.push_back(std::move(record));
@@ -291,21 +277,14 @@ bool LeaderSelectionSchedule::ScheduleUpdate(
             [](const Record& lhs, const Record& rhs) {
               return lhs.activation_view < rhs.activation_view;
             });
-  return true;
-}
-
-bool LeaderSelectionSchedule::ActivateUpTo(int current_view) {
-  size_t selected = active_index_;
-  for (size_t i = active_index_; i < records_.size(); ++i) {
-    if (records_[i].activation_view < current_view) {
-      selected = i;
+  for (size_t i = 0; i < records_.size(); ++i) {
+    if (records_[i].activation_view == activation_view &&
+        records_[i].weight_version == weight_version) {
+      active_index_ = i;
+      return true;
     }
   }
-  if (selected == active_index_) {
-    return false;
-  }
-  active_index_ = selected;
-  return true;
+  return false;
 }
 
 }  // namespace td_hotstuff

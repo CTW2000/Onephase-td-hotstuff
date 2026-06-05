@@ -17,7 +17,13 @@ namespace td_hotstuff {
 class AsyncVoteScoreReputationPlugin;
 struct VoteScoreCandidate;
 
-struct QcEvidenceRecord {
+enum class ReputationEvidenceType {
+  kCertifiedQc,
+  kLeaderOpportunity,
+};
+
+struct ReputationEvidence {
+  ReputationEvidenceType type = ReputationEvidenceType::kCertifiedQc;
   int node_id = 0;
   int total_replicas = 0;
   int qc_view = 0;
@@ -29,6 +35,8 @@ struct QcEvidenceRecord {
   std::string qc_hash;
   std::string signer_bitmap;
 };
+
+using QcEvidenceRecord = ReputationEvidence;
 
 std::string HexEncode(const std::string& data);
 std::string SerializeQcEvidenceRecord(const QcEvidenceRecord& record);
@@ -63,9 +71,7 @@ class AsyncQcEvidenceRecorder {
   std::vector<VoteScoreCandidate> TakeCompletedReputationCandidates();
   void UpdateReputationWeights(std::vector<int64_t> current_weights,
                                std::string old_weight_root_hex,
-                               uint64_t old_weight_version,
-                               std::vector<int64_t> leader_weights = {},
-                               int leader_profile_activation_view = 0);
+                               uint64_t old_weight_version);
 
   bool enabled() const { return enabled_; }
   uint64_t dropped_count() const { return dropped_count_.load(); }

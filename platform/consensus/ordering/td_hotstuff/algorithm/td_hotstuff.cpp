@@ -285,6 +285,7 @@ void HotStuff::AsyncTimeout() {
         last_vote_at = std::chrono::steady_clock::time_point::min();
         continue;
       }
+      RecordLeaderOpportunityLocked(view);
       if (view != watched_view) {
         watched_view = view;
         last_vote_at = std::chrono::steady_clock::time_point::min();
@@ -561,18 +562,9 @@ void HotStuff::SyncReputationWeightsToActiveSchedule() {
   if (qc_evidence_recorder_ == nullptr || weight_schedule_ == nullptr) {
     return;
   }
-  std::vector<int64_t> leader_weights;
-  int leader_profile_activation_view = 0;
-  if (leader_selection_schedule_ != nullptr &&
-      leader_selection_schedule_->enabled()) {
-    leader_weights = leader_selection_schedule_->ActiveLeaderWeights();
-    leader_profile_activation_view =
-        leader_selection_schedule_->ActiveActivationView();
-  }
   qc_evidence_recorder_->UpdateReputationWeights(
       weight_schedule_->ActiveWeights(), weight_schedule_->ActiveWeightRoot(),
-      weight_schedule_->ActiveWeightVersion(), std::move(leader_weights),
-      leader_profile_activation_view);
+      weight_schedule_->ActiveWeightVersion());
 }
 
 void HotStuff::RecordLeaderOpportunityLocked(int view) {
@@ -604,15 +596,6 @@ void HotStuff::RecordLeaderOpportunityLocked(int view) {
 
 WeightSnapshot HotStuff::CurrentWeightSnapshot(int current_view) const {
   WeightSnapshot snapshot = MakeWeightSnapshot(*weight_schedule_, current_view);
-  if (leader_selection_schedule_ != nullptr &&
-      leader_selection_schedule_->enabled()) {
-    snapshot.leader_weights =
-        leader_selection_schedule_->LeaderWeightsForView(current_view);
-    snapshot.leader_weight_root =
-        leader_selection_schedule_->LeaderWeightRootForView(current_view);
-    snapshot.leader_weight_version =
-        leader_selection_schedule_->WeightVersionForView(current_view);
-  }
   return snapshot;
 }
 
@@ -624,10 +607,15 @@ WeightPluginOutboundMessages HotStuff::DrainWeightPlugin(int current_view,
   }
   const bool weight_activated =
       weight_schedule_ != nullptr && weight_schedule_->ActivateUpTo(current_view);
-  const bool leader_activated = leader_selection_schedule_ != nullptr &&
-                                  leader_selection_schedule_->ActivateUpTo(
-                                      current_view);
-  if (weight_activated || leader_activated) {
+  if (weight_activated) {
+    if (leader_selection_schedule_ != nullptr &&
+        leader_selection_schedule_->enabled()) {
+      leader_selection_schedule_->InstallWeightSnapshot(
+          weight_schedule_->ActiveActivationView() + 1,
+          weight_schedule_->ActiveWeightVersion(),
+          weight_schedule_->ActiveWeightRoot(),
+          weight_schedule_->ActiveWeights());
+    }
     SyncReputationWeightsToActiveSchedule();
     weight_update_manager_->OnWeightsActivated(
         CurrentWeightSnapshot(current_view));
@@ -640,16 +628,6 @@ WeightPluginOutboundMessages HotStuff::DrainWeightPlugin(int current_view,
                << " active_weights:"
                << WeightsForLog(weight_schedule_->ActiveWeights());
   }
-  if (leader_activated) {
-    LOG(ERROR) << "activated TD-Hotstuff leader profile version:"
-               << leader_selection_schedule_->ActiveWeightVersion()
-               << " view:" << current_view << " root:"
-               << leader_selection_schedule_->ActiveLeaderWeightRoot()
-               << " leader_weights:"
-               << WeightsForLog(
-                      leader_selection_schedule_->ActiveLeaderWeights());
-  }
-
   if (!force && weight_plugin_drain_interval_views_ > 0 &&
       current_view < next_weight_plugin_drain_view_) {
     return messages;
@@ -688,40 +666,21 @@ bool HotStuff::InstallWeightUpdate(const InstallableWeightUpdate& update,
                  << update.activation_view << " current_view:" << current_view;
     return false;
   }
-  const uint64_t next_weight_version = update.old_weight_version + 1;
-  const int leader_activation_view = update.activation_view;
-  if (leader_selection_schedule_ != nullptr &&
-      leader_selection_schedule_->enabled() &&
-      leader_selection_schedule_->dynamic_updates_enabled() &&
-      !leader_selection_schedule_->ValidateProfile(
-          leader_activation_view, next_weight_version, update.leader_weights,
-          update.leader_weight_root, update.leader_params_version,
-          update.leader_randomness_ref)) {
-    LOG(ERROR)
-        << "reject TD-Hotstuff weight update with invalid leader profile";
-    return false;
-  }
   if (!weight_schedule_->ScheduleUpdate(
           update.activation_view, update.next_weights, update.old_weight_root,
           update.old_weight_version)) {
     return false;
   }
-  if (leader_selection_schedule_ != nullptr &&
-      leader_selection_schedule_->enabled() &&
-      leader_selection_schedule_->dynamic_updates_enabled() &&
-      !leader_selection_schedule_->ScheduleUpdate(
-          leader_activation_view, next_weight_version, update.leader_weights,
-          update.leader_weight_root, update.leader_params_version,
-          update.leader_randomness_ref)) {
-    LOG(ERROR) << "failed to schedule TD-Hotstuff leader profile";
-    return false;
-  }
   const bool weight_activated = weight_schedule_->ActivateUpTo(current_view);
-  bool leader_activated = false;
-  if (leader_selection_schedule_ != nullptr) {
-    leader_activated = leader_selection_schedule_->ActivateUpTo(current_view);
-  }
-  if (weight_activated || leader_activated) {
+  if (weight_activated) {
+    if (leader_selection_schedule_ != nullptr &&
+        leader_selection_schedule_->enabled()) {
+      leader_selection_schedule_->InstallWeightSnapshot(
+          weight_schedule_->ActiveActivationView() + 1,
+          weight_schedule_->ActiveWeightVersion(),
+          weight_schedule_->ActiveWeightRoot(),
+          weight_schedule_->ActiveWeights());
+    }
     SyncReputationWeightsToActiveSchedule();
     weight_update_manager_->OnWeightsActivated(
         CurrentWeightSnapshot(current_view));
@@ -732,22 +691,11 @@ bool HotStuff::InstallWeightUpdate(const InstallableWeightUpdate& update,
                << " view:" << current_view
                << " root:" << weight_schedule_->ActiveWeightRoot()
                << " active_weights:"
-               << WeightsForLog(weight_schedule_->ActiveWeights())
-               << " leader_profile_activation_view:" << leader_activation_view;
+               << WeightsForLog(weight_schedule_->ActiveWeights());
   } else {
     LOG(ERROR) << "scheduled TD-Hotstuff weight update activation_view:"
                << update.activation_view << " current_view:" << current_view
-               << " next_weights:" << WeightsForLog(update.next_weights)
-               << " leader_profile_activation_view:" << leader_activation_view;
-  }
-  if (leader_activated && leader_selection_schedule_ != nullptr) {
-    LOG(ERROR) << "activated TD-Hotstuff leader profile version:"
-               << leader_selection_schedule_->ActiveWeightVersion()
-               << " view:" << current_view << " root:"
-               << leader_selection_schedule_->ActiveLeaderWeightRoot()
-               << " leader_weights:"
-               << WeightsForLog(
-                      leader_selection_schedule_->ActiveLeaderWeights());
+               << " next_weights:" << WeightsForLog(update.next_weights);
   }
   return true;
 }
@@ -831,13 +779,15 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
       proposal_received_ = true;
     }
 
-    // Install any pending profile/weight update before checking proposal
-    // leader context for this view.
-    weight_messages = DrainWeightPlugin(view);
     if (proposal->header().has_timeout_cert()) {
       ApplyTimeoutCertLocked(proposal->header().timeout_cert());
     }
-    if (view < proposal_manager_->CurrentView()) {
+    const int local_current_view = proposal_manager_->CurrentView();
+    // Mutate active weight/leader state only at the local pacemaker boundary.
+    // Proposal/QC verification below still uses view-indexed schedules.
+    weight_messages = DrainWeightPlugin(local_current_view);
+    RecordLeaderOpportunityLocked(view);
+    if (view < local_current_view) {
       stale_proposal = true;
       proposal_valid = false;
     } else if (!proposal_manager_->Verify(*proposal)) {
@@ -877,7 +827,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
         has_qc_evidence = true;
       }
       WeightPluginOutboundMessages post_verify_messages =
-          DrainWeightPlugin(view);
+          DrainWeightPlugin(proposal_manager_->CurrentView());
       weight_messages.candidates.insert(weight_messages.candidates.end(),
                                         post_verify_messages.candidates.begin(),
                                         post_verify_messages.candidates.end());
@@ -899,6 +849,26 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
         CommitProposal(std::move(committed_p_list[i]));
       }
 
+      // AddProposal/AddQC may advance the local view. Drain once more before
+      // choosing the vote destination so boundary votes follow the active
+      // leader schedule.
+      WeightPluginOutboundMessages post_add_messages =
+          DrainWeightPlugin(proposal_manager_->CurrentView());
+      weight_messages.candidates.insert(weight_messages.candidates.end(),
+                                        post_add_messages.candidates.begin(),
+                                        post_add_messages.candidates.end());
+      weight_messages.votes.insert(weight_messages.votes.end(),
+                                   post_add_messages.votes.begin(),
+                                   post_add_messages.votes.end());
+      weight_messages.certs.insert(weight_messages.certs.end(),
+                                   post_add_messages.certs.begin(),
+                                   post_add_messages.certs.end());
+
+      // Re-check after the schedule drain: the next leader for this proposal
+      // may change at a certified activation boundary.
+      if (id_ == NextLeader(view)) {
+        proposal_received_ = true;
+      }
       // LOG(ERROR)<<"send cert view:"<<view<<" to:"<<NextLeader(view);
       if (qc_formed_) {
         // LOG(ERROR) << "after proposal recieeved";
@@ -958,12 +928,13 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
     // LOG(ERROR)<<"RECEIVE proposer cert :"<<cert->view()<<"
     // from:"<<cert->signer();
     int view = cert->view();
-    if (view < proposal_manager_->CurrentView()) {
+    const int local_current_view = proposal_manager_->CurrentView();
+    if (view < local_current_view) {
       return true;
     }
-    // Install any pending weight update before checking a vote for a view that
-    // may already belong to the new weight schedule.
-    weight_messages = DrainWeightPlugin(view);
+    // Mutate active weight/leader state only at the local pacemaker boundary.
+    // Vote aggregation below still uses the view-indexed weight schedule.
+    weight_messages = DrainWeightPlugin(local_current_view);
 
     std::string hash = cert->hash();
     auto& certs = receive_[view][hash];
@@ -1010,7 +981,8 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
         formed_qc_ = std::move(qc);
       }
     }
-    WeightPluginOutboundMessages post_cert_messages = DrainWeightPlugin(view);
+    WeightPluginOutboundMessages post_cert_messages =
+        DrainWeightPlugin(proposal_manager_->CurrentView());
     weight_messages.candidates.insert(weight_messages.candidates.end(),
                                       post_cert_messages.candidates.begin(),
                                       post_cert_messages.candidates.end());
@@ -1114,6 +1086,9 @@ bool HotStuff::ApplyTimeoutCertLocked(const TimeoutCert& cert) {
   if (!proposal_manager_->AdvanceToViewByTimeout(cert)) {
     return false;
   }
+  // A valid TC is deterministic evidence that the scheduled leader for the
+  // timed-out view had an opportunity but did not produce a certified proposal.
+  RecordLeaderOpportunityLocked(cert.view());
   qc_formed_ = false;
   proposal_received_ = false;
   formed_qc_.reset();

@@ -25,10 +25,12 @@
 
 #pragma once
 
+#include <deque>
 #include <future>
 #include <mutex>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/common/framework/performance_manager.h"
@@ -41,6 +43,9 @@ bool BenchmarkDynamicRoutingEnabled(const LeaderSelectionConfig& config,
 uint64_t BenchmarkRetryTimeoutUsForEnv(const char* raw_request_timeout_ms);
 int BenchmarkRouteForView(int view, int replica_num, int predicted_primary,
                           int observed_primary);
+int BenchmarkRouteForObservedPrimaries(
+    int view, int replica_num, int predicted_primary,
+    const std::vector<int>& observed_primaries);
 
 class HotStuffPerformanceManager : public common::PerformanceManager {
  public:
@@ -58,6 +63,9 @@ protected:
 
   void UntrackPendingSendTime(uint64_t local_id);
   int ExpireTimedOutPendingResponses(uint64_t now, uint64_t timeout_us);
+  void RecordObservedPrimary(int primary_id);
+  std::vector<int> ObservedPrimarySet() const;
+  int ObservedRoutingPrimary(int view, int predicted_primary) const;
 
   int count_ = 0;
   int last_primary_view_ = 0;
@@ -65,6 +73,9 @@ protected:
   std::unique_ptr<LeaderSelectionSchedule> leader_selection_schedule_;
   std::mutex pending_send_times_mutex_;
   std::unordered_map<uint64_t, uint64_t> pending_send_times_;
+  mutable std::mutex observed_primary_mutex_;
+  std::deque<int> observed_primary_window_;
+  std::unordered_map<int, int> observed_primary_counts_;
 };
 
 }  // namespace td_hotstuff

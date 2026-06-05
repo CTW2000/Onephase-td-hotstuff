@@ -204,6 +204,7 @@ bool AsyncQcEvidenceRecorder::RecordQc(int qc_view, const std::string& qc_hash,
     return false;
   }
   QcEvidenceRecord record;
+  record.type = ReputationEvidenceType::kCertifiedQc;
   record.node_id = node_id_;
   record.total_replicas = total_replicas_;
   record.qc_view = qc_view;
@@ -223,6 +224,7 @@ bool AsyncQcEvidenceRecorder::RecordLeaderOpportunity(
     return false;
   }
   QcEvidenceRecord record;
+  record.type = ReputationEvidenceType::kLeaderOpportunity;
   record.node_id = node_id_;
   record.total_replicas = total_replicas_;
   record.qc_view = view;
@@ -244,15 +246,13 @@ AsyncQcEvidenceRecorder::TakeCompletedReputationCandidates() {
 
 void AsyncQcEvidenceRecorder::UpdateReputationWeights(
     std::vector<int64_t> current_weights, std::string old_weight_root_hex,
-    uint64_t old_weight_version, std::vector<int64_t> leader_weights,
-    int leader_profile_activation_view) {
+    uint64_t old_weight_version) {
   if (reputation_plugin_ == nullptr) {
     return;
   }
   reputation_plugin_->UpdateCurrentWeights(
       std::move(current_weights), std::move(old_weight_root_hex),
-      old_weight_version, std::move(leader_weights),
-      leader_profile_activation_view);
+      old_weight_version);
 }
 
 void AsyncQcEvidenceRecorder::DropRecord(int qc_view) {

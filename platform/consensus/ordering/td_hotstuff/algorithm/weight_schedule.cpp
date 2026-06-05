@@ -17,6 +17,10 @@ WeightSchedule::WeightSchedule(int total_replicas,
   records_.push_back(std::move(record));
 }
 
+int WeightSchedule::ActiveActivationView() const {
+  return records_[active_index_].activation_view;
+}
+
 uint64_t WeightSchedule::ActiveWeightVersion() const {
   return records_[active_index_].version;
 }

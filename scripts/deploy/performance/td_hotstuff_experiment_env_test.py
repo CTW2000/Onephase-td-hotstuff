@@ -36,23 +36,25 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertEqual(values["TD_HS_REPUTATION_ENABLE"], "0")
         self.assertEqual(values["TD_HS_WEIGHT_UPDATE_ENABLE"], "0")
         self.assertEqual(values["TD_HS_LEADER_SELECTION_ENABLE"], "0")
-        self.assertEqual(values["TD_HS_LEADER_PROFILE_UPDATE_ENABLE"], "0")
         self.assertEqual(values["TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE"], "0")
         self.assertEqual(values["TD_HS_QC_DIVERSITY_ENABLE"], "0")
+        self.assertEqual(values["TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE"], "0")
         self.assertEqual(values["TD_HS_TIMEOUT_ENABLE"], "0")
         self.assertEqual(values["TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT"], "11")
-        self.assertEqual(values["TD_HS_WEIGHTS"], ",".join(["1"] * 20))
+        self.assertEqual(values["TD_HS_WEIGHTS"], ",".join(["30"] * 20))
 
     def test_stable_env_preserves_explicit_overrides(self):
         values = source_helper(
             {
                 "TD_HS_REPUTATION_WINDOW_SIZE": "128",
                 "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT": "12",
+                "TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE": "1",
             }
         )
 
         self.assertEqual(values["TD_HS_REPUTATION_WINDOW_SIZE"], "128")
         self.assertEqual(values["TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT"], "12")
+        self.assertEqual(values["TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE"], "1")
 
     def test_silent_leader_ids_are_not_shared_with_all_replicas_or_clients(self):
         deploy_multi = os.path.join(REPO_ROOT, "scripts", "deploy", "script", "deploy_multi.sh")
@@ -64,6 +66,7 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("-u TD_HS_BAD_NODE_IDS", body)
         self.assertIn("-u TD_HS_BAD_NODE_COUNT", body)
         self.assertIn("TD_HS_SILENT_LEADER=1", body)
+        self.assertIn("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE", shared_env_block)
         self.assertIn("is_silent_leader_node", body)
 
         for script in ["run_slow_leader_n20.sh", "run_slow_vote_n20.sh"]:

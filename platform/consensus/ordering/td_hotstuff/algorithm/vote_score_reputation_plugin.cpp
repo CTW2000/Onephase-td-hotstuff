@@ -6,7 +6,6 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <set>
 #include <sstream>
 #include <utility>
@@ -33,6 +32,12 @@ constexpr const char* kMinWeightEnv = "TD_HS_REPUTATION_MIN_WEIGHT";
 constexpr const char* kMaxWeightEnv = "TD_HS_REPUTATION_MAX_WEIGHT";
 constexpr const char* kMinDecayOpportunitiesEnv =
     "TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES";
+constexpr const char* kMinLeaderOpportunitiesEnv =
+    "TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES";
+constexpr const char* kLeaderRecoveryEnableEnv =
+    "TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE";
+constexpr const char* kMinCandidateQcsEnv =
+    "TD_HS_REPUTATION_MIN_CANDIDATE_QCS";
 constexpr const char* kAlgorithmBayesV3 = "bayes_v3";
 constexpr const char* kWeightUpdateEpochViewsEnv = "TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS";
 constexpr const char* kWeightUpdateActivationDelayEnv = "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY";
@@ -43,6 +48,7 @@ constexpr int kDefaultDecayPerEpoch = 3;
 constexpr int kDefaultMaxRecoveryPerEpoch = 3;
 constexpr int kDefaultBonusPerEpoch = 1;
 constexpr int kDefaultMinDecayOpportunities = 8;
+constexpr int kDefaultMinLeaderOpportunities = 8;
 constexpr int64_t kMinWeight = 1;
 constexpr int64_t kMaxWeight = 100;
 
@@ -68,6 +74,26 @@ size_t SizeFromEnv(const char* env_name, size_t default_value) {
                  << ", use default:" << default_value;
     return default_value;
   }
+}
+
+size_t CompleteWindowQcThreshold(size_t window_size, size_t epoch_views) {
+  const size_t expected_qcs =
+      epoch_views == 0 ? window_size : std::min(window_size, epoch_views);
+  if (expected_qcs <= 1) {
+    return 1;
+  }
+  return std::max<size_t>(1, (expected_qcs * 3 + 3) / 4);
+}
+
+size_t MinCandidateQcCountFromEnv(size_t window_size, size_t epoch_views) {
+  const size_t default_value = CompleteWindowQcThreshold(window_size,
+                                                        epoch_views);
+  const size_t configured = SizeFromEnv(kMinCandidateQcsEnv, default_value);
+  const size_t max_reasonable =
+      std::max<size_t>(1, epoch_views == 0 ? window_size
+                                           : std::min(window_size,
+                                                      epoch_views));
+  return std::max<size_t>(1, std::min(configured, max_reasonable));
 }
 
 int IntFromEnv(const char* env_name, int default_value) {
@@ -98,15 +124,19 @@ int IntFromEnvInRange(const char* env_name, int default_value, int min_value,
 
 ReputationRecoveryConfig RecoveryConfigFromValues(
     int decay_per_epoch, int max_recovery_per_epoch, int bonus_per_epoch,
-    int64_t min_weight, int64_t max_weight, uint64_t min_decay_opportunities) {
+    int64_t min_weight, int64_t max_weight, uint64_t min_decay_opportunities,
+    uint64_t min_leader_opportunities = kDefaultMinLeaderOpportunities) {
   ReputationRecoveryConfig config;
   config.decay_per_epoch = std::max(0, decay_per_epoch);
   config.max_recovery_per_epoch = std::max(0, max_recovery_per_epoch);
   config.bonus_per_epoch = std::max(0, bonus_per_epoch);
   config.min_decay_opportunities =
       std::max<uint64_t>(1, min_decay_opportunities);
+  config.min_leader_opportunities =
+      std::max<uint64_t>(1, min_leader_opportunities);
   config.min_weight = std::max<int64_t>(kMinWeight, min_weight);
   config.max_weight = std::min<int64_t>(kMaxWeight, max_weight);
+  config.leader_recovery_enabled = false;
   if (config.max_weight < config.min_weight) {
     config.min_weight = kMinWeight;
     config.max_weight = kMaxWeight;
@@ -118,7 +148,8 @@ ReputationRecoveryConfig RecoveryConfigForCompute(int max_delta) {
   const int decay = max_delta > 0 ? max_delta : kDefaultDecayPerEpoch;
   return RecoveryConfigFromValues(decay, decay, kDefaultBonusPerEpoch,
                                   kMinWeight, kMaxWeight,
-                                  /*min_decay_opportunities=*/1);
+                                  /*min_decay_opportunities=*/1,
+                                  kDefaultMinLeaderOpportunities);
 }
 
 ReputationRecoveryConfig RecoveryConfigFromEnv(int legacy_default_decay) {
@@ -136,9 +167,12 @@ ReputationRecoveryConfig RecoveryConfigFromEnv(int legacy_default_decay) {
       IntFromEnvInRange(kMaxWeightEnv, static_cast<int>(kMaxWeight), 1, 100);
   const int min_decay_opportunities = IntFromEnvInRange(
       kMinDecayOpportunitiesEnv, kDefaultMinDecayOpportunities, 1, 1000000);
+  const int min_leader_opportunities = IntFromEnvInRange(
+      kMinLeaderOpportunitiesEnv, kDefaultMinLeaderOpportunities, 1, 1000000);
   ReputationRecoveryConfig config = RecoveryConfigFromValues(
       decay, recovery, bonus, min_weight, max_weight,
-      min_decay_opportunities);
+      min_decay_opportunities, min_leader_opportunities);
+  config.leader_recovery_enabled = EnvFlagEnabled(kLeaderRecoveryEnableEnv);
   return config;
 }
 
@@ -221,126 +255,6 @@ uint64_t FairExpectedSignerOpportunities(uint64_t selected_signer_slots,
       static_cast<uint64_t>(RoundedDivide(selected_signer_slots,
                                           static_cast<uint64_t>(total_replicas)));
   return std::max<uint64_t>(1, std::min<uint64_t>(event_count, expected));
-}
-
-int64_t LeaderEligibleMinWeightFromEvidence(
-    const std::vector<ReputationQcEvent>& events,
-    const ReputationRecoveryConfig& recovery_config) {
-  for (const ReputationQcEvent& event : events) {
-    if (event.leader_eligible_min_weight > 0) {
-      return event.leader_eligible_min_weight;
-    }
-  }
-  return recovery_config.leader_eligible_min_weight;
-}
-
-bool AllWeightsEqualForLeaderSelection(const std::vector<int64_t>& weights) {
-  return std::adjacent_find(weights.begin(), weights.end(),
-                            std::not_equal_to<int64_t>()) == weights.end();
-}
-
-std::vector<int> SmoothWeightedRoundRobinSequenceForReputation(
-    const std::vector<int64_t>& weights, int total_replicas,
-    int64_t eligible_min_weight) {
-  std::vector<int64_t> active_weights(weights.size(), 0);
-  int64_t total_weight = 0;
-  int eligible_count = 0;
-  for (size_t i = 0; i < weights.size(); ++i) {
-    if (weights[i] >= eligible_min_weight && weights[i] > 0) {
-      active_weights[i] = weights[i];
-      total_weight += weights[i];
-      ++eligible_count;
-    }
-  }
-  if (eligible_count == 0) {
-    for (size_t i = 0; i < weights.size(); ++i) {
-      if (weights[i] > 0) {
-        active_weights[i] = weights[i];
-        total_weight += weights[i];
-        ++eligible_count;
-      }
-    }
-  }
-  if (eligible_count == 0 || total_weight <= 0) {
-    return {};
-  }
-  if (eligible_count == total_replicas &&
-      AllWeightsEqualForLeaderSelection(weights)) {
-    return {};
-  }
-  std::vector<int64_t> current(weights.size(), 0);
-  std::vector<int> sequence;
-  sequence.reserve(static_cast<size_t>(total_weight));
-  for (int64_t step = 0; step < total_weight; ++step) {
-    int selected = -1;
-    for (size_t i = 0; i < active_weights.size(); ++i) {
-      if (active_weights[i] <= 0) {
-        continue;
-      }
-      current[i] += active_weights[i];
-      if (selected < 0 || current[i] > current[selected]) {
-        selected = static_cast<int>(i);
-      }
-    }
-    if (selected < 0) {
-      break;
-    }
-    current[selected] -= total_weight;
-    sequence.push_back(selected + 1);
-  }
-  return sequence;
-}
-
-int DefaultLeaderForReputationView(int view, int total_replicas) {
-  if (view <= 0 || total_replicas <= 0) {
-    return 0;
-  }
-  return (view % total_replicas) + 1;
-}
-
-int ExpectedLeaderForView(int view, const std::vector<int64_t>& weights,
-                          int total_replicas,
-                          int64_t eligible_min_weight,
-                          int leader_profile_activation_view) {
-  const std::vector<int> sequence =
-      SmoothWeightedRoundRobinSequenceForReputation(
-          weights, total_replicas, eligible_min_weight);
-  if (sequence.empty()) {
-    return DefaultLeaderForReputationView(view, total_replicas);
-  }
-  const int64_t offset =
-      leader_profile_activation_view == 0
-          ? static_cast<int64_t>(view) - 1
-          : static_cast<int64_t>(view) - leader_profile_activation_view;
-  if (offset < 0) {
-    return DefaultLeaderForReputationView(view, total_replicas);
-  }
-  return sequence[static_cast<size_t>(offset) % sequence.size()];
-}
-
-void AddDeterministicLeaderOpportunities(
-    int start_view, int end_view, const std::vector<int64_t>& weights,
-    int total_replicas, int64_t eligible_min_weight, uint64_t weight_version,
-    const std::string& active_weight_root, int leader_profile_activation_view,
-    std::vector<ReputationQcEvent>* events) {
-  if (events == nullptr || start_view <= 0 || end_view < start_view) {
-    return;
-  }
-  events->reserve(events->size() +
-                  static_cast<size_t>(end_view - start_view + 1));
-  for (int view = start_view; view <= end_view; ++view) {
-    ReputationQcEvent opportunity;
-    opportunity.qc_view = view;
-    opportunity.leader_id = ExpectedLeaderForView(
-        view, weights, total_replicas, eligible_min_weight,
-        leader_profile_activation_view);
-    opportunity.leader_opportunity = true;
-    opportunity.weight_version = weight_version;
-    opportunity.active_weight_root = active_weight_root;
-    opportunity.leader_eligible_min_weight = eligible_min_weight;
-    opportunity.leader_profile_activation_view = leader_profile_activation_view;
-    events->push_back(std::move(opportunity));
-  }
 }
 
 int RecoveryCreditForScore(int score, int max_recovery_per_epoch) {
@@ -676,6 +590,14 @@ VoteScoreCandidate ComputeBayesianReputationCandidateWithConfig(
     if (validator.inclusions > 0) {
       recovery_score = std::max(recovery_score, 67);
     }
+    const bool has_strong_leader_failure_signal =
+        leader_opportunities > 0 && validator.leader_certified_count == 0 &&
+        validator.leader_score < 50;
+    if (recovery_config.leader_recovery_enabled &&
+        (leader_opportunities >= recovery_config.min_leader_opportunities ||
+         has_strong_leader_failure_signal)) {
+      recovery_score = std::min(recovery_score, validator.leader_score);
+    }
     const bool near_fair_vote = HasNearFairInclusion(
         validator.inclusions, validator.opportunities);
     const int64_t available_decay =
@@ -709,28 +631,6 @@ VoteScoreCandidate ComputeBayesianReputationCandidateWithConfig(
         recovery_config);
   }
 
-  candidate.leader_weights = weights;
-  for (const ValidatorVoteScore& validator : candidate.validators) {
-    const int index = validator.validator_id - 1;
-    if (index < 0 || index >= static_cast<int>(candidate.leader_weights.size())) {
-      continue;
-    }
-    const int64_t voting_weight =
-        index < static_cast<int>(weights.size()) ? weights[index]
-                                                : candidate.leader_weights[index];
-    if (validator.leader_certified_count > 0) {
-      candidate.leader_weights[index] = std::min<int64_t>(
-          voting_weight,
-          ClampWeight(candidate.leader_weights[index] +
-                          recovery_config.max_recovery_per_epoch,
-                      recovery_config));
-    } else if (validator.leader_opportunity_count >= 2 &&
-               validator.leader_score < 67) {
-      candidate.leader_weights[index] = ClampWeight(
-          candidate.leader_weights[index] - recovery_config.decay_per_epoch,
-          recovery_config);
-    }
-  }
   RecomputeVoteScoreCandidateRoots(&candidate);
   return candidate;
 }
@@ -744,21 +644,12 @@ void RecomputeVoteScoreCandidateRoots(VoteScoreCandidate* candidate) {
   for (const ValidatorVoteScore& validator : candidate->validators) {
     candidate->next_weights.push_back(validator.next_weight);
   }
-  if (candidate->leader_weights.size() != candidate->validators.size()) {
-    candidate->leader_weights.clear();
-    candidate->leader_weights.reserve(candidate->validators.size());
-    for (const ValidatorVoteScore& validator : candidate->validators) {
-      candidate->leader_weights.push_back(validator.current_weight);
-    }
-  }
+  candidate->leader_weights.clear();
   candidate->metric_root_hex = HashHex(MetricCanonical(*candidate));
   candidate->next_weight_root_hex = WeightRootHex(candidate->next_weights);
-  candidate->leader_weight_root_hex =
-      LeaderWeightRootHex(candidate->leader_weights);
-  candidate->leader_params_version = 1;
-  candidate->leader_randomness_ref = LeaderRandomnessRefHex(
-      candidate->old_weight_root_hex, candidate->old_weight_version,
-      candidate->activation_view, candidate->leader_weight_root_hex);
+  candidate->leader_weight_root_hex.clear();
+  candidate->leader_params_version = 0;
+  candidate->leader_randomness_ref.clear();
   candidate->candidate_digest_hex = VoteScoreCandidateDigest(
       candidate->total_replicas, candidate->window_index,
       candidate->start_qc_view, candidate->end_qc_view,
@@ -803,11 +694,6 @@ std::string VoteScoreCandidateToJson(const VoteScoreCandidate& candidate) {
       << ",\"activation_view\":" << candidate.activation_view
       << ",\"metric_root\":\"" << candidate.metric_root_hex << "\""
       << ",\"next_weight_root\":\"" << candidate.next_weight_root_hex << "\""
-      << ",\"leader_weight_root\":\"" << candidate.leader_weight_root_hex
-      << "\""
-      << ",\"leader_params_version\":" << candidate.leader_params_version
-      << ",\"leader_randomness_ref\":\"" << candidate.leader_randomness_ref
-      << "\""
       << ",\"candidate_digest\":\"" << candidate.candidate_digest_hex << "\""
       << ",\"next_weights\":[";
   for (size_t i = 0; i < candidate.next_weights.size(); ++i) {
@@ -816,16 +702,7 @@ std::string VoteScoreCandidateToJson(const VoteScoreCandidate& candidate) {
     }
     out << candidate.next_weights[i];
   }
-  out << ']'
-      << ",\"leader_weights\":[";
-  for (size_t i = 0; i < candidate.leader_weights.size(); ++i) {
-    if (i != 0) {
-      out << ',';
-    }
-    out << candidate.leader_weights[i];
-  }
-  out << ']'
-      << ",\"validators\":[";
+  out << "],\"validators\":[";
   for (size_t i = 0; i < candidate.validators.size(); ++i) {
     if (i != 0) {
       out << ',';
@@ -860,7 +737,6 @@ AsyncVoteScoreReputationPlugin::AsyncVoteScoreReputationPlugin(
     : node_id_(node_id),
       total_replicas_(total_replicas),
       current_weights_(NormalizeWeights(current_weights, total_replicas)),
-      current_leader_weights_(current_weights_),
       old_weight_root_hex_(WeightRootHex(current_weights_)),
       old_weight_version_(0),
       epoch_views_(SizeFromEnv(kWeightUpdateEpochViewsEnv, kDefaultWindowSize)),
@@ -869,6 +745,8 @@ AsyncVoteScoreReputationPlugin::AsyncVoteScoreReputationPlugin(
       output_dir_(std::move(output_dir)),
       output_path_(OutputPath(output_dir_, node_id_)),
       window_size_(window_size == 0 ? kDefaultWindowSize : window_size),
+      min_candidate_qc_count_(
+          MinCandidateQcCountFromEnv(window_size_, epoch_views_)),
       queue_capacity_(queue_capacity == 0 ? kDefaultQueueCapacity
                                           : queue_capacity),
       recovery_config_(RecoveryConfigFromEnv(max_delta)) {}
@@ -925,14 +803,9 @@ AsyncVoteScoreReputationPlugin::TakeCompletedCandidates() {
 
 void AsyncVoteScoreReputationPlugin::UpdateCurrentWeights(
     std::vector<int64_t> current_weights, std::string old_weight_root_hex,
-    uint64_t old_weight_version, std::vector<int64_t> leader_weights,
-    int leader_profile_activation_view) {
+    uint64_t old_weight_version) {
   std::unique_lock<std::mutex> lock(mutex_);
   current_weights_ = NormalizeWeights(current_weights, total_replicas_);
-  current_leader_weights_ = leader_weights.empty()
-                                ? current_weights_
-                                : NormalizeWeights(leader_weights, total_replicas_);
-  leader_profile_activation_view_ = leader_profile_activation_view;
   old_weight_root_hex_ = std::move(old_weight_root_hex);
   old_weight_version_ = old_weight_version;
   current_window_.clear();
@@ -1017,8 +890,6 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
     const ReputationQcEvent& event, std::ofstream& output) {
   std::vector<ReputationQcEvent> window;
   std::vector<int64_t> current_weights;
-  std::vector<int64_t> leader_weights;
-  int leader_profile_activation_view = 0;
   std::string old_weight_root_hex;
   uint64_t old_weight_version = 0;
   uint64_t window_index = 0;
@@ -1041,8 +912,6 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
         current_window_qc_count_ = 0;
         window_index = window_index_++;
         current_weights = current_weights_;
-        leader_weights = current_leader_weights_;
-        leader_profile_activation_view = leader_profile_activation_view_;
         old_weight_root_hex = old_weight_root_hex_;
         old_weight_version = old_weight_version_;
       }
@@ -1057,23 +926,18 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
       current_window_qc_count_ = 0;
       window_index = window_index_++;
       current_weights = current_weights_;
-      leader_weights = current_leader_weights_;
-      leader_profile_activation_view = leader_profile_activation_view_;
       old_weight_root_hex = old_weight_root_hex_;
       old_weight_version = old_weight_version_;
     }
   }
   FlushWindow(output, std::move(window), window_index, std::move(current_weights),
-              std::move(old_weight_root_hex), old_weight_version,
-              std::move(leader_weights), leader_profile_activation_view);
+              std::move(old_weight_root_hex), old_weight_version);
 }
 
 void AsyncVoteScoreReputationPlugin::FlushWindow(
     std::ofstream& output, std::vector<ReputationQcEvent> window,
     uint64_t window_index, std::vector<int64_t> current_weights,
-    std::string old_weight_root_hex, uint64_t old_weight_version,
-    std::vector<int64_t> leader_weights,
-    int leader_profile_activation_view) {
+    std::string old_weight_root_hex, uint64_t old_weight_version) {
   if (window.empty()) {
     return;
   }
@@ -1084,6 +948,9 @@ void AsyncVoteScoreReputationPlugin::FlushWindow(
     }
   }
   const uint64_t qc_record_count = unique_qcs.size();
+  if (qc_record_count < min_candidate_qc_count_) {
+    return;
+  }
   int observed_start_view = 0;
   int observed_end_view = 0;
   for (const ReputationQcEvent& event : window) {
@@ -1105,52 +972,10 @@ void AsyncVoteScoreReputationPlugin::FlushWindow(
   }
   const int activation_view = ActivationViewForWindow(
       window_end_view, epoch_views_, activation_epoch_delay_);
-  std::vector<ReputationQcEvent> compute_window = window;
-  if (observed_start_view > 0 && observed_end_view >= observed_start_view) {
-    const int64_t eligible_min_weight = LeaderEligibleMinWeightFromEvidence(
-        window, recovery_config_);
-    std::vector<int64_t> active_leader_weights = leader_weights.empty()
-                                                     ? current_weights
-                                                     : leader_weights;
-    AddDeterministicLeaderOpportunities(
-        observed_start_view, observed_end_view, active_leader_weights,
-        total_replicas_, eligible_min_weight, old_weight_version,
-        old_weight_root_hex, leader_profile_activation_view, &compute_window);
-  }
   VoteScoreCandidate candidate = ComputeBayesianReputationCandidateWithConfig(
-      node_id_, total_replicas_, window_index, compute_window, current_weights,
+      node_id_, total_replicas_, window_index, window, current_weights,
       recovery_config_, old_weight_root_hex, old_weight_version,
       activation_view);
-  std::vector<int64_t> candidate_leader_weights = leader_weights.empty()
-                                                     ? current_weights
-                                                     : leader_weights;
-  candidate_leader_weights =
-      NormalizeWeights(candidate_leader_weights, total_replicas_);
-  const std::vector<int64_t> baseline_leader_weights = candidate_leader_weights;
-  for (const ValidatorVoteScore& validator : candidate.validators) {
-    const int index = validator.validator_id - 1;
-    if (index < 0 || index >= static_cast<int>(candidate_leader_weights.size())) {
-      continue;
-    }
-    const int64_t voting_weight =
-        index < static_cast<int>(current_weights.size())
-            ? current_weights[index]
-            : candidate_leader_weights[index];
-    if (validator.leader_certified_count > 0) {
-      candidate_leader_weights[index] = std::min<int64_t>(
-          voting_weight,
-          ClampWeight(candidate_leader_weights[index] +
-                          recovery_config_.max_recovery_per_epoch,
-                      recovery_config_));
-    } else if (validator.leader_opportunity_count >= 2 &&
-               validator.leader_score < 67) {
-      candidate_leader_weights[index] = ClampWeight(
-          candidate_leader_weights[index] - recovery_config_.decay_per_epoch,
-          recovery_config_);
-    }
-  }
-  candidate.leader_weights = std::move(candidate_leader_weights);
-  RecomputeVoteScoreCandidateRoots(&candidate);
   if (epoch_views_ > 0 && window_end_view > 0) {
     candidate.start_qc_view = window_end_view - static_cast<int>(epoch_views_) + 1;
     candidate.end_qc_view = window_end_view;
@@ -1164,9 +989,7 @@ void AsyncVoteScoreReputationPlugin::FlushWindow(
     output_records_since_flush_ = 0;
   }
   const bool changes_weights = candidate.next_weights != current_weights;
-  const bool changes_leader_profile =
-      candidate.leader_weights != baseline_leader_weights;
-  if (changes_weights || changes_leader_profile) {
+  if (changes_weights) {
     std::unique_lock<std::mutex> lock(mutex_);
     if (completed_candidates_.size() >= queue_capacity_) {
       completed_candidates_.pop_front();
@@ -1205,8 +1028,6 @@ void AsyncVoteScoreReputationPlugin::WorkerLoop() {
 
   std::vector<ReputationQcEvent> window;
   std::vector<int64_t> current_weights;
-  std::vector<int64_t> leader_weights;
-  int leader_profile_activation_view = 0;
   std::string old_weight_root_hex;
   uint64_t old_weight_version = 0;
   uint64_t window_index = 0;
@@ -1218,15 +1039,12 @@ void AsyncVoteScoreReputationPlugin::WorkerLoop() {
       current_window_qc_count_ = 0;
       window_index = window_index_++;
       current_weights = current_weights_;
-      leader_weights = current_leader_weights_;
-      leader_profile_activation_view = leader_profile_activation_view_;
       old_weight_root_hex = old_weight_root_hex_;
       old_weight_version = old_weight_version_;
     }
   }
   FlushWindow(output, std::move(window), window_index, std::move(current_weights),
-              std::move(old_weight_root_hex), old_weight_version,
-              std::move(leader_weights), leader_profile_activation_view);
+              std::move(old_weight_root_hex), old_weight_version);
   output.flush();
 }
 

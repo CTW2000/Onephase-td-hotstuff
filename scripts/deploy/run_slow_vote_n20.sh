@@ -120,6 +120,15 @@ run_single_experiment() {
     local tps=$(grep "^[0-9]" "$result_file" | head -1)
     local lat=$(grep "^[0-9]" "$result_file" | tail -1)
     echo "  >> Throughput: $tps txn/s | Latency: $lat s"
+    if [ "${KEEP_EXPERIMENT_LOGS:-0}" = "1" ]; then
+      local keep_dir="$RESULT_DIR/logs_${proto}_slowvote${num_slow}"
+      rm -rf "$keep_dir"
+      mkdir -p "$keep_dir"
+      cp result_*_log "$keep_dir"/ 2>/dev/null || true
+      cp result_*_reputation.jsonl "$keep_dir"/ 2>/dev/null || true
+      cp result_*_qc_evidence.jsonl "$keep_dir"/ 2>/dev/null || true
+      echo "  >> Logs preserved in: $keep_dir"
+    fi
     rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
   else
     echo "  >> NO LOG FILES COLLECTED"

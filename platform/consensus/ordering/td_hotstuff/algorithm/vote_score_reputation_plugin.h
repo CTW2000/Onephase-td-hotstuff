@@ -21,7 +21,9 @@ struct ReputationRecoveryConfig {
   int64_t min_weight = 1;
   int64_t max_weight = 100;
   uint64_t min_decay_opportunities = 1;
+  uint64_t min_leader_opportunities = 8;
   int64_t leader_eligible_min_weight = 10;
+  bool leader_recovery_enabled = false;
 };
 
 struct ReputationQcEvent {
@@ -33,7 +35,6 @@ struct ReputationQcEvent {
   uint64_t weight_version = 0;
   std::string active_weight_root;
   int64_t leader_eligible_min_weight = 0;
-  int leader_profile_activation_view = 0;
 };
 
 struct ValidatorVoteScore {
@@ -70,7 +71,7 @@ struct VoteScoreCandidate {
   std::string metric_root_hex;
   std::string next_weight_root_hex;
   std::string leader_weight_root_hex;
-  uint64_t leader_params_version = 1;
+  uint64_t leader_params_version = 0;
   std::string leader_randomness_ref;
   std::string candidate_digest_hex;
 };
@@ -141,10 +142,7 @@ class AsyncVoteScoreReputationPlugin {
   std::vector<VoteScoreCandidate> TakeCompletedCandidates();
   void UpdateCurrentWeights(std::vector<int64_t> current_weights,
                             std::string old_weight_root_hex,
-                            uint64_t old_weight_version,
-                            std::vector<int64_t> leader_weights = {},
-                            int leader_profile_activation_view = 0);
-
+                            uint64_t old_weight_version);
   bool enabled() const { return enabled_; }
   uint64_t dropped_count() const { return dropped_count_.load(); }
 
@@ -156,16 +154,12 @@ class AsyncVoteScoreReputationPlugin {
                    uint64_t window_index,
                    std::vector<int64_t> current_weights,
                    std::string old_weight_root_hex,
-                   uint64_t old_weight_version,
-                   std::vector<int64_t> leader_weights,
-                   int leader_profile_activation_view);
+                   uint64_t old_weight_version);
   void DropRecord(int qc_view);
 
   int node_id_;
   int total_replicas_;
   std::vector<int64_t> current_weights_;
-  std::vector<int64_t> current_leader_weights_;
-  int leader_profile_activation_view_ = 0;
   std::string old_weight_root_hex_;
   uint64_t old_weight_version_ = 0;
   size_t epoch_views_ = 4096;
@@ -173,6 +167,7 @@ class AsyncVoteScoreReputationPlugin {
   std::string output_dir_;
   std::string output_path_;
   size_t window_size_;
+  size_t min_candidate_qc_count_;
   size_t queue_capacity_;
   ReputationRecoveryConfig recovery_config_;
   bool enabled_ = true;
