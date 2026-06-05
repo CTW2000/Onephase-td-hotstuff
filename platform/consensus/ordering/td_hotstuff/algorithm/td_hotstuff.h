@@ -14,6 +14,7 @@
 
 #include "platform/common/queue/lock_free_queue.h"
 #include "platform/consensus/ordering/common/algorithm/protocol_base.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/async_consensus_verifier.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/qc_evidence_recorder.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/qc_signer_selector.h"
@@ -56,6 +57,9 @@ class HotStuff : public common::ProtocolBase {
   void AsyncSend();
   void AsyncCommit();
   void AsyncTimeout();
+  void AsyncVerifiedEvents();
+  bool ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert);
+  void ProcessVerifiedConsensusEvent(VerifiedConsensusEvent event);
 
   std::unique_ptr<Certificate> GenerateCertificate(const Proposal& proposal);
 
@@ -133,6 +137,7 @@ class HotStuff : public common::ProtocolBase {
   std::shared_ptr<LeaderSelectionSchedule> leader_selection_schedule_;
   std::unique_ptr<WeightUpdateManager> weight_update_manager_;
   std::unique_ptr<AsyncQcEvidenceRecorder> qc_evidence_recorder_;
+  std::unique_ptr<AsyncConsensusVerifier> async_verifier_;
   std::unique_ptr<TimeoutManager> timeout_manager_;
   std::set<int> timeout_echoed_views_;
   QcSignerCooldownTracker qc_signer_cooldown_;
@@ -141,6 +146,7 @@ class HotStuff : public common::ProtocolBase {
   std::deque<WeightPluginOutboundMessages> weight_plugin_broadcast_queue_;
   std::thread weight_plugin_broadcast_thread_;
   std::thread timeout_thread_;
+  std::thread verified_event_thread_;
   bool stop_weight_plugin_broadcast_ = false;
   int last_recorded_leader_opportunity_view_ = 0;
   std::atomic<bool> stop_timeout_{false};
@@ -150,6 +156,7 @@ class HotStuff : public common::ProtocolBase {
   int next_weight_plugin_drain_view_ = 0;
   uint64_t timeout_progress_epoch_ = 0;
   std::atomic<uint64_t> timeout_progress_epoch_atomic_{0};
+  std::atomic<bool> stop_verified_events_{false};
   int last_valid_proposal_view_ = 0;
   bool silent_leader_for_experiment_ = false;
 };

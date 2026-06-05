@@ -7,14 +7,13 @@
 #include <string>
 
 #include "common/crypto/signature_verifier.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/certificate_verifier.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
 
 namespace resdb {
 namespace td_hotstuff {
 
-constexpr const char* kTimeoutQuorumRuleId =
-    "td_hotstuff_timeout_quorum_v1";
 
 struct TimeoutConfig {
   bool enabled = false;
@@ -22,7 +21,6 @@ struct TimeoutConfig {
 };
 
 TimeoutConfig TimeoutConfigFromEnv();
-std::string TimeoutVotePayload(const TimeoutVote& vote);
 bool ShouldTimeoutView(int current_view, int last_valid_proposal_view);
 
 class TimeoutManager {
@@ -50,6 +48,7 @@ class TimeoutManager {
   int total_replicas_;
   SignatureVerifier* verifier_;
   std::shared_ptr<WeightSchedule> weight_schedule_;
+  CertificateVerifier certificate_verifier_;
   std::map<int, std::map<int, TimeoutVote>> votes_by_view_;
   std::set<int> formed_cert_views_;
 };

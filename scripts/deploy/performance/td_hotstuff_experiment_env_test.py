@@ -33,13 +33,15 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
     def test_stable_env_sets_pipeline_defaults(self):
         values = source_helper()
 
-        self.assertEqual(values["TD_HS_REPUTATION_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_LEADER_SELECTION_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_LEADER_PROFILE_UPDATE_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_REPUTATION_ENABLE"], "0")
+        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_ENABLE"], "0")
+        self.assertEqual(values["TD_HS_LEADER_SELECTION_ENABLE"], "0")
+        self.assertEqual(values["TD_HS_LEADER_PROFILE_UPDATE_ENABLE"], "0")
+        self.assertEqual(values["TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE"], "0")
+        self.assertEqual(values["TD_HS_QC_DIVERSITY_ENABLE"], "0")
+        self.assertEqual(values["TD_HS_TIMEOUT_ENABLE"], "0")
         self.assertEqual(values["TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT"], "11")
-        self.assertEqual(len(values["TD_HS_WEIGHTS"].split(",")), 20)
+        self.assertEqual(values["TD_HS_WEIGHTS"], ",".join(["1"] * 20))
 
     def test_stable_env_preserves_explicit_overrides(self):
         values = source_helper(

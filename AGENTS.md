@@ -13,6 +13,7 @@ Codex 改代码，但不提交 commit；我在 Cursor 的 Git 面板里审查 di
 ## End-to-end pipeline checks
 
 - When adding a new function or changing existing behavior, check the whole live pipeline before experiments: consensus protocol logic, reputation plugin logic, client request routing, benchmark deployment scripts, and metric parsing/summary code.
+- When implementing a new feature or component, first decide whether it affects the consensus core and whether the work can be processed asynchronously. Keep the consensus core workload as small as possible, because even small extra processing on the hot path can cause a large performance decline.
 - Do not assume a performance drop is caused by the new protocol idea until the client pipeline, benchmark routing, generated configs, environment propagation, and result parser have been checked against the active leader/weight/timeout rules.
 - In normal no-Byzantine 20-replica + 1-client experiments, throughput should recover to the normal baseline, usually around `82000+`, unless the new mechanism intentionally adds unavoidable work. If no-Byzantine throughput stays far below that level, treat it as a bug or pipeline mismatch and find the source before running larger Byzantine experiments.
 - Every time no-Byzantine performance drops below the normal level after a code or config change, first inspect the exact code, benchmark, and metric changes made in that iteration and try to fix the regression. Only accept the lower baseline when the new feature itself truly adds unavoidable work and that cost has been measured and explained.

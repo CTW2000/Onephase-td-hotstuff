@@ -60,7 +60,7 @@ bool SignerBitmapMatchesSignatures(const QC& qc, int total_num) {
 }
 
 ProposalManager::ProposalManager(int32_t id, int limit_count, SignatureVerifier* verifier, int total_num, int non_responsive_num, int fork_tail_num, const std::vector<int64_t>& replica_weights, int64_t quorum_weight, std::shared_ptr<WeightSchedule> weight_schedule, std::shared_ptr<LeaderSelectionSchedule> leader_schedule)
-    : id_(id), limit_count_(limit_count), total_num_(total_num), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), weight_schedule_(weight_schedule != nullptr ? weight_schedule : std::make_shared<WeightSchedule>(total_num, replica_weights_)), leader_schedule_(leader_schedule), verifier_(verifier) {
+    : id_(id), limit_count_(limit_count), total_num_(total_num), non_responsive_num_(non_responsive_num), fork_tail_num_(fork_tail_num), replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)), quorum_weight_(quorum_weight > 0 ? quorum_weight : CalculateQuorumWeight(replica_weights_)), weight_schedule_(weight_schedule != nullptr ? weight_schedule : std::make_shared<WeightSchedule>(total_num, replica_weights_)), leader_schedule_(leader_schedule), verifier_(verifier), certificate_verifier_(total_num, verifier, weight_schedule_) {
     round_ = 1;
     global_stats_ = Stats::GetGlobalStats();
     assert(verifier_ != nullptr);
@@ -85,6 +85,15 @@ std::string ProposalManager::GetHash(const Proposal& proposal){
 
 bool ProposalManager::VerifyHash(const Proposal& proposal) {
   return  GetHash(proposal) == proposal.hash();
+}
+
+bool ProposalManager::VerifyProposalSignature(const Proposal& proposal) {
+  std::string error;
+  if (!certificate_verifier_.VerifyProposalSignature(proposal, &error)) {
+    LOG(ERROR) << "proposal signature invalid: " << error;
+    return false;
+  }
+  return true;
 }
 
 bool ProposalManager::VerifyLeader(const Proposal& proposal) {
@@ -124,49 +133,19 @@ int64_t ProposalManager::QuorumWeightForView(int view) const {
 }
 
 bool ProposalManager::VerifyCert(const Certificate& cert) {
-  if (cert.signer() != cert.sign().node_id()) {
-    LOG(ERROR) << "cert signer mismatch, signer:" << cert.signer()
-               << " sign node:" << cert.sign().node_id();
+  std::string error;
+  if (!certificate_verifier_.VerifyVote(cert, &error)) {
+    LOG(ERROR) << "cert invalid: " << error;
     return false;
   }
-  if (WeightForSigner(cert.signer(), cert.view()) <= 0) {
-    LOG(ERROR) << "cert signer out of range:" << cert.signer();
-    return false;
-  }
-  return verifier_->VerifyMessage(cert.hash(), cert.sign());
+  return true;
 }
 
 
 bool ProposalManager::VerifyQC(const QC& qc) {
-  if (!SignerBitmapMatchesSignatures(qc, total_num_)) {
-    LOG(ERROR) << "qc signer bitmap does not match signatures";
-    return false;
-  }
-
-  int64_t total_weight = 0;
-  std::set<int> seen_signers;
-  for(const auto& sign : qc.signatures()){
-    int signer = sign.node_id();
-    if (WeightForSigner(signer, qc.view()) <= 0) {
-      LOG(ERROR) << "qc has unknown signer:" << signer;
-      return false;
-    }
-    if (!seen_signers.insert(signer).second) {
-      LOG(ERROR) << "qc has duplicate signer:" << signer;
-      return false;
-    }
-    bool valid = verifier_->VerifyMessage(qc.hash(), sign);
-    if(!valid){
-      LOG(ERROR) << "Verify message fail";
-      return false;
-    }
-    total_weight += WeightForSigner(signer, qc.view());
-  }
-
-  const int64_t quorum_weight = QuorumWeightForView(qc.view());
-  if (total_weight < quorum_weight) {
-    LOG(ERROR) << "qc weight:" << total_weight << " not enough, quorum:"
-               << quorum_weight << " signatures:" << qc.signatures_size();
+  std::string error;
+  if (!certificate_verifier_.VerifyQC(qc, &error)) {
+    LOG(ERROR) << "qc invalid: " << error;
     return false;
   }
   return true;
@@ -183,6 +162,10 @@ bool ProposalManager::SafeNode(const Proposal& proposal){
 bool ProposalManager::Verify(const Proposal& proposal) {
   if( !VerifyHash(proposal)){
     LOG(ERROR)<<"hash not match:";
+    return false;
+  }
+
+  if (!VerifyProposalSignature(proposal)) {
     return false;
   }
 
@@ -229,6 +212,12 @@ std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
   }
   proposal->set_createtime(GetCurrentTime());
   proposal->set_hash(GetHash(*proposal));
+  auto signature_or = verifier_->SignMessage(ProposalSignaturePayload(*proposal));
+  if (!signature_or.ok()) {
+    LOG(ERROR) << "failed to sign TD-Hotstuff proposal view:" << round_;
+    return nullptr;
+  }
+  *proposal->mutable_signature() = *signature_or;
   return proposal;
 }
 
@@ -245,9 +234,8 @@ const TimeoutCert& ProposalManager::HighestTimeoutCert() const {
 }
 
 bool ProposalManager::VerifyTimeoutCert(const TimeoutCert& cert) {
-  TimeoutManager verifier(id_, total_num_, verifier_, weight_schedule_);
   std::string error;
-  if (!verifier.VerifyTimeoutCert(cert, &error)) {
+  if (!certificate_verifier_.VerifyTimeoutCert(cert, &error)) {
     LOG(ERROR) << "invalid TD-Hotstuff timeout cert: " << error;
     return false;
   }
@@ -282,6 +270,10 @@ bool ProposalManager::VerifyTimeoutJustification(const Proposal& proposal) {
     return false;
   }
   return VerifyQC(proposal.header().qc());
+}
+
+bool ProposalManager::RecordVote(const Proposal& proposal, std::string* error) {
+  return safety_rules_.RecordVote(proposal, error);
 }
 
 bool ProposalManager::AdvanceToViewByTimeout(const TimeoutCert& cert) {

@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "common/utils/utils.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/certificate_verifier.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -100,6 +101,10 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
       id_, total_num_, verifier_, WeightUpdateConfigFromEnv());
   qc_evidence_recorder_ = AsyncQcEvidenceRecorder::CreateFromEnv(
       id_, total_num_, weight_schedule_->ActiveWeights());
+  async_verifier_ = std::make_unique<AsyncConsensusVerifier>(
+      total_num_, verifier_, AsyncVerifierWorkerCountFromEnv(),
+      AsyncVerifierQueueCapacityFromEnv(), weight_schedule_);
+  async_verifier_->Start();
   weight_plugin_drain_interval_views_ =
       PositiveIntFromEnv("TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS", 256);
   timeout_empty_proposal_budget_views_ =
@@ -113,6 +118,7 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
   commit_thread_ = std::thread(&HotStuff::AsyncCommit, this);
   weight_plugin_broadcast_thread_ =
       std::thread(&HotStuff::AsyncBroadcastWeightPluginMessages, this);
+  verified_event_thread_ = std::thread(&HotStuff::AsyncVerifiedEvents, this);
   if (timeout_manager_ != nullptr) {
     timeout_thread_ = std::thread(&HotStuff::AsyncTimeout, this);
   }
@@ -121,6 +127,14 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
 }
 
 HotStuff::~HotStuff() {
+  stop_verified_events_.store(true);
+  if (async_verifier_ != nullptr) {
+    async_verifier_->Stop();
+  }
+  if (verified_event_thread_.joinable()) {
+    verified_event_thread_.join();
+  }
+
   stop_timeout_.store(true);
   if (timeout_thread_.joinable()) {
     timeout_thread_.join();
@@ -273,9 +287,10 @@ void HotStuff::AsyncTimeout() {
       }
       if (view != watched_view) {
         watched_view = view;
-        view_started_at = now;
         last_vote_at = std::chrono::steady_clock::time_point::min();
-        continue;
+        // The view has already been idle for timeout_interval by this point.
+        // Do not reset view_started_at, otherwise the first timeout vote waits
+        // almost two full timeout intervals.
       }
       if (last_vote_at != std::chrono::steady_clock::time_point::min() &&
           now - last_vote_at < timeout_interval) {
@@ -385,6 +400,37 @@ void HotStuff::AsyncCommit() {
       txn.set_id(seq++);
       Commit(txn);
     }
+  }
+}
+
+void HotStuff::AsyncVerifiedEvents() {
+  while (true) {
+    std::vector<VerifiedConsensusEvent> events;
+    if (async_verifier_ != nullptr) {
+      events =
+          async_verifier_->WaitForVerified(std::chrono::milliseconds(100));
+    }
+    for (VerifiedConsensusEvent& event : events) {
+      ProcessVerifiedConsensusEvent(std::move(event));
+    }
+    if ((IsStop() || stop_verified_events_.load()) && events.empty()) {
+      break;
+    }
+    if (async_verifier_ == nullptr) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  }
+}
+
+void HotStuff::ProcessVerifiedConsensusEvent(VerifiedConsensusEvent event) {
+  switch (event.type) {
+    case VerifiedConsensusEvent::Type::kVote:
+      ProcessVerifiedCertificate(std::move(event.vote));
+      return;
+    case VerifiedConsensusEvent::Type::kTimeoutVote:
+    case VerifiedConsensusEvent::Type::kTimeoutCert:
+    case VerifiedConsensusEvent::Type::kNone:
+      return;
   }
 }
 
@@ -797,6 +843,12 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     } else if (!proposal_manager_->Verify(*proposal)) {
       LOG(ERROR) << " proposal invalid";
       proposal_valid = false;
+    } else {
+      std::string safety_error;
+      if (!proposal_manager_->RecordVote(*proposal, &safety_error)) {
+        LOG(ERROR) << "proposal vote safety rejected: " << safety_error;
+        proposal_valid = false;
+      }
     }
 
     if (proposal_valid) {
@@ -880,21 +932,38 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
 }
 
 bool HotStuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
+  if (cert == nullptr) {
+    return false;
+  }
+  if (async_verifier_ != nullptr &&
+      async_verifier_->TrySubmitVote(&cert)) {
+    return true;
+  }
+  {
+    std::unique_lock<std::mutex> lk(mutex_);
+    if (cert == nullptr || !proposal_manager_->VerifyCert(*cert)) {
+      return false;
+    }
+  }
+  return ProcessVerifiedCertificate(std::move(cert));
+}
+
+bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
+  if (cert == nullptr) {
+    return false;
+  }
   WeightPluginOutboundMessages weight_messages;
   {
     std::unique_lock<std::mutex> lk(mutex_);
     // LOG(ERROR)<<"RECEIVE proposer cert :"<<cert->view()<<"
     // from:"<<cert->signer();
     int view = cert->view();
+    if (view < proposal_manager_->CurrentView()) {
+      return true;
+    }
     // Install any pending weight update before checking a vote for a view that
     // may already belong to the new weight schedule.
     weight_messages = DrainWeightPlugin(view);
-    bool valid = proposal_manager_->VerifyCert(*cert);
-    if (!valid) {
-      LOG(ERROR) << "Verify message fail";
-      assert(1 == 0);
-      return false;
-    }
 
     std::string hash = cert->hash();
     auto& certs = receive_[view][hash];
@@ -1130,8 +1199,7 @@ std::unique_ptr<Certificate> HotStuff::GenerateCertificate(
   cert->set_view(proposal.header().view());
   cert->set_signer(id_);
 
-  std::string data_str = proposal.hash();
-  auto hash_signature_or = verifier_->SignMessage(data_str);
+  auto hash_signature_or = verifier_->SignMessage(VoteSignaturePayload(*cert));
   if (!hash_signature_or.ok()) {
     LOG(ERROR) << "Sign message fail";
     return nullptr;

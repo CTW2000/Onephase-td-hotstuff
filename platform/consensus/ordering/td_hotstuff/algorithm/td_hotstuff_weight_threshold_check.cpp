@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "common/crypto/mock_signature_verifier.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/certificate_verifier.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 
 namespace resdb {
@@ -15,6 +16,13 @@ namespace {
 
 using ::testing::_;
 using ::testing::Return;
+
+SignatureInfo SignatureFrom(int signer) {
+  SignatureInfo signature;
+  signature.set_node_id(signer);
+  signature.set_signature("signature-" + std::to_string(signer));
+  return signature;
+}
 
 class TestProposalManager : public ProposalManager {
  public:
@@ -71,9 +79,7 @@ TimeoutCert MakeTimeoutCert(int view, const std::vector<int>& signers,
 
 TEST(TdHotstuffWeightedQCTest, DefaultWeightsPreserveClassicQuorum) {
   MockSignatureVerifier verifier;
-  EXPECT_CALL(verifier, VerifyMessage("block-hash", _))
-      .Times(5)
-      .WillRepeatedly(Return(true));
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
 
   TestProposalManager manager(&verifier);
 
@@ -83,9 +89,7 @@ TEST(TdHotstuffWeightedQCTest, DefaultWeightsPreserveClassicQuorum) {
 
 TEST(TdHotstuffWeightedQCTest, AcceptsWeightedQuorumBelowClassicCount) {
   MockSignatureVerifier verifier;
-  EXPECT_CALL(verifier, VerifyMessage("block-hash", _))
-      .Times(2)
-      .WillRepeatedly(Return(true));
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
 
   TestProposalManager manager(&verifier, {3, 3, 1, 1});
 
@@ -94,9 +98,7 @@ TEST(TdHotstuffWeightedQCTest, AcceptsWeightedQuorumBelowClassicCount) {
 
 TEST(TdHotstuffWeightedQCTest, RejectsClassicCountWithoutEnoughWeight) {
   MockSignatureVerifier verifier;
-  EXPECT_CALL(verifier, VerifyMessage("block-hash", _))
-      .Times(3)
-      .WillRepeatedly(Return(true));
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
 
   TestProposalManager manager(&verifier, {1, 1, 1, 4});
 
@@ -131,6 +133,7 @@ TEST(TdHotstuffTimeoutTest,
      AdvanceToViewByTimeoutMovesToNextViewAndGeneratedProposalCarriesTc) {
   MockSignatureVerifier verifier;
   EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+  EXPECT_CALL(verifier, SignMessage(_)).WillRepeatedly(Return(SignatureFrom(3)));
 
   TestProposalManager manager(/*node_id=*/3, &verifier, nullptr);
   TimeoutCert cert = MakeTimeoutCert(/*view=*/1, {1, 2, 3}, QC());
@@ -149,6 +152,7 @@ TEST(TdHotstuffTimeoutTest,
 TEST(TdHotstuffTimeoutTest, RejectsProposalWithInvalidTimeoutCert) {
   MockSignatureVerifier verifier;
   EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+  EXPECT_CALL(verifier, SignMessage(_)).WillRepeatedly(Return(SignatureFrom(3)));
 
   TestProposalManager manager(/*node_id=*/3, &verifier, nullptr);
   TimeoutCert cert = MakeTimeoutCert(/*view=*/1, {1, 2, 3}, QC());
@@ -172,6 +176,9 @@ TEST(TdHotstuffLeaderSelectionTest,
   const int expected_leader = leader_schedule->LeaderForView(1);
 
   MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(_))
+      .WillRepeatedly(Return(SignatureFrom(expected_leader)));
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
   TestProposalManager manager(expected_leader, &verifier, leader_schedule);
   std::vector<std::unique_ptr<Transaction>> txns;
   std::unique_ptr<Proposal> proposal = manager.GenerateProposal(txns);

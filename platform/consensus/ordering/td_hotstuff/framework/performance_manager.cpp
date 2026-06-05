@@ -25,6 +25,7 @@
 
 #include "platform/consensus/ordering/td_hotstuff/framework/performance_manager.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <sstream>
 #include <string>
@@ -168,10 +169,43 @@ int HotStuffPerformanceManager::GetPrimary(){
 
 void HotStuffPerformanceManager::SendMessage(const Request& request) {
   const int primary = GetPrimary();
+  const uint64_t now = GetCurrentTime();
+  {
+    std::unique_lock<std::mutex> lk(pending_send_times_mutex_);
+    pending_send_times_[request.user_seq()] = now;
+  }
   Request tagged_request(request);
   tagged_request.set_current_view(last_primary_view_);
-  last_send_time_ = GetCurrentTime();
+  last_send_time_ = now;
   replica_communicator_->SendMessage(tagged_request, primary);
+}
+
+void HotStuffPerformanceManager::UntrackPendingSendTime(uint64_t local_id) {
+  std::unique_lock<std::mutex> lk(pending_send_times_mutex_);
+  pending_send_times_.erase(local_id);
+}
+
+int HotStuffPerformanceManager::ExpireTimedOutPendingResponses(
+    uint64_t now, uint64_t timeout_us) {
+  std::vector<uint64_t> expired_ids;
+  {
+    std::unique_lock<std::mutex> lk(pending_send_times_mutex_);
+    for (auto it = pending_send_times_.begin();
+         it != pending_send_times_.end();) {
+      if (now >= it->second && now - it->second >= timeout_us) {
+        expired_ids.push_back(it->first);
+        it = pending_send_times_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+  for (uint64_t id : expired_ids) {
+    const int idx = id % response_set_size_;
+    std::unique_lock<std::mutex> lk(response_lock_[idx]);
+    response_[idx].erase(static_cast<int64_t>(id));
+  }
+  return static_cast<int>(expired_ids.size());
 }
 
 void HotStuffPerformanceManager::MaybeReleaseStalledInflight() {
@@ -184,11 +218,16 @@ void HotStuffPerformanceManager::MaybeReleaseStalledInflight() {
   }
   const uint64_t now = GetCurrentTime();
   const uint64_t retry_timeout_us = BenchmarkRetryTimeoutUs();
-  if (now <= last_send_time_ || now - last_send_time_ < retry_timeout_us) {
+  const int expired_responses =
+      ExpireTimedOutPendingResponses(now, retry_timeout_us);
+  if (expired_responses <= 0) {
     return;
   }
-  const int old_send_num = send_num_.exchange(0);
-  const int expired_responses = ExpirePendingResponses();
+  int old_send_num = send_num_.load();
+  while (old_send_num > 0 &&
+         !send_num_.compare_exchange_weak(
+             old_send_num, std::max(0, old_send_num - expired_responses))) {
+  }
   const uint64_t observed_primary = last_response_.load();
   last_send_time_ = now;
   LOG(WARNING) << "release stalled TD-Hotstuff benchmark inflight: old_send_num="
@@ -245,6 +284,7 @@ CollectorResultCode HotStuffPerformanceManager::AddResponseMsg(
 
   if (done) {
     UntrackPendingResponse(seq);
+    UntrackPendingSendTime(seq);
     response_call_back(std::move(batch_response));
     return CollectorResultCode::STATE_CHANGED;
   }

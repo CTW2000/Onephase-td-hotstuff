@@ -34,17 +34,6 @@ std::string BuildBitmap(const std::vector<int>& signers, int total_replicas) {
   return bitmap;
 }
 
-std::string QcDigest(const QC& qc) {
-  std::string bytes;
-  qc.SerializeToString(&bytes);
-  return SignatureVerifier::CalculateHash(bytes);
-}
-
-bool QcEqualForTimeout(const QC& left, const QC& right) {
-  return left.view() == right.view() && left.hash() == right.hash() &&
-         left.signer_bitmap() == right.signer_bitmap();
-}
-
 bool BetterHighQc(const QC& candidate, const QC& current) {
   if (candidate.view() != current.view()) {
     return candidate.view() > current.view();
@@ -76,15 +65,6 @@ TimeoutConfig TimeoutConfigFromEnv() {
   return config;
 }
 
-std::string TimeoutVotePayload(const TimeoutVote& vote) {
-  std::ostringstream payload;
-  payload << "td_hotstuff_timeout_vote_v1|" << vote.view() << '|'
-          << vote.signer() << '|' << vote.high_qc().view() << '|'
-          << vote.high_qc().hash() << '|' << vote.high_qc().signer_bitmap()
-          << '|' << QcDigest(vote.high_qc());
-  return payload.str();
-}
-
 bool ShouldTimeoutView(int current_view, int last_valid_proposal_view) {
   return current_view > 0 && last_valid_proposal_view < current_view;
 }
@@ -95,7 +75,8 @@ TimeoutManager::TimeoutManager(
     : node_id_(node_id),
       total_replicas_(total_replicas),
       verifier_(verifier),
-      weight_schedule_(std::move(weight_schedule)) {}
+      weight_schedule_(std::move(weight_schedule)),
+      certificate_verifier_(total_replicas, verifier, weight_schedule_) {}
 
 std::unique_ptr<TimeoutVote> TimeoutManager::CreateTimeoutVote(
     int view, const QC& high_qc) {
@@ -159,67 +140,12 @@ bool TimeoutManager::VerifyTimeoutVote(const TimeoutVote& vote,
     SetError(error, "signer has no active weight");
     return false;
   }
-  if (!VerifyHighQc(vote.high_qc(), vote.view(), error)) {
-    return false;
-  }
-  if (!verifier_->VerifyMessage(TimeoutVotePayload(vote), vote.signature())) {
-    SetError(error, "bad timeout vote signature");
-    return false;
-  }
-  return true;
+  return certificate_verifier_.VerifyTimeoutVote(vote, error);
 }
 
 bool TimeoutManager::VerifyTimeoutCert(const TimeoutCert& cert,
                                        std::string* error) const {
-  if (cert.view() <= 0) {
-    SetError(error, "invalid timeout cert view");
-    return false;
-  }
-  if (cert.quorum_rule_id() != kTimeoutQuorumRuleId) {
-    SetError(error, "wrong timeout quorum rule");
-    return false;
-  }
-  if (!VerifyHighQc(cert.high_qc(), cert.view(), error)) {
-    return false;
-  }
-
-  std::set<int> seen_signers;
-  std::vector<int> signers;
-  int64_t total_weight = 0;
-  QC best_high_qc;
-  for (const TimeoutVote& vote : cert.votes()) {
-    if (vote.view() != cert.view()) {
-      SetError(error, "vote view mismatch");
-      return false;
-    }
-    if (!seen_signers.insert(vote.signer()).second) {
-      SetError(error, "duplicate timeout vote signer");
-      return false;
-    }
-    if (!VerifyTimeoutVote(vote, error)) {
-      return false;
-    }
-    signers.push_back(vote.signer());
-    total_weight += WeightForSigner(vote.signer(), cert.view());
-    if (BetterHighQc(vote.high_qc(), best_high_qc)) {
-      best_high_qc = vote.high_qc();
-    }
-  }
-
-  std::sort(signers.begin(), signers.end());
-  if (cert.signer_bitmap() != BuildBitmap(signers, total_replicas_)) {
-    SetError(error, "timeout cert signer bitmap mismatch");
-    return false;
-  }
-  if (total_weight < QuorumWeightForView(cert.view())) {
-    SetError(error, "insufficient timeout cert quorum weight");
-    return false;
-  }
-  if (!QcEqualForTimeout(cert.high_qc(), best_high_qc)) {
-    SetError(error, "timeout cert high qc mismatch");
-    return false;
-  }
-  return true;
+  return certificate_verifier_.VerifyTimeoutCert(cert, error);
 }
 
 void TimeoutManager::ResetBelowView(int view) {
@@ -248,44 +174,7 @@ bool TimeoutManager::VerifyHighQc(const QC& qc, int timeout_view,
     SetError(error, "timeout high qc is not lower than timeout view");
     return false;
   }
-  const size_t expected_size =
-      total_replicas_ <= 0 ? 0 : (total_replicas_ + 7) / 8;
-  if (qc.signer_bitmap().size() != expected_size) {
-    SetError(error, "high qc bitmap size mismatch");
-    return false;
-  }
-
-  std::vector<int> signers;
-  int64_t total_weight = 0;
-  std::set<int> seen_signers;
-  for (const auto& signature : qc.signatures()) {
-    const int signer = signature.node_id();
-    if (!seen_signers.insert(signer).second) {
-      SetError(error, "duplicate high qc signer");
-      return false;
-    }
-    if (WeightForSigner(signer, qc.view()) <= 0) {
-      SetError(error, "high qc signer has no active weight");
-      return false;
-    }
-    if (verifier_ != nullptr &&
-        !verifier_->VerifyMessage(qc.hash(), signature)) {
-      SetError(error, "bad high qc signature");
-      return false;
-    }
-    signers.push_back(signer);
-    total_weight += WeightForSigner(signer, qc.view());
-  }
-  std::sort(signers.begin(), signers.end());
-  if (qc.signer_bitmap() != BuildBitmap(signers, total_replicas_)) {
-    SetError(error, "high qc signer bitmap mismatch");
-    return false;
-  }
-  if (total_weight < QuorumWeightForView(qc.view())) {
-    SetError(error, "high qc quorum weight too low");
-    return false;
-  }
-  return true;
+  return certificate_verifier_.VerifyQC(qc, error);
 }
 
 int64_t TimeoutManager::WeightForSigner(int signer, int view) const {

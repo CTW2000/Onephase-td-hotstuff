@@ -69,6 +69,7 @@ message Proposal {
   int32 sender = 3;
   bytes hash = 4;
   uint64 createtime = 5;
+  SignatureInfo signature = 6;
 };
 
 message CandidateValidatorWeight {

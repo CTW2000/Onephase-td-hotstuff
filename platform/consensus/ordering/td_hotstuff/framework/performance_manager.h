@@ -26,7 +26,9 @@
 #pragma once
 
 #include <future>
+#include <mutex>
 #include <memory>
+#include <unordered_map>
 
 #include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/common/framework/performance_manager.h"
@@ -54,10 +56,15 @@ protected:
   void MaybeReleaseStalledInflight() override;
   int GetPrimary() override;
 
+  void UntrackPendingSendTime(uint64_t local_id);
+  int ExpireTimedOutPendingResponses(uint64_t now, uint64_t timeout_us);
+
   int count_ = 0;
   int last_primary_view_ = 0;
   bool dynamic_benchmark_routing_enabled_ = false;
   std::unique_ptr<LeaderSelectionSchedule> leader_selection_schedule_;
+  std::mutex pending_send_times_mutex_;
+  std::unordered_map<uint64_t, uint64_t> pending_send_times_;
 };
 
 }  // namespace td_hotstuff
