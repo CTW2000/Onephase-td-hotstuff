@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -18,6 +19,7 @@
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/qc_evidence_recorder.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/qc_signer_selector.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_fault_injector.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/timeout_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
@@ -74,6 +76,9 @@ class HotStuff : public common::ProtocolBase {
       const std::map<int, std::unique_ptr<Certificate>>& certs) const;
   std::vector<QcSignerInfo> CertificateSignerInfos(
       const std::map<int, std::unique_ptr<Certificate>>& certs, int view) const;
+  bool MaybeFormQcLocked(int view, const std::string& hash, bool force);
+  bool FlushPendingQcFormationLocked();
+  void ClearPendingQcFormationLocked();
   WeightSnapshot CurrentWeightSnapshot(int current_view) const;
   WeightPluginOutboundMessages DrainWeightPlugin(int current_view,
                                                  bool force = false);
@@ -91,6 +96,16 @@ class HotStuff : public common::ProtocolBase {
   void BroadcastTimeoutCert(const TimeoutCert& cert);
   bool ApplyTimeoutCertLocked(const TimeoutCert& cert);
   bool IsSilentLeaderForExperiment() const;
+  bool IsUnfairLeaderForExperiment() const;
+  bool IsDoubleProposalForExperiment() const;
+  bool IsDoubleVoteForExperiment() const;
+  bool IsInvalidQcForExperiment() const;
+  bool IsWeightUpdateVoteEquivocationForExperiment() const;
+  bool IsTimeoutVoteEquivocationForExperiment() const;
+  bool IsInvalidTcProposalForExperiment() const;
+  std::vector<int> SelectUnfairQcSigners(
+      const std::vector<QcSignerInfo>& signer_infos,
+      int64_t quorum_weight) const;
   std::vector<std::unique_ptr<Transaction>> TakeTransactionsForView(
       int view, int max_count);
   void MarkTransactionCommitted(const Transaction& txn);
@@ -141,6 +156,7 @@ class HotStuff : public common::ProtocolBase {
   std::unique_ptr<TimeoutManager> timeout_manager_;
   std::set<int> timeout_echoed_views_;
   QcSignerCooldownTracker qc_signer_cooldown_;
+  std::map<int, QcSignerCooldownTracker> qc_signer_cooldown_by_leader_;
   std::mutex weight_plugin_broadcast_mutex_;
   std::condition_variable weight_plugin_broadcast_cv_;
   std::deque<WeightPluginOutboundMessages> weight_plugin_broadcast_queue_;
@@ -154,11 +170,18 @@ class HotStuff : public common::ProtocolBase {
   int timeout_empty_proposal_budget_views_ = 0;
   int weight_plugin_drain_interval_views_ = 64;
   int next_weight_plugin_drain_view_ = 0;
+  int qc_diversity_grace_us_ = 0;
+  bool pending_qc_formation_ = false;
+  int pending_qc_view_ = 0;
+  std::string pending_qc_hash_;
+  std::chrono::steady_clock::time_point pending_qc_ready_at_;
+  std::atomic<bool> pending_qc_formation_active_{false};
   uint64_t timeout_progress_epoch_ = 0;
   std::atomic<uint64_t> timeout_progress_epoch_atomic_{0};
   std::atomic<bool> stop_verified_events_{false};
   int last_valid_proposal_view_ = 0;
-  bool silent_leader_for_experiment_ = false;
+  ExperimentFaultConfig experiment_faults_;
+  bool weight_update_vote_equivocation_injected_for_experiment_ = false;
 };
 
 }  // namespace td_hotstuff

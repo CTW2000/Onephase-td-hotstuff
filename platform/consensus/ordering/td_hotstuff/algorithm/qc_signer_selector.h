@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <map>
 #include <vector>
 
 namespace resdb {
@@ -32,14 +31,15 @@ class QcSignerCooldownTracker {
   void RecordQcSigners(const std::vector<int>& signers);
 
  private:
+  void EnsureSignerCapacity(int signer);
   bool IsCooling(int signer) const;
   uint64_t SelectionDebt(int signer) const;
 
   QcSignerDiversityConfig config_;
   uint64_t qc_sequence_ = 0;
-  std::map<int, uint64_t> last_included_sequence_by_signer_;
-  std::map<int, uint64_t> eligible_count_by_signer_;
-  std::map<int, uint64_t> included_count_by_signer_;
+  std::vector<uint64_t> last_included_sequence_by_signer_;
+  std::vector<uint64_t> eligible_count_by_signer_;
+  std::vector<uint64_t> included_count_by_signer_;
 };
 
 }  // namespace td_hotstuff

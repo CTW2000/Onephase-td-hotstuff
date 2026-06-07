@@ -24,22 +24,33 @@ TEST(LeaderSelectionScheduleTest, DisabledModePreservesRoundRobinLeaders) {
   EXPECT_TRUE(schedule.ContextHashForView(1).empty());
 }
 
-TEST(LeaderSelectionScheduleTest, EnvReadsOnlyEnableAndEligibilityThreshold) {
+TEST(LeaderSelectionScheduleTest, EnvReadsLeaderSelectionKnobs) {
   setenv("TD_HS_LEADER_SELECTION_ENABLE", "1", /*overwrite=*/1);
   setenv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT", "20", /*overwrite=*/1);
-  setenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS", "64", /*overwrite=*/1);
+  setenv("TD_HS_LEADER_SELECTION_COOLDOWN_VIEWS", "3", /*overwrite=*/1);
+  setenv("TD_HS_LEADER_SELECTION_MAX_SHARE_PERCENT", "40", /*overwrite=*/1);
+  setenv("TD_HS_LEADER_SELECTION_FAIRNESS_DEBT_ENABLE", "0",
+         /*overwrite=*/1);
 
   LeaderSelectionConfig config = LeaderSelectionConfigFromEnv();
   EXPECT_TRUE(config.enabled);
   EXPECT_EQ(config.eligible_min_weight, 20);
+  EXPECT_EQ(config.cooldown_views, 3);
+  EXPECT_EQ(config.max_share_percent, 40);
+  EXPECT_FALSE(config.fairness_debt_enabled);
 
   unsetenv("TD_HS_LEADER_SELECTION_ENABLE");
   unsetenv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT");
-  unsetenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS");
+  unsetenv("TD_HS_LEADER_SELECTION_COOLDOWN_VIEWS");
+  unsetenv("TD_HS_LEADER_SELECTION_MAX_SHARE_PERCENT");
+  unsetenv("TD_HS_LEADER_SELECTION_FAIRNESS_DEBT_ENABLE");
 
   config = LeaderSelectionConfigFromEnv();
   EXPECT_FALSE(config.enabled);
   EXPECT_EQ(config.eligible_min_weight, 10);
+  EXPECT_EQ(config.cooldown_views, 0);
+  EXPECT_EQ(config.max_share_percent, 0);
+  EXPECT_TRUE(config.fairness_debt_enabled);
 }
 
 TEST(LeaderSelectionScheduleTest, WeightedRoundRobinSelectionIsDeterministic) {
@@ -66,6 +77,70 @@ TEST(LeaderSelectionScheduleTest, WeightedRoundRobinSelectionIsDeterministic) {
   EXPECT_EQ(leader_counts[3], 30);
   EXPECT_FALSE(first.ContextHashForView(10).empty());
   EXPECT_EQ(first.ContextHashForView(10), second.ContextHashForView(10));
+}
+
+
+TEST(LeaderSelectionScheduleTest, CooldownAvoidsImmediateRepeatsWhenAlternativesExist) {
+  LeaderSelectionConfig config;
+  config.enabled = true;
+  config.eligible_min_weight = 1;
+  config.cooldown_views = 2;
+  config.fairness_debt_enabled = true;
+  LeaderSelectionSchedule schedule(/*total_replicas=*/3, {90, 30, 30},
+                                   config);
+
+  int previous = 0;
+  int immediate_repeats = 0;
+  for (int view = 1; view <= 30; ++view) {
+    const int leader = schedule.LeaderForView(view);
+    if (leader == previous) {
+      ++immediate_repeats;
+    }
+    previous = leader;
+  }
+
+  EXPECT_EQ(immediate_repeats, 0);
+}
+
+TEST(LeaderSelectionScheduleTest, MaxShareCapLimitsDominantLeaderSlots) {
+  LeaderSelectionConfig config;
+  config.enabled = true;
+  config.eligible_min_weight = 1;
+  config.cooldown_views = 0;
+  config.max_share_percent = 50;
+  config.fairness_debt_enabled = true;
+  LeaderSelectionSchedule schedule(/*total_replicas=*/3, {100, 1, 1},
+                                   config);
+
+  std::map<int, int> leader_counts;
+  for (int view = 1; view <= 102; ++view) {
+    ++leader_counts[schedule.LeaderForView(view)];
+  }
+
+  EXPECT_LE(leader_counts[1], 51);
+  EXPECT_GT(leader_counts[2], 0);
+  EXPECT_GT(leader_counts[3], 0);
+}
+
+TEST(LeaderSelectionScheduleTest, FairnessDebtGivesMinorityValidatorsSlots) {
+  LeaderSelectionConfig config;
+  config.enabled = true;
+  config.eligible_min_weight = 1;
+  config.cooldown_views = 0;
+  config.fairness_debt_enabled = true;
+  LeaderSelectionSchedule schedule(/*total_replicas=*/4, {60, 20, 10, 10},
+                                   config);
+
+  std::map<int, int> leader_counts;
+  for (int view = 1; view <= 100; ++view) {
+    ++leader_counts[schedule.LeaderForView(view)];
+  }
+
+  EXPECT_GT(leader_counts[2], 0);
+  EXPECT_GT(leader_counts[3], 0);
+  EXPECT_GT(leader_counts[4], 0);
+  EXPECT_GE(leader_counts[1], leader_counts[2]);
+  EXPECT_GE(leader_counts[2], leader_counts[3]);
 }
 
 TEST(LeaderSelectionScheduleTest, EligibleThresholdExcludesLowWeightLeaders) {

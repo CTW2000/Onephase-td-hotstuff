@@ -66,12 +66,20 @@ collect_logs() {
   for ip in $SERVERS; do
     for node_id in $(ssh -o StrictHostKeyChecking=no hyperchain@$ip "ls ~/resilientdb_app/ 2>/dev/null | grep -E '^[0-9]+$'" 2>/dev/null); do
       scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/kv_server_performance.log result_${node_id}_log 2>/dev/null &
+      if [ "${KEEP_EXPERIMENT_LOGS:-0}" = "1" ]; then
+        scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/'td_hotstuff_reputation_node_'*.jsonl result_${node_id}_reputation.jsonl 2>/dev/null || true &
+        scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/'td_hotstuff_qc_evidence_node_'*.jsonl result_${node_id}_qc_evidence.jsonl 2>/dev/null || true &
+      fi
     done
   done
   for d in $DEPLOY_DIR/resilientdb_app/*/; do
     local node_id=$(basename "$d")
     if [ -f "$d/kv_server_performance.log" ]; then
       cp "$d/kv_server_performance.log" result_${node_id}_log 2>/dev/null &
+      if [ "${KEEP_EXPERIMENT_LOGS:-0}" = "1" ]; then
+        cp "$d"/td_hotstuff_reputation_node_*.jsonl result_${node_id}_reputation.jsonl 2>/dev/null || true &
+        cp "$d"/td_hotstuff_qc_evidence_node_*.jsonl result_${node_id}_qc_evidence.jsonl 2>/dev/null || true &
+      fi
     fi
   done
   wait
@@ -104,7 +112,12 @@ run_single_experiment() {
   for((i=1;;i++)); do
     cf=$PWD/config_out/client${i}.config
     if [ ! -f "$cf" ]; then break; fi
-    env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
+    env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_UNFAIR_LEADER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS \
+        -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
+        -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS \
+        -u TD_HS_INVALID_TC_PROPOSAL_IDS \
+        -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT \
+        ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
   done
 
   echo "  Sleeping ${SLEEP_TIME}s..."

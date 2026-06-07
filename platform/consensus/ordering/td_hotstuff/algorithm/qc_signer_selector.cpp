@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <map>
 #include <string>
 
 namespace resdb {
@@ -47,9 +46,11 @@ void AddUntilQuorum(const std::vector<QcSignerInfo>& signers,
   }
 }
 
-uint64_t MapValueOrZero(const std::map<int, uint64_t>& values, int signer) {
-  const auto it = values.find(signer);
-  return it == values.end() ? 0 : it->second;
+uint64_t VectorValueOrZero(const std::vector<uint64_t>& values, int signer) {
+  if (signer <= 0 || signer >= static_cast<int>(values.size())) {
+    return 0;
+  }
+  return values[signer];
 }
 
 uint64_t RotatingRank(int signer, int max_signer, uint64_t fairness_seed) {
@@ -108,6 +109,7 @@ std::vector<int> QcSignerCooldownTracker::SelectSignersForQc(
     return selected;
   }
 
+  EnsureSignerCapacity(max_signer);
   for (const QcSignerInfo& signer : usable_signers) {
     ++eligible_count_by_signer_[signer.signer];
   }
@@ -133,9 +135,9 @@ std::vector<int> QcSignerCooldownTracker::SelectSignersForQc(
       return lhs_debt > rhs_debt;
     }
     const uint64_t lhs_last =
-        MapValueOrZero(last_included_sequence_by_signer_, lhs.signer);
+        VectorValueOrZero(last_included_sequence_by_signer_, lhs.signer);
     const uint64_t rhs_last =
-        MapValueOrZero(last_included_sequence_by_signer_, rhs.signer);
+        VectorValueOrZero(last_included_sequence_by_signer_, rhs.signer);
     if (lhs_last != rhs_last) {
       return lhs_last < rhs_last;
     }
@@ -163,25 +165,38 @@ void QcSignerCooldownTracker::RecordQcSigners(
   }
   for (int signer : signers) {
     if (signer > 0) {
-      last_included_sequence_by_signer_[signer] = qc_sequence_;
+      EnsureSignerCapacity(signer);
+      last_included_sequence_by_signer_[signer] = qc_sequence_ + 1;
       ++included_count_by_signer_[signer];
     }
   }
   ++qc_sequence_;
 }
 
+void QcSignerCooldownTracker::EnsureSignerCapacity(int signer) {
+  if (signer <= 0 || signer < static_cast<int>(eligible_count_by_signer_.size())) {
+    return;
+  }
+  const size_t new_size = static_cast<size_t>(signer) + 1;
+  last_included_sequence_by_signer_.resize(new_size, 0);
+  eligible_count_by_signer_.resize(new_size, 0);
+  included_count_by_signer_.resize(new_size, 0);
+}
+
 bool QcSignerCooldownTracker::IsCooling(int signer) const {
-  const auto it = last_included_sequence_by_signer_.find(signer);
-  if (it == last_included_sequence_by_signer_.end()) {
+  const uint64_t stored =
+      VectorValueOrZero(last_included_sequence_by_signer_, signer);
+  if (stored == 0) {
     return false;
   }
-  return qc_sequence_ >= it->second &&
-         qc_sequence_ - it->second <= config_.cooldown_rounds;
+  const uint64_t last_included_sequence = stored - 1;
+  return qc_sequence_ >= last_included_sequence &&
+         qc_sequence_ - last_included_sequence <= config_.cooldown_rounds;
 }
 
 uint64_t QcSignerCooldownTracker::SelectionDebt(int signer) const {
-  const uint64_t eligible = MapValueOrZero(eligible_count_by_signer_, signer);
-  const uint64_t included = MapValueOrZero(included_count_by_signer_, signer);
+  const uint64_t eligible = VectorValueOrZero(eligible_count_by_signer_, signer);
+  const uint64_t included = VectorValueOrZero(included_count_by_signer_, signer);
   return eligible > included ? eligible - included : 0;
 }
 

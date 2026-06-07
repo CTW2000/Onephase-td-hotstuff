@@ -11,6 +11,8 @@
 #include <thread>
 #include <vector>
 
+#include "platform/consensus/reputation/reputation_algorithm.h"
+
 namespace resdb {
 namespace td_hotstuff {
 
@@ -20,6 +22,13 @@ struct VoteScoreCandidate;
 enum class ReputationEvidenceType {
   kCertifiedQc,
   kLeaderOpportunity,
+  kSignedProposalArtifact,
+  kSignedVoteArtifact,
+  kInvalidQcProposalArtifact,
+  kSignedWeightUpdateVoteArtifact,
+  kSignedTimeoutVoteArtifact,
+  kInvalidTcProposalArtifact,
+  kVerifiedQcArtifact,
 };
 
 struct ReputationEvidence {
@@ -28,12 +37,29 @@ struct ReputationEvidence {
   int total_replicas = 0;
   int qc_view = 0;
   int leader_id = 0;
+  int qc_collector_id = 0;
   bool leader_opportunity = false;
   uint64_t weight_version = 0;
   std::string active_weight_root;
   int64_t leader_eligible_min_weight = 0;
   std::string qc_hash;
   std::string signer_bitmap;
+  std::string available_signer_bitmap;
+  std::string protocol_id;
+  int proposal_slot = 0;
+  std::string proposal_hash;
+  bool proposal_signature_verified = false;
+  int vote_signer_id = 0;
+  std::string vote_proposal_hash;
+  bool vote_signature_verified = false;
+  bool qc_verified = false;
+  std::string invalid_reason;
+  std::string old_weight_root;
+  uint64_t old_weight_version = 0;
+  int activation_view = 0;
+  std::string candidate_digest;
+  std::string high_qc_digest;
+  bool timeout_cert_verified = false;
 };
 
 using QcEvidenceRecord = ReputationEvidence;
@@ -63,11 +89,28 @@ class AsyncQcEvidenceRecorder {
   bool RecordQc(int qc_view, const std::string& qc_hash,
                 const std::string& signer_bitmap, int leader_id,
                 uint64_t weight_version, std::string active_weight_root,
-                int64_t leader_eligible_min_weight = 0);
+                int64_t leader_eligible_min_weight = 0,
+                std::string available_signer_bitmap = "",
+                int qc_collector_id = 0);
   bool RecordLeaderOpportunity(int view, int leader_id,
                                uint64_t weight_version,
                                std::string active_weight_root,
                                int64_t leader_eligible_min_weight = 0);
+  bool RecordSignedProposalArtifact(
+      const ::resdb::consensus::reputation::SignedProposalEvidence& artifact);
+  bool RecordSignedVoteArtifact(
+      const ::resdb::consensus::reputation::SignedVoteEvidence& artifact);
+  bool RecordInvalidQcProposalArtifact(
+      const ::resdb::consensus::reputation::InvalidQcProposalEvidence& artifact);
+  bool RecordSignedWeightUpdateVoteArtifact(
+      const ::resdb::consensus::reputation::SignedWeightUpdateVoteEvidence&
+          artifact);
+  bool RecordSignedTimeoutVoteArtifact(
+      const ::resdb::consensus::reputation::SignedTimeoutVoteEvidence& artifact);
+  bool RecordInvalidTcProposalArtifact(
+      const ::resdb::consensus::reputation::InvalidTcProposalEvidence& artifact);
+  bool RecordVerifiedQcArtifact(
+      const ::resdb::consensus::reputation::VerifiedQcArtifactEvidence& artifact);
   std::vector<VoteScoreCandidate> TakeCompletedReputationCandidates();
   void UpdateReputationWeights(std::vector<int64_t> current_weights,
                                std::string old_weight_root_hex,

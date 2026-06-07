@@ -33,15 +33,25 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
     def test_stable_env_sets_pipeline_defaults(self):
         values = source_helper()
 
-        self.assertEqual(values["TD_HS_REPUTATION_ENABLE"], "0")
-        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_ENABLE"], "0")
-        self.assertEqual(values["TD_HS_LEADER_SELECTION_ENABLE"], "0")
-        self.assertEqual(values["TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE"], "0")
-        self.assertEqual(values["TD_HS_QC_DIVERSITY_ENABLE"], "0")
-        self.assertEqual(values["TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE"], "0")
+        self.assertEqual(values["TD_HS_REPUTATION_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_LEADER_SELECTION_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_QC_DIVERSITY_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES"], "2")
         self.assertEqual(values["TD_HS_TIMEOUT_ENABLE"], "0")
         self.assertEqual(values["TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT"], "11")
         self.assertEqual(values["TD_HS_WEIGHTS"], ",".join(["30"] * 20))
+        self.assertEqual(values["TD_HS_REPUTATION_WINDOW_SIZE"], "512")
+        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS"], "512")
+        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY"], "1")
+        self.assertEqual(values["TD_HS_REPUTATION_MAX_DELTA"], "5")
+        self.assertEqual(values["TD_HS_REPUTATION_DECAY_PER_EPOCH"], "5")
+        self.assertEqual(values["TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH"], "5")
+        self.assertEqual(values["TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES"], "1")
+        self.assertEqual(values["TD_HS_QC_SIGNER_COOLDOWN_ROUNDS"], "8")
+        self.assertEqual(values["TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS"], "256")
 
     def test_stable_env_preserves_explicit_overrides(self):
         values = source_helper(
@@ -49,12 +59,14 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
                 "TD_HS_REPUTATION_WINDOW_SIZE": "128",
                 "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT": "12",
                 "TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE": "1",
+                "TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES": "1",
             }
         )
 
         self.assertEqual(values["TD_HS_REPUTATION_WINDOW_SIZE"], "128")
         self.assertEqual(values["TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT"], "12")
         self.assertEqual(values["TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES"], "1")
 
     def test_silent_leader_ids_are_not_shared_with_all_replicas_or_clients(self):
         deploy_multi = os.path.join(REPO_ROOT, "scripts", "deploy", "script", "deploy_multi.sh")
@@ -62,18 +74,74 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
             body = fp.read()
         shared_env_block = body.split("td_env_names=(", 1)[1].split(")", 1)[0]
         self.assertNotIn("TD_HS_SILENT_LEADER_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_UNFAIR_LEADER_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_DOUBLE_PROPOSAL_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_DOUBLE_VOTE_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_INVALID_QC_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_INVALID_TC_PROPOSAL_IDS", shared_env_block)
         self.assertIn("-u TD_HS_SILENT_LEADER_IDS", body)
+        self.assertIn("-u TD_HS_UNFAIR_LEADER_IDS", body)
+        self.assertIn("-u TD_HS_DOUBLE_PROPOSAL_IDS", body)
+        self.assertIn("-u TD_HS_DOUBLE_VOTE_IDS", body)
+        self.assertIn("-u TD_HS_INVALID_QC_IDS", body)
+        self.assertIn("-u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", body)
+        self.assertIn("-u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", body)
+        self.assertIn("-u TD_HS_INVALID_TC_PROPOSAL_IDS", body)
         self.assertIn("-u TD_HS_BAD_NODE_IDS", body)
         self.assertIn("-u TD_HS_BAD_NODE_COUNT", body)
         self.assertIn("TD_HS_SILENT_LEADER=1", body)
+        self.assertIn("TD_HS_UNFAIR_LEADER=1", body)
+        self.assertIn("TD_HS_DOUBLE_PROPOSAL=1", body)
+        self.assertIn("TD_HS_DOUBLE_VOTE=1", body)
+        self.assertIn("TD_HS_INVALID_QC=1", body)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION=1", body)
+        self.assertIn("TD_HS_TIMEOUT_VOTE_EQUIVOCATION=1", body)
+        self.assertIn("TD_HS_INVALID_TC_PROPOSAL=1", body)
         self.assertIn("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE", shared_env_block)
         self.assertIn("is_silent_leader_node", body)
+        self.assertIn("is_unfair_leader_node", body)
+        self.assertIn("is_double_proposal_node", body)
+        self.assertIn("is_double_vote_node", body)
+        self.assertIn("is_invalid_qc_node", body)
+        self.assertIn("is_weight_update_vote_equivocation_node", body)
+        self.assertIn("is_timeout_vote_equivocation_node", body)
+        self.assertIn("is_invalid_tc_proposal_node", body)
 
-        for script in ["run_slow_leader_n20.sh", "run_slow_vote_n20.sh"]:
+        for script in [
+            "run_slow_leader_n20.sh",
+            "run_slow_vote_n20.sh",
+            "run_double_proposal_n20.sh",
+            "run_double_vote_n20.sh",
+            "run_invalid_qc_n20.sh",
+            "run_weight_update_vote_equivocation_n20.sh",
+            "run_timeout_vote_equivocation_n20.sh",
+            "run_invalid_tc_n20.sh",
+        ]:
             with self.subTest(script=script):
                 with open(os.path.join(REPO_ROOT, "scripts", "deploy", script)) as fp:
                     script_body = fp.read()
                 self.assertIn("env -u TD_HS_SILENT_LEADER_IDS", script_body)
+                self.assertIn("-u TD_HS_UNFAIR_LEADER_IDS", script_body)
+                self.assertIn("-u TD_HS_DOUBLE_PROPOSAL_IDS", script_body)
+                self.assertIn("-u TD_HS_DOUBLE_VOTE_IDS", script_body)
+                self.assertIn("-u TD_HS_INVALID_QC_IDS", script_body)
+                self.assertIn("-u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", script_body)
+                self.assertIn("-u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", script_body)
+                self.assertIn("-u TD_HS_INVALID_TC_PROPOSAL_IDS", script_body)
+
+    def test_double_proposal_runner_builds_comma_separated_bad_ids(self):
+        runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_double_proposal_n20.sh")
+        with open(runner) as fp:
+            body = fp.read()
+        self.assertNotIn('ids=",$ids"', body)
+        self.assertIn('ids="${ids},${i}"', body)
+
+    def test_signed_proposal_artifacts_are_exported_before_vote_safety(self):
+        with open(os.path.join(REPO_ROOT, "platform", "consensus", "ordering", "td_hotstuff", "algorithm", "td_hotstuff.cpp")) as fp:
+            body = fp.read()
+        self.assertLess(body.index("RecordSignedProposalArtifact"), body.index("RecordVote(*proposal"))
 
     def test_slow_experiment_scripts_restore_shared_configs(self):
         scripts = [

@@ -35,6 +35,8 @@ message QC {
   bytes hash = 3;
   int32 slot = 4;
   bytes signer_bitmap = 5;
+  bytes available_signer_bitmap = 6;
+  int32 collector_id = 7;
 }
 
 message TimeoutVote {
@@ -100,6 +102,9 @@ message CandidateWeightUpdate {
   uint64 leader_params_version = 15;
   string leader_randomness_ref = 16;
   repeated CandidateLeaderWeight leader_validators = 17;
+  string reputation_root = 18;
+  string strong_fault_root = 19;
+  string penalty_root = 20;
 }
 
 message WeightUpdateVote {

@@ -64,6 +64,7 @@ CandidateWeightUpdate BuildCandidateWeightUpdate(
     const VoteScoreCandidate& candidate);
 std::string WeightUpdateVotePayload(const CandidateWeightUpdate& update,
                                     int validator_id);
+std::string WeightUpdateVotePayload(const WeightUpdateVote& vote);
 
 class WeightUpdateManager {
  public:
@@ -99,6 +100,8 @@ class WeightUpdateManager {
   bool VerifyVote(const WeightUpdateVote& vote,
                   const CandidateWeightUpdate& update,
                   std::string* error) const;
+  bool VerifyVoteEvidence(const WeightUpdateVote& vote,
+                          std::string* error) const;
   bool VerifyCert(const WeightUpdateCert& cert,
                   const WeightSchedule& schedule,
                   std::string* error) const;
@@ -136,6 +139,7 @@ class WeightUpdateManager {
   std::map<std::string, std::map<int, WeightUpdateVote>> weight_update_votes_;
   std::map<int, WeightUpdateCert> pending_weight_update_certs_;
   std::set<std::string> voted_weight_candidate_digests_;
+  std::set<std::string> voted_weight_candidate_schedule_keys_;
   std::set<std::string> broadcast_candidate_digests_;
   std::set<std::string> broadcast_weight_cert_digests_;
   WeightPluginOutboundMessages outbound_messages_;

@@ -104,6 +104,85 @@ def parse_active_weights(line):
 def parse_leader_weights(line):
     return parse_weights_from_match(LEADER_WEIGHT_RE.search(line))
 
+def reputation_file_for_log(log_file):
+    base = os.path.basename(log_file)
+    match = re.match(r"result_(\d+)_log$", base)
+    if not match:
+        return None
+    return os.path.join(os.path.dirname(log_file),
+                        f"result_{match.group(1)}_reputation.jsonl")
+
+def read_reputation_summary(log_files):
+    best_record = None
+    best_key = (-1, -1)
+    max_fault_counts = []
+    max_penalty_points = []
+    for log_file in log_files:
+        reputation_file = reputation_file_for_log(log_file)
+        if not reputation_file or not os.path.exists(reputation_file):
+            continue
+        try:
+            lines = open(reputation_file)
+        except OSError:
+            continue
+        with lines:
+            for line in lines:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                validators = record.get("validators", [])
+                if validators:
+                    if len(max_fault_counts) < len(validators):
+                        max_fault_counts.extend([0] * (len(validators) - len(max_fault_counts)))
+                        max_penalty_points.extend([0] * (len(validators) - len(max_penalty_points)))
+                    for validator in validators:
+                        try:
+                            idx = int(validator.get("validator_id", 0)) - 1
+                        except (TypeError, ValueError):
+                            continue
+                        if 0 <= idx < len(max_fault_counts):
+                            max_fault_counts[idx] = max(
+                                max_fault_counts[idx],
+                                int(validator.get("strong_fault_count", 0)))
+                            max_penalty_points[idx] = max(
+                                max_penalty_points[idx],
+                                int(validator.get("penalty_points", 0)))
+                try:
+                    key = (int(record.get("old_weight_version", 0)),
+                           int(record.get("window_index", 0)))
+                except (TypeError, ValueError):
+                    key = (0, 0)
+                if key >= best_key:
+                    best_key = key
+                    best_record = record
+    return best_record, max_fault_counts, max_penalty_points
+
+def print_reputation_summary(log_files, bad_node_ids):
+    record, fault_counts, penalty_points = read_reputation_summary(log_files)
+    if record is None:
+        return
+    print("reputation candidate digest:", record.get("candidate_digest", ""))
+    print("strong fault root:", record.get("strong_fault_root", ""))
+    print("penalty root:", record.get("penalty_root", ""))
+    if record.get("next_weights") is not None:
+        print("reputation next weights:",
+              ",".join(str(v) for v in record.get("next_weights", [])))
+    if fault_counts:
+        print("validator strong fault counts:",
+              ",".join(str(v) for v in fault_counts))
+        print("validator penalty points:",
+              ",".join(str(v) for v in penalty_points))
+        if bad_node_ids:
+            bad_faults = [fault_counts[i - 1] for i in bad_node_ids
+                          if 1 <= i <= len(fault_counts)]
+            bad_penalties = [penalty_points[i - 1] for i in bad_node_ids
+                             if 1 <= i <= len(penalty_points)]
+            print("bad node strong fault counts:",
+                  ",".join(str(v) for v in bad_faults))
+            print("bad node penalty points:",
+                  ",".join(str(v) for v in bad_penalties))
+
 def all_bad_nodes_below_threshold(weights, bad_node_count, eligible_min_weight,
                                   bad_node_ids=None):
     if weights is None:
@@ -440,6 +519,7 @@ if __name__ == '__main__':
         print_final_weight_summary(final_weights_by_log,
                                    final_leader_weights_by_log,
                                    bad_node_count, bad_node_ids)
+        print_reputation_summary(files, bad_node_ids)
     max_lat, avg_lat = cal_lat(lat, len(files) / 2)
     cal_lat4(lat4, len(files) / 2)
     print(avg_tps)

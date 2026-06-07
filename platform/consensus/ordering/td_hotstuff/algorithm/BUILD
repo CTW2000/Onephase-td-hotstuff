@@ -62,6 +62,19 @@ cc_library(
 )
 
 cc_library(
+    name = "td_hotstuff_fault_injector",
+    srcs = ["td_hotstuff_fault_injector.cpp"],
+    hdrs = ["td_hotstuff_fault_injector.h"],
+    deps = [
+        ":certificate_verifier",
+        ":weight_update_manager",
+        "//common:glog",
+        "//common/crypto:signature_verifier",
+        "//platform/consensus/ordering/td_hotstuff/proto:proposal_cc_proto",
+    ],
+)
+
+cc_library(
     name = "td_hotstuff_digest",
     srcs = ["td_hotstuff_digest.cpp"],
     hdrs = ["td_hotstuff_digest.h"],
@@ -99,6 +112,7 @@ cc_library(
         ":td_hotstuff_digest",
         "//common:glog",
         "//common/crypto:hash",
+        "//platform/consensus/reputation:reputation_algorithm",
     ],
 )
 
@@ -110,6 +124,7 @@ cc_library(
     deps = [
         ":vote_score_reputation_plugin",
         "//common:glog",
+        "//platform/consensus/reputation:reputation_algorithm",
     ],
 )
 
@@ -139,6 +154,7 @@ cc_library(
         ":proposal_manager",
         ":qc_evidence_recorder",
         ":qc_signer_selector",
+        ":td_hotstuff_fault_injector",
         ":timeout_manager",
         ":weight_update_manager",
         "//common:comm",
@@ -188,6 +204,7 @@ cc_test(
     deps = [
         ":leader_selection_schedule",
         ":proposal_manager",
+        ":td_hotstuff_fault_injector",
         "//common/crypto:mock_signature_verifier",
         "//common/test:test_main",
     ],
@@ -199,6 +216,19 @@ cc_test(
     deps = [
         ":timeout_manager",
         ":proposal_manager",
+        "//common/crypto:mock_signature_verifier",
+        "//common/test:test_main",
+    ],
+)
+
+cc_test(
+    name = "td_hotstuff_fault_injector_test",
+    srcs = ["td_hotstuff_fault_injector_test.cpp"],
+    deps = [
+        ":proposal_manager",
+        ":td_hotstuff_fault_injector",
+        ":timeout_manager",
+        ":weight_update_manager",
         "//common/crypto:mock_signature_verifier",
         "//common/test:test_main",
     ],

@@ -30,6 +30,7 @@ TEST(QcEvidenceRecorderTest, FormatsCompactJsonWithoutSignatures) {
   record.total_replicas = 4;
   record.qc_view = 7;
   record.leader_id = 4;
+  record.qc_collector_id = 5;
   record.weight_version = 2;
   record.active_weight_root = "root-2";
   record.leader_eligible_min_weight = 11;
@@ -39,7 +40,7 @@ TEST(QcEvidenceRecorderTest, FormatsCompactJsonWithoutSignatures) {
   EXPECT_EQ(SerializeQcEvidenceRecord(record),
             "{\"schema\":\"td_hotstuff_qc_evidence_v1\","
             "\"node_id\":3,\"total_replicas\":4,\"qc_view\":7,"
-            "\"leader_id\":4,\"weight_version\":2,"
+            "\"leader_id\":4,\"qc_collector_id\":5,\"weight_version\":2,"
             "\"active_weight_root\":\"root-2\","
             "\"leader_eligible_min_weight\":11,"
             "\"qc_hash_hex\":\"01ab\",\"signer_bitmap_hex\":\"0d\"}");
@@ -62,6 +63,101 @@ TEST(QcEvidenceRecorderTest, FormatsLeaderOpportunityJson) {
             "\"leader_id\":2,\"weight_version\":4,"
             "\"active_weight_root\":\"root-4\","
             "\"leader_eligible_min_weight\":11}");
+}
+
+TEST(QcEvidenceRecorderTest, FormatsSignedProposalArtifactJsonCompactly) {
+  QcEvidenceRecord record;
+  record.type = ReputationEvidenceType::kSignedProposalArtifact;
+  record.node_id = 3;
+  record.total_replicas = 4;
+  record.protocol_id = "td_hotstuff";
+  record.qc_view = 9;
+  record.proposal_slot = 2;
+  record.leader_id = 2;
+  record.weight_version = 4;
+  record.active_weight_root = "root-4";
+  record.proposal_hash = std::string("\xCA\xFE", 2);
+  record.proposal_signature_verified = true;
+
+  const std::string json = SerializeQcEvidenceRecord(record);
+  EXPECT_NE(json.find("\"schema\":\"td_hotstuff_signed_proposal_artifact_v1\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"protocol_id\":\"td_hotstuff\""), std::string::npos);
+  EXPECT_NE(json.find("\"view\":9"), std::string::npos);
+  EXPECT_NE(json.find("\"slot\":2"), std::string::npos);
+  EXPECT_NE(json.find("\"proposal_hash_hex\":\"cafe\""), std::string::npos);
+  EXPECT_NE(json.find("\"signature_verified\":true"), std::string::npos);
+  EXPECT_EQ(json.find("transaction"), std::string::npos);
+}
+
+TEST(QcEvidenceRecorderTest, FormatsV2StrongFaultArtifactJsonCompactly) {
+  QcEvidenceRecord weight_vote;
+  weight_vote.type = ReputationEvidenceType::kSignedWeightUpdateVoteArtifact;
+  weight_vote.node_id = 3;
+  weight_vote.total_replicas = 4;
+  weight_vote.protocol_id = "td_hotstuff";
+  weight_vote.vote_signer_id = 2;
+  weight_vote.old_weight_root = "old-root";
+  weight_vote.old_weight_version = 7;
+  weight_vote.activation_view = 64;
+  weight_vote.candidate_digest = std::string("\x01\x02", 2);
+  weight_vote.vote_signature_verified = true;
+  EXPECT_NE(SerializeQcEvidenceRecord(weight_vote)
+                .find("\"schema\":\"td_hotstuff_weight_update_vote_artifact_v1\""),
+            std::string::npos);
+  EXPECT_NE(SerializeQcEvidenceRecord(weight_vote)
+                .find("\"candidate_digest_hex\":\"0102\""),
+            std::string::npos);
+
+  QcEvidenceRecord timeout_vote;
+  timeout_vote.type = ReputationEvidenceType::kSignedTimeoutVoteArtifact;
+  timeout_vote.node_id = 3;
+  timeout_vote.total_replicas = 4;
+  timeout_vote.protocol_id = "td_hotstuff";
+  timeout_vote.qc_view = 9;
+  timeout_vote.vote_signer_id = 2;
+  timeout_vote.high_qc_digest = std::string("\x03\x04", 2);
+  timeout_vote.vote_signature_verified = true;
+  EXPECT_NE(SerializeQcEvidenceRecord(timeout_vote)
+                .find("\"schema\":\"td_hotstuff_timeout_vote_artifact_v1\""),
+            std::string::npos);
+  EXPECT_NE(SerializeQcEvidenceRecord(timeout_vote)
+                .find("\"high_qc_digest_hex\":\"0304\""),
+            std::string::npos);
+
+  QcEvidenceRecord invalid_tc;
+  invalid_tc.type = ReputationEvidenceType::kInvalidTcProposalArtifact;
+  invalid_tc.node_id = 3;
+  invalid_tc.total_replicas = 4;
+  invalid_tc.protocol_id = "td_hotstuff";
+  invalid_tc.qc_view = 10;
+  invalid_tc.leader_id = 4;
+  invalid_tc.proposal_hash = std::string("\xCA\xFE", 2);
+  invalid_tc.proposal_signature_verified = true;
+  invalid_tc.timeout_cert_verified = false;
+  invalid_tc.invalid_reason = "bad_tc";
+  EXPECT_NE(SerializeQcEvidenceRecord(invalid_tc)
+                .find("\"schema\":\"td_hotstuff_invalid_tc_proposal_artifact_v1\""),
+            std::string::npos);
+  EXPECT_NE(SerializeQcEvidenceRecord(invalid_tc)
+                .find("\"timeout_cert_verified\":false"),
+            std::string::npos);
+
+  QcEvidenceRecord verified_qc;
+  verified_qc.type = ReputationEvidenceType::kVerifiedQcArtifact;
+  verified_qc.node_id = 3;
+  verified_qc.total_replicas = 4;
+  verified_qc.protocol_id = "td_hotstuff";
+  verified_qc.qc_view = 11;
+  verified_qc.qc_hash = std::string("\xBA\xAD", 2);
+  verified_qc.signer_bitmap = std::string("\x0f", 1);
+  verified_qc.qc_verified = true;
+  EXPECT_NE(SerializeQcEvidenceRecord(verified_qc)
+                .find("\"schema\":\"td_hotstuff_verified_qc_artifact_v1\""),
+            std::string::npos);
+  EXPECT_NE(SerializeQcEvidenceRecord(verified_qc)
+                .find("\"signer_bitmap_hex\":\"0f\""),
+            std::string::npos);
 }
 
 TEST(QcEvidenceRecorderTest, DisabledRecorderDoesNotWriteFile) {
@@ -118,7 +214,7 @@ TEST(QcEvidenceRecorderTest, ReputationOnlyModeDispatchesWithoutEvidenceJson) {
   recorder->Stop();
 
   const std::string data = ReadFile(reputation_file);
-  EXPECT_NE(data.find("\"schema\":\"td_hotstuff_reputation_bayes_v3\""),
+  EXPECT_NE(data.find("\"schema\":\"td_hotstuff_reputation_bayes_v4\""),
             std::string::npos);
   EXPECT_NE(data.find("\"event_count\":1"), std::string::npos);
 

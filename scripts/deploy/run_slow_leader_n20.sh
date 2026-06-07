@@ -124,7 +124,12 @@ run_single_experiment() {
   for((i=1;;i++)); do
     cf=$PWD/config_out/client${i}.config
     if [ ! -f "$cf" ]; then break; fi
-    env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
+    env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_UNFAIR_LEADER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS \
+        -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
+        -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS \
+        -u TD_HS_INVALID_TC_PROPOSAL_IDS \
+        -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT \
+        ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
   done
 
   echo "  Sleeping ${SLEEP_TIME}s..."

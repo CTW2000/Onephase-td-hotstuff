@@ -13,6 +13,7 @@
 
 #include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h"
+#include "platform/consensus/reputation/reputation_algorithm.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -85,6 +86,57 @@ TEST(VoteScoreReputationPluginTest, DecodesTdHotstuffSignerBitmap) {
   EXPECT_EQ(DecodeSignerBitmap(bitmap, 5), std::vector<int>({1, 4}));
 }
 
+TEST(VoteScoreReputationPluginTest, MapsQcEvidenceToCanonicalMetricEvidence) {
+  ReputationQcEvent event;
+  event.qc_view = 17;
+  event.qc_hash = "qc-hash";
+  event.signer_bitmap = Bitmap({1, 3, 5}, 5);
+  event.available_signer_bitmap = Bitmap({1, 2, 3, 4, 5}, 5);
+  event.leader_id = 4;
+  event.qc_collector_id = 2;
+  event.weight_version = 9;
+  event.active_weight_root = "weight-root";
+  event.leader_eligible_min_weight = 10;
+
+  const auto evidence = ToMetricEvidence(event);
+
+  EXPECT_EQ(evidence.artifact_family,
+            consensus::reputation::ArtifactFamily::kQc);
+  EXPECT_EQ(evidence.outcome_class,
+            consensus::reputation::OutcomeClass::kCertified);
+  EXPECT_EQ(evidence.view_or_round, 17);
+  EXPECT_EQ(evidence.leader_id, 4);
+  EXPECT_EQ(evidence.collector_id, 2);
+  EXPECT_EQ(evidence.artifact_digest, "qc-hash");
+  EXPECT_EQ(evidence.signer_bitmap, event.signer_bitmap);
+  EXPECT_EQ(evidence.available_signer_bitmap, event.available_signer_bitmap);
+  EXPECT_EQ(evidence.weight_version, 9);
+  EXPECT_EQ(evidence.active_weight_root, "weight-root");
+  EXPECT_EQ(evidence.leader_eligible_min_weight, 10);
+}
+
+TEST(VoteScoreReputationPluginTest,
+     MapsLeaderOpportunityToCanonicalTimeoutOutcome) {
+  ReputationQcEvent event;
+  event.qc_view = 18;
+  event.leader_id = 3;
+  event.leader_opportunity = true;
+  event.weight_version = 2;
+  event.active_weight_root = "root-2";
+
+  const auto evidence = ToMetricEvidence(event);
+
+  EXPECT_EQ(evidence.artifact_family,
+            consensus::reputation::ArtifactFamily::kTimeout);
+  EXPECT_EQ(evidence.outcome_class,
+            consensus::reputation::OutcomeClass::kTimeoutOrViewChange);
+  EXPECT_EQ(evidence.view_or_round, 18);
+  EXPECT_EQ(evidence.leader_id, 3);
+  EXPECT_TRUE(evidence.signer_bitmap.empty());
+  EXPECT_EQ(evidence.weight_version, 2);
+  EXPECT_EQ(evidence.active_weight_root, "root-2");
+}
+
 TEST(VoteScoreReputationPluginTest, ComputesVoteScoresWithRecoveryDecay) {
   std::vector<ReputationQcEvent> events;
   events.push_back({10, "hash-a", std::string(1, static_cast<char>(0x07))});
@@ -107,7 +159,7 @@ TEST(VoteScoreReputationPluginTest, ComputesVoteScoresWithRecoveryDecay) {
 
   EXPECT_EQ(candidate.validators[1].inclusions, 3);
   EXPECT_EQ(candidate.validators[1].vote_score, 100);
-  EXPECT_EQ(candidate.validators[1].next_weight, 11);
+  EXPECT_EQ(candidate.validators[1].next_weight, 10);
 
   EXPECT_EQ(candidate.validators[2].inclusions, 2);
   EXPECT_EQ(candidate.validators[2].vote_score, 75);
@@ -136,9 +188,10 @@ TEST(VoteScoreReputationPluginTest, CandidateRootsAreStable) {
   EXPECT_FALSE(first.candidate_digest_hex.empty());
 
   const std::string json = VoteScoreCandidateToJson(first);
-  EXPECT_NE(json.find("\"schema\":\"td_hotstuff_reputation_bayes_v3\""),
+  EXPECT_NE(json.find("\"schema\":\"td_hotstuff_reputation_bayes_v4\""),
             std::string::npos);
   EXPECT_NE(json.find("\"vote_score\":100"), std::string::npos);
+  EXPECT_NE(json.find("\"reputation_root\":\""), std::string::npos);
   EXPECT_NE(json.find("\"next_weight_root\":\""), std::string::npos);
 }
 
@@ -169,6 +222,159 @@ TEST(VoteScoreReputationPluginTest, CandidateIsWeightOnlyForV1Pipeline) {
 }
 
 TEST(VoteScoreReputationPluginTest,
+     MapsV2StrongFaultArtifactsToNeutralCandidatePenalties) {
+  ReputationRecoveryConfig config;
+  config.decay_per_epoch = 1;
+  config.max_recovery_per_epoch = 1;
+  config.bonus_per_epoch = 0;
+  config.min_weight = 1;
+  config.max_weight = 100;
+  config.min_decay_opportunities = 1;
+  config.strong_fault_enabled = true;
+  config.weight_update_vote_equivocation_detection_enabled = true;
+  config.timeout_vote_equivocation_detection_enabled = true;
+  config.invalid_tc_proposal_detection_enabled = true;
+  config.conflicting_qc_detection_enabled = true;
+  config.strong_fault_target_weight = 1;
+
+  std::vector<ReputationQcEvent> events;
+  for (int view = 1; view <= 2; ++view) {
+    ReputationQcEvent qc;
+    qc.qc_view = view;
+    qc.qc_hash = "qc-" + std::to_string(view);
+    qc.signer_bitmap = Bitmap({1, 2, 3, 4}, 4);
+    qc.leader_id = view;
+    qc.weight_version = 7;
+    qc.active_weight_root = "old-root";
+    events.push_back(qc);
+  }
+
+  ReputationQcEvent weight_vote_a;
+  weight_vote_a.weight_update_vote_artifact = true;
+  weight_vote_a.protocol_id = "td_hotstuff";
+  weight_vote_a.vote_signer_id = 1;
+  weight_vote_a.old_weight_root = "old-root";
+  weight_vote_a.old_weight_version = 7;
+  weight_vote_a.activation_view = 64;
+  weight_vote_a.candidate_digest = "candidate-a";
+  weight_vote_a.vote_signature_verified = true;
+  weight_vote_a.weight_version = 7;
+  weight_vote_a.active_weight_root = "old-root";
+  ReputationQcEvent weight_vote_b = weight_vote_a;
+  weight_vote_b.candidate_digest = "candidate-b";
+  events.push_back(weight_vote_a);
+  events.push_back(weight_vote_b);
+
+  ReputationQcEvent timeout_a;
+  timeout_a.timeout_vote_artifact = true;
+  timeout_a.protocol_id = "td_hotstuff";
+  timeout_a.vote_signer_id = 2;
+  timeout_a.qc_view = 12;
+  timeout_a.high_qc_digest = "high-qc-a";
+  timeout_a.vote_signature_verified = true;
+  timeout_a.weight_version = 7;
+  timeout_a.active_weight_root = "old-root";
+  ReputationQcEvent timeout_b = timeout_a;
+  timeout_b.high_qc_digest = "high-qc-b";
+  events.push_back(timeout_a);
+  events.push_back(timeout_b);
+
+  ReputationQcEvent invalid_tc;
+  invalid_tc.invalid_tc_proposal_artifact = true;
+  invalid_tc.protocol_id = "td_hotstuff";
+  invalid_tc.leader_id = 3;
+  invalid_tc.qc_view = 15;
+  invalid_tc.proposal_hash = "proposal-with-bad-tc";
+  invalid_tc.proposal_signature_verified = true;
+  invalid_tc.timeout_cert_verified = false;
+  invalid_tc.invalid_reason = "bad_tc";
+  invalid_tc.weight_version = 7;
+  invalid_tc.active_weight_root = "old-root";
+  events.push_back(invalid_tc);
+
+  ReputationQcEvent qc_a;
+  qc_a.verified_qc_artifact = true;
+  qc_a.protocol_id = "td_hotstuff";
+  qc_a.qc_view = 21;
+  qc_a.qc_hash = "conflict-qc-a";
+  qc_a.signer_bitmap = Bitmap({3, 4}, 4);
+  qc_a.qc_verified = true;
+  qc_a.weight_version = 7;
+  qc_a.active_weight_root = "old-root";
+  ReputationQcEvent qc_b = qc_a;
+  qc_b.qc_hash = "conflict-qc-b";
+  qc_b.signer_bitmap = Bitmap({4}, 4);
+  events.push_back(qc_a);
+  events.push_back(qc_b);
+
+  const VoteScoreCandidate candidate =
+      ComputeBayesianReputationCandidateWithConfig(
+          /*node_id=*/1, /*total_replicas=*/4, /*window_index=*/1, events,
+          /*current_weights=*/{30, 30, 30, 30}, config,
+          /*old_weight_root_hex=*/"old-root", /*old_weight_version=*/7,
+          /*activation_view=*/64);
+
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({1, 1, 1, 1}));
+  EXPECT_EQ(candidate.validators[0].strong_fault_count, 1);
+  EXPECT_EQ(candidate.validators[1].strong_fault_count, 1);
+  EXPECT_EQ(candidate.validators[2].strong_fault_count, 1);
+  EXPECT_EQ(candidate.validators[3].strong_fault_count, 1);
+  EXPECT_FALSE(candidate.strong_fault_root_hex.empty());
+  EXPECT_FALSE(candidate.penalty_root_hex.empty());
+}
+
+TEST(VoteScoreReputationPluginTest,
+     BayesianV3CertifiedQcCountsAsDeduplicatedLeaderOpportunity) {
+  std::vector<ReputationQcEvent> events;
+  ReputationQcEvent certified;
+  certified.qc_view = 1;
+  certified.qc_hash = "certified-1";
+  certified.signer_bitmap = Bitmap({1, 2, 3, 4}, 4);
+  certified.leader_id = 1;
+  events.push_back(certified);
+
+  ReputationQcEvent duplicate_opportunity;
+  duplicate_opportunity.qc_view = 1;
+  duplicate_opportunity.leader_id = 1;
+  duplicate_opportunity.leader_opportunity = true;
+  events.push_back(duplicate_opportunity);
+  events.push_back(duplicate_opportunity);
+
+  ReputationQcEvent timeout_opportunity;
+  timeout_opportunity.qc_view = 2;
+  timeout_opportunity.leader_id = 2;
+  timeout_opportunity.leader_opportunity = true;
+  events.push_back(timeout_opportunity);
+
+  ReputationRecoveryConfig config;
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  config.bonus_per_epoch = 0;
+  config.min_weight = 1;
+  config.max_weight = 100;
+  config.min_decay_opportunities = 1;
+  config.min_leader_opportunities = 1;
+  config.leader_recovery_enabled = true;
+
+  const VoteScoreCandidate candidate =
+      ComputeBayesianReputationCandidateWithConfig(
+          /*node_id=*/1, /*total_replicas=*/4, /*window_index=*/1, events,
+          /*current_weights=*/{30, 30, 30, 30}, config,
+          /*old_weight_root_hex=*/"old-root", /*old_weight_version=*/0,
+          /*activation_view=*/128);
+
+  ASSERT_EQ(candidate.validators.size(), 4);
+  EXPECT_EQ(candidate.validators[0].leader_opportunity_count, 1);
+  EXPECT_EQ(candidate.validators[0].leader_certified_count, 1);
+  EXPECT_EQ(candidate.validators[0].leader_score, 67);
+  EXPECT_EQ(candidate.validators[0].next_weight, 30);
+  EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 1);
+  EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
+  EXPECT_LT(candidate.validators[1].leader_score, 50);
+  EXPECT_LT(candidate.validators[1].next_weight, 30);
+}
+
+TEST(VoteScoreReputationPluginTest,
      BayesianV3RepeatedMissingParticipationLosesUnrecoveredDecay) {
   std::vector<ReputationQcEvent> events;
   for (int view = 1; view <= 4; ++view) {
@@ -186,9 +392,9 @@ TEST(VoteScoreReputationPluginTest,
       /*old_weight_root_hex=*/"old-root", /*old_weight_version=*/2,
       /*activation_view=*/8);
 
-  EXPECT_EQ(candidate.algorithm, "bayes_v3");
+  EXPECT_EQ(candidate.algorithm, "bayes_v4");
   EXPECT_EQ(candidate.next_weights,
-            std::vector<int64_t>({11, 11, 11, 11, 9}));
+            std::vector<int64_t>({10, 10, 10, 10, 9}));
   EXPECT_EQ(candidate.validators[4].inclusions, 0);
   EXPECT_EQ(candidate.validators[4].next_weight, 9);
 }
@@ -442,6 +648,7 @@ TEST(VoteScoreReputationPluginTest,
     narrow.qc_view = i + 1;
     narrow.qc_hash = "narrow-" + std::to_string(i);
     narrow.signer_bitmap = Bitmap({1, 2}, 4);
+    narrow.available_signer_bitmap = Bitmap({1, 2}, 4);
     narrow.leader_id = 1;
     narrow_events.push_back(narrow);
 
@@ -461,6 +668,380 @@ TEST(VoteScoreReputationPluginTest,
 
   EXPECT_LT(narrow.validators[0].leader_diversity_score,
             varied.validators[0].leader_diversity_score);
+
+  for (int view = 1; view <= 4; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 1;
+    opportunity.leader_opportunity = true;
+    narrow_events.push_back(opportunity);
+  }
+  for (int view = 5; view <= 8; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 2;
+    opportunity.leader_opportunity = true;
+    narrow_events.push_back(opportunity);
+
+    ReputationQcEvent fair;
+    fair.qc_view = view;
+    fair.qc_hash = "fair-" + std::to_string(view);
+    fair.signer_bitmap = view % 2 == 0 ? Bitmap({1, 2, 3}, 4)
+                                       : Bitmap({2, 3, 4}, 4);
+    fair.available_signer_bitmap = Bitmap({1, 2, 3, 4}, 4);
+    fair.leader_id = 2;
+    narrow_events.push_back(fair);
+  }
+  ReputationRecoveryConfig config;
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  config.bonus_per_epoch = 0;
+  config.min_weight = 1;
+  config.max_weight = 100;
+  config.min_decay_opportunities = 1;
+  config.min_leader_opportunities = 1;
+  config.leader_recovery_enabled = true;
+  const VoteScoreCandidate punished =
+      ComputeBayesianReputationCandidateWithConfig(
+          1, 4, 1, narrow_events, {10, 10, 10, 10}, config, "old-root",
+          0, 8);
+  EXPECT_LT(punished.validators[0].next_weight,
+            punished.validators[1].next_weight);
+}
+
+
+TEST(VoteScoreReputationPluginTest,
+     BayesianV3RepeatedQuorumGroupIsNotHiddenByOccasionalCoverage) {
+  std::vector<ReputationQcEvent> events;
+  const std::vector<int64_t> weights(20, 30);
+  const std::string narrow_quorum =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 20);
+  const std::string fallback_15 =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15}, 20);
+  const std::string fallback_16_17 =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 16, 17}, 20);
+  const std::string fallback_18_20 =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 18, 19, 20}, 20);
+  const std::string fair_alternate =
+      Bitmap({7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, 20);
+
+  for (int view = 1; view <= 32; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 1;
+    opportunity.leader_opportunity = true;
+    events.push_back(opportunity);
+
+    ReputationQcEvent qc;
+    qc.qc_view = view;
+    qc.qc_hash = "qc-" + std::to_string(view);
+    qc.leader_id = 1;
+    if (view % 8 == 0) {
+      const int fallback_index = view / 8;
+      if (fallback_index == 1) {
+        qc.signer_bitmap = fallback_15;
+      } else if (fallback_index == 2) {
+        qc.signer_bitmap = fallback_16_17;
+      } else {
+        qc.signer_bitmap = fallback_18_20;
+      }
+    } else {
+      qc.signer_bitmap = narrow_quorum;
+    }
+    qc.available_signer_bitmap = qc.signer_bitmap;
+    events.push_back(qc);
+  }
+  for (int view = 33; view <= 64; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 2;
+    opportunity.leader_opportunity = true;
+    events.push_back(opportunity);
+
+    ReputationQcEvent qc;
+    qc.qc_view = view;
+    qc.qc_hash = "fair-" + std::to_string(view);
+    qc.leader_id = 2;
+    qc.signer_bitmap = view % 2 == 0 ? narrow_quorum : fair_alternate;
+    events.push_back(qc);
+  }
+
+  ReputationRecoveryConfig config;
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  config.bonus_per_epoch = 0;
+  config.min_weight = 1;
+  config.max_weight = 100;
+  config.min_decay_opportunities = 1;
+  config.min_leader_opportunities = 1;
+  config.leader_recovery_enabled = true;
+  const VoteScoreCandidate candidate = ComputeBayesianReputationCandidateWithConfig(
+      1, 20, 1, events, weights, config, "old-root", 0, 64);
+
+  EXPECT_LT(candidate.validators[0].leader_diversity_score, 67);
+  EXPECT_EQ(candidate.validators[1].leader_diversity_score, 100);
+  EXPECT_LT(candidate.validators[0].next_weight, 30);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+}
+
+
+
+TEST(VoteScoreReputationPluginTest,
+     BayesianV3FrequencySkewWithBroadTargetIsMetricOnly) {
+  std::vector<ReputationQcEvent> events;
+  const std::vector<int64_t> weights(20, 30);
+  const std::string broad_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+
+  for (int view = 1; view <= 32; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 1;
+    opportunity.leader_opportunity = true;
+    events.push_back(opportunity);
+
+    const int rare_signer = 14 + (view % 7);
+    ReputationQcEvent qc;
+    qc.qc_view = view;
+    qc.qc_hash = "skewed-" + std::to_string(view);
+    qc.leader_id = 1;
+    qc.signer_bitmap = Bitmap({1, 2, 3, 4, 5, 6, 7,
+                               8, 9, 10, 11, 12, 13, rare_signer},
+                              20);
+    qc.available_signer_bitmap = broad_available;
+    events.push_back(qc);
+  }
+  for (int view = 33; view <= 64; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 2;
+    opportunity.leader_opportunity = true;
+    events.push_back(opportunity);
+
+    ReputationQcEvent qc;
+    qc.qc_view = view;
+    qc.qc_hash = "fair-" + std::to_string(view);
+    qc.leader_id = 2;
+    qc.signer_bitmap = broad_available;
+    qc.available_signer_bitmap = broad_available;
+    events.push_back(qc);
+  }
+
+  ReputationRecoveryConfig config;
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  config.bonus_per_epoch = 0;
+  config.min_weight = 1;
+  config.max_weight = 100;
+  config.min_decay_opportunities = 1;
+  config.min_leader_opportunities = 1;
+  config.leader_recovery_enabled = true;
+  const VoteScoreCandidate candidate = ComputeBayesianReputationCandidateWithConfig(
+      1, 20, 1, events, weights, config, "old-root", 0, 128);
+
+  EXPECT_LT(candidate.validators[0].leader_diversity_score,
+            candidate.validators[1].leader_diversity_score);
+  EXPECT_EQ(candidate.validators[0].next_weight, 30);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+}
+
+TEST(VoteScoreReputationPluginTest,
+     BayesianV3TargetCoverageDistinguishesNarrowAndBroadCollectors) {
+  std::vector<ReputationQcEvent> events;
+  const std::vector<int64_t> weights(20, 30);
+  const std::string narrow_quorum =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 20);
+  const std::string broad_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+
+  for (int view = 1; view <= 32; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 1;
+    opportunity.leader_opportunity = true;
+    events.push_back(opportunity);
+
+    ReputationQcEvent qc;
+    qc.qc_view = view;
+    qc.qc_hash = "narrow-selected-" + std::to_string(view);
+    qc.leader_id = 1;
+    qc.signer_bitmap = narrow_quorum;
+    qc.available_signer_bitmap = broad_available;
+    events.push_back(qc);
+  }
+  for (int view = 33; view <= 64; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 2;
+    opportunity.leader_opportunity = true;
+    events.push_back(opportunity);
+
+    ReputationQcEvent qc;
+    qc.qc_view = view;
+    qc.qc_hash = "narrow-target-" + std::to_string(view);
+    qc.leader_id = 2;
+    qc.signer_bitmap = narrow_quorum;
+    qc.available_signer_bitmap = narrow_quorum;
+    events.push_back(qc);
+  }
+  for (int view = 65; view <= 96; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 3;
+    opportunity.leader_opportunity = true;
+    events.push_back(opportunity);
+
+    ReputationQcEvent qc;
+    qc.qc_view = view;
+    qc.qc_hash = "broad-rotating-" + std::to_string(view);
+    qc.leader_id = 3;
+    qc.signer_bitmap = RotatingBitmap(view, /*signer_count=*/14,
+                                      /*total_replicas=*/20);
+    qc.available_signer_bitmap = broad_available;
+    events.push_back(qc);
+  }
+
+  ReputationRecoveryConfig config;
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  config.bonus_per_epoch = 0;
+  config.min_weight = 1;
+  config.max_weight = 100;
+  config.min_decay_opportunities = 1;
+  config.min_leader_opportunities = 1;
+  config.leader_recovery_enabled = true;
+  const VoteScoreCandidate candidate = ComputeBayesianReputationCandidateWithConfig(
+      1, 20, 1, events, weights, config, "old-root", 0, 128);
+
+  EXPECT_LT(candidate.validators[0].leader_diversity_score,
+            candidate.validators[2].leader_diversity_score);
+  EXPECT_LT(candidate.validators[1].leader_diversity_score,
+            candidate.validators[2].leader_diversity_score);
+  EXPECT_EQ(candidate.validators[0].next_weight, 30);
+  EXPECT_LT(candidate.validators[1].next_weight,
+            candidate.validators[2].next_weight);
+  EXPECT_EQ(candidate.validators[2].next_weight, 30);
+}
+
+
+TEST(VoteScoreReputationPluginTest,
+     BayesianV3SilentLeaderRecoveryDoesNotUseBroadTargetDiversity) {
+  std::vector<ReputationQcEvent> events;
+  const std::vector<int64_t> weights(20, 30);
+  const std::string broad_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+  const std::string narrow_signers =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 20);
+
+  for (int view = 1; view <= 32; ++view) {
+    ReputationQcEvent silent_opportunity;
+    silent_opportunity.qc_view = view;
+    silent_opportunity.leader_id = 1;
+    silent_opportunity.leader_opportunity = true;
+    events.push_back(silent_opportunity);
+
+    ReputationQcEvent honest_opportunity;
+    honest_opportunity.qc_view = 100 + view;
+    honest_opportunity.leader_id = 2;
+    honest_opportunity.leader_opportunity = true;
+    events.push_back(honest_opportunity);
+
+    ReputationQcEvent qc;
+    qc.qc_view = 100 + view;
+    qc.qc_hash = "honest-low-selected-diversity-" + std::to_string(view);
+    qc.leader_id = 2;
+    qc.signer_bitmap = narrow_signers;
+    qc.available_signer_bitmap = broad_available;
+    events.push_back(qc);
+  }
+
+  ReputationRecoveryConfig config;
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  config.bonus_per_epoch = 0;
+  config.min_weight = 1;
+  config.max_weight = 100;
+  config.min_decay_opportunities = 1;
+  config.min_leader_opportunities = 1;
+  config.leader_recovery_enabled = true;
+  const VoteScoreCandidate candidate = ComputeBayesianReputationCandidateWithConfig(
+      1, 20, 1, events, weights, config, "old-root", 0, 128);
+
+  EXPECT_LT(candidate.validators[0].leader_score, 50);
+  EXPECT_LT(candidate.validators[0].next_weight, 30);
+  EXPECT_LT(candidate.validators[1].leader_diversity_score, 100);
+  EXPECT_GE(candidate.validators[1].leader_score, 95);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+}
+
+TEST(VoteScoreReputationPluginTest,
+     BayesianV3CollectorTargetCoverageReducesCollectorRecovery) {
+  std::vector<ReputationQcEvent> events;
+  const std::vector<int64_t> weights(20, 30);
+  const std::string narrow_quorum =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 20);
+  const std::string broad_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+
+  for (int view = 1; view <= 32; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 1;
+    opportunity.leader_opportunity = true;
+    events.push_back(opportunity);
+
+    ReputationQcEvent qc;
+    qc.qc_view = view;
+    qc.qc_hash = "collector-narrow-" + std::to_string(view);
+    qc.leader_id = 1;
+    qc.qc_collector_id = 1;
+    qc.signer_bitmap = narrow_quorum;
+    qc.available_signer_bitmap = narrow_quorum;
+    events.push_back(qc);
+  }
+  for (int view = 33; view <= 64; ++view) {
+    ReputationQcEvent opportunity;
+    opportunity.qc_view = view;
+    opportunity.leader_id = 2;
+    opportunity.leader_opportunity = true;
+    events.push_back(opportunity);
+
+    ReputationQcEvent qc;
+    qc.qc_view = view;
+    qc.qc_hash = "collector-broad-" + std::to_string(view);
+    qc.leader_id = 2;
+    qc.qc_collector_id = 2;
+    qc.signer_bitmap = RotatingBitmap(view, /*signer_count=*/14,
+                                      /*total_replicas=*/20);
+    qc.available_signer_bitmap = broad_available;
+    events.push_back(qc);
+  }
+
+  ReputationRecoveryConfig config;
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  config.bonus_per_epoch = 0;
+  config.min_weight = 1;
+  config.max_weight = 100;
+  config.min_decay_opportunities = 1;
+  config.min_leader_opportunities = 1;
+  config.leader_recovery_enabled = true;
+  const VoteScoreCandidate candidate = ComputeBayesianReputationCandidateWithConfig(
+      1, 20, 1, events, weights, config, "old-root", 0, 128);
+
+  EXPECT_LT(candidate.validators[0].leader_diversity_score,
+            candidate.validators[1].leader_diversity_score);
+  EXPECT_LT(candidate.validators[0].next_weight,
+            candidate.validators[1].next_weight);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
 }
 
 TEST(VoteScoreReputationPluginTest,
@@ -804,7 +1385,7 @@ TEST(VoteScoreReputationPluginTest,
 }
 
 TEST(VoteScoreReputationPluginTest,
-     BayesianV3RewardsAllGoodWindowWithSmallBonus) {
+     BayesianV3BonusDoesNotDriftBalancedAllGoodWindow) {
   std::vector<ReputationQcEvent> events;
   for (int view = 1; view <= 64; ++view) {
     ReputationQcEvent event;
@@ -818,11 +1399,11 @@ TEST(VoteScoreReputationPluginTest,
   const VoteScoreCandidate candidate = ComputeBayesianReputationCandidate(
       1, 4, 2, events, {30, 30, 30, 30}, 3, "old-root", 0, 128);
 
-  EXPECT_EQ(candidate.algorithm, "bayes_v3");
-  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({31, 31, 31, 31}));
+  EXPECT_EQ(candidate.algorithm, "bayes_v4");
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({30, 30, 30, 30}));
   for (const ValidatorVoteScore& validator : candidate.validators) {
-    EXPECT_EQ(validator.reputation_score, 100);
-    EXPECT_EQ(validator.next_weight, validator.current_weight + 1);
+    EXPECT_EQ(validator.bonus_credit, 0);
+    EXPECT_EQ(validator.next_weight, validator.current_weight);
   }
 }
 
@@ -841,10 +1422,10 @@ TEST(VoteScoreReputationPluginTest,
   const VoteScoreCandidate candidate = ComputeBayesianReputationCandidate(
       1, 5, 2, events, {10, 10, 10, 10, 10}, 3, "old-root", 0, 128);
 
-  EXPECT_EQ(candidate.validators[0].next_weight, 11);
-  EXPECT_EQ(candidate.validators[1].next_weight, 11);
-  EXPECT_EQ(candidate.validators[2].next_weight, 11);
-  EXPECT_EQ(candidate.validators[3].next_weight, 11);
+  EXPECT_EQ(candidate.validators[0].next_weight, 10);
+  EXPECT_EQ(candidate.validators[1].next_weight, 10);
+  EXPECT_EQ(candidate.validators[2].next_weight, 10);
+  EXPECT_EQ(candidate.validators[3].next_weight, 10);
   EXPECT_EQ(candidate.validators[4].inclusions, 0);
   EXPECT_EQ(candidate.validators[4].next_weight, 7);
 }
@@ -868,7 +1449,7 @@ TEST(VoteScoreReputationPluginTest,
     weights = candidate.next_weights;
   }
 
-  EXPECT_EQ(weights, std::vector<int64_t>({14, 14, 14, 14, 1}));
+  EXPECT_EQ(weights, std::vector<int64_t>({10, 10, 10, 10, 1}));
 }
 
 TEST(VoteScoreReputationPluginTest,
@@ -1027,6 +1608,198 @@ TEST(VoteScoreReputationPluginTest,
   unsetenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS");
   unsetenv("TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY");
   unsetenv("TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES");
+}
+
+
+TEST(VoteScoreReputationPluginTest,
+     StrongFaultStickinessAppliesOnlyToProvenFaults) {
+  setenv("TD_HS_STRONG_FAULT_ENABLE", "1", /*overwrite=*/1);
+  setenv("TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE", "1", /*overwrite=*/1);
+  setenv("TD_HS_STRONG_FAULT_TARGET_WEIGHT", "1", /*overwrite=*/1);
+  setenv("TD_HS_REPUTATION_BONUS_PER_EPOCH", "3", /*overwrite=*/1);
+  setenv("TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES", "1", /*overwrite=*/1);
+  setenv("TD_HS_REPUTATION_MIN_CANDIDATE_QCS", "1", /*overwrite=*/1);
+  setenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS", "2", /*overwrite=*/1);
+  setenv("TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY", "1",
+         /*overwrite=*/1);
+
+  const std::string output_dir =
+      TempDir("td_hotstuff_reputation_strong_fault_sticky_test");
+  const std::vector<int64_t> low_non_fault_weights = {1, 30, 30, 30};
+  const std::string low_non_fault_root = WeightRootHex(low_non_fault_weights);
+  AsyncVoteScoreReputationPlugin non_fault_plugin(
+      /*node_id=*/1, /*total_replicas=*/4, low_non_fault_weights,
+      output_dir + "_non_fault", /*window_size=*/2, /*queue_capacity=*/64,
+      /*max_delta=*/3);
+  non_fault_plugin.Start();
+  for (int view = 1; view <= 2; ++view) {
+    EXPECT_TRUE(non_fault_plugin.RecordQc(
+        view, "non-fault-qc-" + std::to_string(view),
+        Bitmap({1, 2, 3, 4}, 4), DefaultLeaderForView(view, 4),
+        /*weight_version=*/0, low_non_fault_root));
+  }
+  std::vector<VoteScoreCandidate> non_fault =
+      WaitForCandidates(&non_fault_plugin, 1);
+  non_fault_plugin.Stop();
+  ASSERT_EQ(non_fault.size(), 1);
+  EXPECT_EQ(non_fault[0].validators[0].strong_fault_count, 0);
+  EXPECT_GT(non_fault[0].next_weights[0], 1);
+
+  const std::vector<int64_t> initial_weights = {30, 30, 30, 30};
+  const std::string initial_root = WeightRootHex(initial_weights);
+  AsyncVoteScoreReputationPlugin fault_plugin(
+      /*node_id=*/1, /*total_replicas=*/4, initial_weights,
+      output_dir + "_fault", /*window_size=*/2, /*queue_capacity=*/64,
+      /*max_delta=*/3);
+  fault_plugin.Start();
+  consensus::reputation::SignedProposalEvidence first;
+  first.protocol_id = "td_hotstuff";
+  first.leader_id = 2;
+  first.view_or_round = 1;
+  first.slot_or_height = 0;
+  first.proposal_hash = "proposal-a";
+  first.signature_verified = true;
+  first.active_weight_root = initial_root;
+  first.weight_version = 0;
+  consensus::reputation::SignedProposalEvidence second = first;
+  second.proposal_hash = "proposal-b";
+  EXPECT_TRUE(fault_plugin.RecordSignedProposalArtifact(first));
+  EXPECT_TRUE(fault_plugin.RecordSignedProposalArtifact(second));
+  std::vector<VoteScoreCandidate> first_fault_window =
+      WaitForCandidates(&fault_plugin, 1);
+  ASSERT_EQ(first_fault_window.size(), 1);
+  EXPECT_EQ(first_fault_window[0].validators[1].strong_fault_count, 1);
+  EXPECT_EQ(first_fault_window[0].next_weights[1], 1);
+
+  const std::vector<int64_t> activated_weights = {30, 2, 30, 30};
+  const std::string activated_root = WeightRootHex(activated_weights);
+  fault_plugin.UpdateCurrentWeights(activated_weights, activated_root,
+                                    /*old_weight_version=*/1);
+  for (int view = 3; view <= 4; ++view) {
+    EXPECT_TRUE(fault_plugin.RecordQc(
+        view, "post-fault-qc-" + std::to_string(view),
+        Bitmap({1, 2, 3, 4}, 4), DefaultLeaderForView(view, 4),
+        /*weight_version=*/1, activated_root));
+  }
+  std::vector<VoteScoreCandidate> second_fault_window =
+      WaitForCandidates(&fault_plugin, 1);
+  fault_plugin.Stop();
+  ASSERT_EQ(second_fault_window.size(), 1);
+  EXPECT_EQ(second_fault_window[0].validators[1].strong_fault_count, 1);
+  EXPECT_EQ(second_fault_window[0].next_weights[1], 1);
+  EXPECT_GT(second_fault_window[0].next_weights[0], 1);
+
+  unsetenv("TD_HS_STRONG_FAULT_ENABLE");
+  unsetenv("TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE");
+  unsetenv("TD_HS_STRONG_FAULT_TARGET_WEIGHT");
+  unsetenv("TD_HS_REPUTATION_BONUS_PER_EPOCH");
+  unsetenv("TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES");
+  unsetenv("TD_HS_REPUTATION_MIN_CANDIDATE_QCS");
+  unsetenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS");
+  unsetenv("TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY");
+}
+
+TEST(VoteScoreReputationPluginTest,
+     DirectInvalidTcFaultFlushesSparseCandidateWithoutSoftWeightDrift) {
+  setenv("TD_HS_STRONG_FAULT_ENABLE", "1", /*overwrite=*/1);
+  setenv("TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE", "1", /*overwrite=*/1);
+  setenv("TD_HS_STRONG_FAULT_TARGET_WEIGHT", "1", /*overwrite=*/1);
+  setenv("TD_HS_REPUTATION_MIN_CANDIDATE_QCS", "16", /*overwrite=*/1);
+  setenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS", "64", /*overwrite=*/1);
+  setenv("TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY", "1",
+         /*overwrite=*/1);
+
+  const std::vector<int64_t> initial_weights = {30, 30, 30, 30};
+  const std::string initial_root = WeightRootHex(initial_weights);
+  AsyncVoteScoreReputationPlugin plugin(
+      /*node_id=*/1, /*total_replicas=*/4, initial_weights,
+      TempDir("td_hotstuff_reputation_sparse_invalid_tc_test"),
+      /*window_size=*/64, /*queue_capacity=*/64, /*max_delta=*/3);
+  plugin.Start();
+
+  consensus::reputation::InvalidTcProposalEvidence invalid_tc;
+  invalid_tc.protocol_id = "td_hotstuff";
+  invalid_tc.leader_id = 2;
+  invalid_tc.view_or_round = 5;
+  invalid_tc.slot_or_height = 0;
+  invalid_tc.proposal_hash = "signed-invalid-tc-proposal";
+  invalid_tc.proposal_signature_verified = true;
+  invalid_tc.timeout_cert_verified = false;
+  invalid_tc.invalid_reason = "invalid_tc_in_proposal";
+  invalid_tc.active_weight_root = initial_root;
+  invalid_tc.weight_version = 0;
+  EXPECT_TRUE(plugin.RecordInvalidTcProposalArtifact(invalid_tc));
+
+  std::vector<VoteScoreCandidate> candidates = WaitForCandidates(&plugin, 1);
+  plugin.Stop();
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].validators[1].strong_fault_count, 1);
+  EXPECT_EQ(candidates[0].next_weights[1], 1);
+  EXPECT_EQ(candidates[0].next_weights[0], 30);
+  EXPECT_EQ(candidates[0].next_weights[2], 30);
+  EXPECT_EQ(candidates[0].next_weights[3], 30);
+  EXPECT_EQ(candidates[0].event_count, 0);
+  EXPECT_EQ(candidates[0].activation_view, 129);
+
+  unsetenv("TD_HS_STRONG_FAULT_ENABLE");
+  unsetenv("TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE");
+  unsetenv("TD_HS_STRONG_FAULT_TARGET_WEIGHT");
+  unsetenv("TD_HS_REPUTATION_MIN_CANDIDATE_QCS");
+  unsetenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS");
+  unsetenv("TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY");
+}
+
+TEST(VoteScoreReputationPluginTest,
+     WeightUpdateVoteEquivocationFlushesSparsePenaltyCandidate) {
+  setenv("TD_HS_STRONG_FAULT_ENABLE", "1", /*overwrite=*/1);
+  setenv("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE", "1",
+         /*overwrite=*/1);
+  setenv("TD_HS_STRONG_FAULT_TARGET_WEIGHT", "1", /*overwrite=*/1);
+  setenv("TD_HS_REPUTATION_MIN_CANDIDATE_QCS", "16", /*overwrite=*/1);
+  setenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS", "64", /*overwrite=*/1);
+  setenv("TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY", "1",
+         /*overwrite=*/1);
+
+  const std::vector<int64_t> initial_weights = {30, 30, 30, 30};
+  const std::string initial_root = WeightRootHex(initial_weights);
+  AsyncVoteScoreReputationPlugin plugin(
+      /*node_id=*/1, /*total_replicas=*/4, initial_weights,
+      TempDir("td_hotstuff_reputation_sparse_wuv_test"),
+      /*window_size=*/64, /*queue_capacity=*/64, /*max_delta=*/3);
+  plugin.Start();
+
+  consensus::reputation::SignedWeightUpdateVoteEvidence first;
+  first.protocol_id = "td_hotstuff";
+  first.validator_id = 3;
+  first.old_weight_root = initial_root;
+  first.old_weight_version = 0;
+  first.activation_view = 2;
+  first.candidate_digest = "candidate-a";
+  first.signature_verified = true;
+  first.active_weight_root = initial_root;
+  first.weight_version = 0;
+  consensus::reputation::SignedWeightUpdateVoteEvidence second = first;
+  second.candidate_digest = "candidate-b";
+  EXPECT_TRUE(plugin.RecordSignedWeightUpdateVoteArtifact(first));
+  EXPECT_TRUE(plugin.RecordSignedWeightUpdateVoteArtifact(second));
+
+  std::vector<VoteScoreCandidate> candidates = WaitForCandidates(&plugin, 1);
+  plugin.Stop();
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].validators[2].strong_fault_count, 1);
+  EXPECT_EQ(candidates[0].next_weights[2], 1);
+  EXPECT_EQ(candidates[0].next_weights[0], 30);
+  EXPECT_EQ(candidates[0].next_weights[1], 30);
+  EXPECT_EQ(candidates[0].next_weights[3], 30);
+  EXPECT_EQ(candidates[0].event_count, 0);
+  EXPECT_EQ(candidates[0].activation_view, 129);
+
+  unsetenv("TD_HS_STRONG_FAULT_ENABLE");
+  unsetenv("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE");
+  unsetenv("TD_HS_STRONG_FAULT_TARGET_WEIGHT");
+  unsetenv("TD_HS_REPUTATION_MIN_CANDIDATE_QCS");
+  unsetenv("TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS");
+  unsetenv("TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY");
 }
 
 TEST(VoteScoreReputationPluginTest, CreateFromEnvReturnsNullWhenDisabled) {

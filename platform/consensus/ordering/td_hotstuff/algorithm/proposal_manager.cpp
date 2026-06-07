@@ -151,6 +151,10 @@ bool ProposalManager::VerifyQC(const QC& qc) {
   return true;
 }
 
+bool ProposalManager::VerifyQcForEvidence(const QC& qc) {
+  return VerifyQC(qc);
+}
+
 bool ProposalManager::SafeNode(const Proposal& proposal){
   if(proposal.header().qc().view() > lock_qc_.view()){
     return true;
@@ -173,6 +177,11 @@ bool ProposalManager::Verify(const Proposal& proposal) {
     return false;
   }
 
+  if (proposal.header().has_timeout_cert() &&
+      !VerifyTimeoutCert(proposal.header().timeout_cert())) {
+    return false;
+  }
+
   if(proposal.header().view() == 1){
     return true;
   }
@@ -183,11 +192,21 @@ bool ProposalManager::Verify(const Proposal& proposal) {
   return VerifyTimeoutJustification(proposal);
 }
 
+bool ProposalManager::VerifyEnvelopeForEvidence(const Proposal& proposal) {
+  return VerifyHash(proposal) && VerifyProposalSignature(proposal) &&
+         VerifyLeader(proposal);
+}
+
 std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
     const std::vector<std::unique_ptr<Transaction>>& txns) {
   std::unique_ptr<Proposal> proposal = std::make_unique<Proposal>();
+  int proposal_view = 0;
   {
     std::unique_lock<std::mutex> lk(txn_mutex_);
+    if (signed_proposal_for_view_ != nullptr &&
+        signed_proposal_view_ == round_) {
+      return std::make_unique<Proposal>(*signed_proposal_for_view_);
+    }
     for(const auto& txn: txns){
       global_stats_->AddProposeLatency(GetCurrentTime() - txn->reception_time());
       *proposal->add_transactions() = *txn;
@@ -204,6 +223,7 @@ std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
     }
 
     proposal->mutable_header()->set_view(round_);
+    proposal_view = round_;
     if (leader_schedule_ != nullptr) {
       proposal->mutable_header()->set_leader_context_hash(
           leader_schedule_->ContextHashForView(round_));
@@ -214,10 +234,19 @@ std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
   proposal->set_hash(GetHash(*proposal));
   auto signature_or = verifier_->SignMessage(ProposalSignaturePayload(*proposal));
   if (!signature_or.ok()) {
-    LOG(ERROR) << "failed to sign TD-Hotstuff proposal view:" << round_;
+    LOG(ERROR) << "failed to sign TD-Hotstuff proposal view:" << proposal_view;
     return nullptr;
   }
   *proposal->mutable_signature() = *signature_or;
+  {
+    std::unique_lock<std::mutex> lk(txn_mutex_);
+    if (signed_proposal_for_view_ != nullptr &&
+        signed_proposal_view_ == proposal_view) {
+      return std::make_unique<Proposal>(*signed_proposal_for_view_);
+    }
+    signed_proposal_view_ = proposal_view;
+    signed_proposal_for_view_ = std::make_unique<Proposal>(*proposal);
+  }
   return proposal;
 }
 
@@ -305,7 +334,8 @@ void ProposalManager::AddQC(std::unique_ptr<QC> qc){
 std::vector<std::unique_ptr<Proposal>> ProposalManager::AddProposal(std::unique_ptr<Proposal> proposal){
   //LOG(ERROR)<<"ADD PROPOSAL";
   std::unique_lock<std::mutex> lk(txn_mutex_);
-  if(generic_qc_.view() < proposal->header().qc().view()){
+  if(generic_qc_.view() < proposal->header().qc().view() &&
+     VerifyQC(proposal->header().qc())){
     generic_qc_ = proposal->header().qc();
     round_ = std::max(round_, generic_qc_.view() + 1);
   }

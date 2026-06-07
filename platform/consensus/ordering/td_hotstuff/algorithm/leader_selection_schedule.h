@@ -12,6 +12,9 @@ namespace td_hotstuff {
 struct LeaderSelectionConfig {
   bool enabled = false;
   int64_t eligible_min_weight = 10;
+  int64_t cooldown_views = 0;
+  int64_t max_share_percent = 0;
+  bool fairness_debt_enabled = true;
 };
 
 LeaderSelectionConfig LeaderSelectionConfigFromEnv();

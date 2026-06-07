@@ -1,0 +1,692 @@
+#include "platform/consensus/reputation/reputation_algorithm.h"
+
+#include <initializer_list>
+#include <string>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+namespace resdb {
+namespace consensus {
+namespace reputation {
+namespace {
+
+std::string Bitmap(std::initializer_list<int> signers, int total_replicas) {
+  std::string bitmap((total_replicas + 7) / 8, '\0');
+  for (int signer : signers) {
+    if (signer < 1 || signer > total_replicas) {
+      continue;
+    }
+    const int bit = signer - 1;
+    bitmap[bit / 8] = static_cast<char>(bitmap[bit / 8] | (1 << (bit % 8)));
+  }
+  return bitmap;
+}
+
+ReputationConfig TestConfig() {
+  ReputationConfig config;
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  config.bonus_per_epoch = 0;
+  config.min_weight = 1;
+  config.max_weight = 100;
+  config.min_decay_opportunities = 1;
+  config.min_leader_opportunities = 1;
+  config.leader_recovery_enabled = true;
+  return config;
+}
+
+MetricEvidence CertifiedQc(int view, int leader, std::string signer_bitmap,
+                           std::string available_signer_bitmap = "") {
+  MetricEvidence event;
+  event.artifact_family = ArtifactFamily::kQc;
+  event.view_or_round = view;
+  event.leader_id = leader;
+  event.collector_id = leader;
+  event.artifact_digest = "qc-" + std::to_string(view);
+  event.signer_bitmap = std::move(signer_bitmap);
+  event.available_signer_bitmap = std::move(available_signer_bitmap);
+  event.outcome_class = OutcomeClass::kCertified;
+  return event;
+}
+
+MetricEvidence TimeoutEvidence(int view, int leader) {
+  MetricEvidence event;
+  event.artifact_family = ArtifactFamily::kTimeout;
+  event.view_or_round = view;
+  event.leader_id = leader;
+  event.outcome_class = OutcomeClass::kTimeoutOrViewChange;
+  return event;
+}
+
+SignedProposalEvidence ProposalArtifact(int leader, int view, int slot,
+                                        std::string proposal_hash,
+                                        bool signature_verified = true) {
+  SignedProposalEvidence artifact;
+  artifact.protocol_id = "td_hotstuff";
+  artifact.leader_id = leader;
+  artifact.view_or_round = view;
+  artifact.slot_or_height = slot;
+  artifact.proposal_hash = std::move(proposal_hash);
+  artifact.signature_verified = signature_verified;
+  artifact.weight_version = 7;
+  artifact.active_weight_root = "old-root";
+  return artifact;
+}
+
+SignedVoteEvidence VoteArtifact(int signer, int view, int slot,
+                                std::string proposal_hash,
+                                bool signature_verified = true) {
+  SignedVoteEvidence artifact;
+  artifact.protocol_id = "td_hotstuff";
+  artifact.signer_id = signer;
+  artifact.view_or_round = view;
+  artifact.slot_or_height = slot;
+  artifact.proposal_hash = std::move(proposal_hash);
+  artifact.signature_verified = signature_verified;
+  artifact.weight_version = 7;
+  artifact.active_weight_root = "old-root";
+  return artifact;
+}
+
+InvalidQcProposalEvidence InvalidQcArtifact(
+    int leader, int view, int slot, std::string proposal_hash,
+    bool proposal_signature_verified = true, bool qc_verified = false) {
+  InvalidQcProposalEvidence artifact;
+  artifact.protocol_id = "td_hotstuff";
+  artifact.leader_id = leader;
+  artifact.view_or_round = view;
+  artifact.slot_or_height = slot;
+  artifact.proposal_hash = std::move(proposal_hash);
+  artifact.proposal_signature_verified = proposal_signature_verified;
+  artifact.qc_verified = qc_verified;
+  artifact.invalid_reason = "bad_qc";
+  artifact.weight_version = 7;
+  artifact.active_weight_root = "old-root";
+  return artifact;
+}
+
+SignedWeightUpdateVoteEvidence WeightUpdateVoteArtifact(
+    int validator, std::string candidate_digest,
+    bool signature_verified = true) {
+  SignedWeightUpdateVoteEvidence artifact;
+  artifact.protocol_id = "td_hotstuff";
+  artifact.validator_id = validator;
+  artifact.old_weight_root = "old-root";
+  artifact.old_weight_version = 7;
+  artifact.activation_view = 64;
+  artifact.candidate_digest = std::move(candidate_digest);
+  artifact.signature_verified = signature_verified;
+  artifact.weight_version = 7;
+  artifact.active_weight_root = "old-root";
+  return artifact;
+}
+
+SignedTimeoutVoteEvidence TimeoutVoteArtifact(
+    int signer, int view, std::string high_qc_digest,
+    bool signature_verified = true) {
+  SignedTimeoutVoteEvidence artifact;
+  artifact.protocol_id = "td_hotstuff";
+  artifact.signer_id = signer;
+  artifact.view_or_round = view;
+  artifact.high_qc_digest = std::move(high_qc_digest);
+  artifact.signature_verified = signature_verified;
+  artifact.weight_version = 7;
+  artifact.active_weight_root = "old-root";
+  return artifact;
+}
+
+InvalidTcProposalEvidence InvalidTcArtifact(
+    int leader, int view, int slot, std::string proposal_hash,
+    bool proposal_signature_verified = true,
+    bool timeout_cert_verified = false) {
+  InvalidTcProposalEvidence artifact;
+  artifact.protocol_id = "td_hotstuff";
+  artifact.leader_id = leader;
+  artifact.view_or_round = view;
+  artifact.slot_or_height = slot;
+  artifact.proposal_hash = std::move(proposal_hash);
+  artifact.proposal_signature_verified = proposal_signature_verified;
+  artifact.timeout_cert_verified = timeout_cert_verified;
+  artifact.invalid_reason = "bad_tc";
+  artifact.weight_version = 7;
+  artifact.active_weight_root = "old-root";
+  return artifact;
+}
+
+VerifiedQcArtifactEvidence QcArtifact(int view, int slot, std::string qc_hash,
+                                      std::string signer_bitmap,
+                                      bool qc_verified = true) {
+  VerifiedQcArtifactEvidence artifact;
+  artifact.protocol_id = "td_hotstuff";
+  artifact.view_or_round = view;
+  artifact.slot_or_height = slot;
+  artifact.qc_hash = std::move(qc_hash);
+  artifact.signer_bitmap = std::move(signer_bitmap);
+  artifact.qc_verified = qc_verified;
+  artifact.weight_version = 7;
+  artifact.active_weight_root = "old-root";
+  return artifact;
+}
+
+TEST(ReputationAlgorithmTest, DecodesSignerBitmap) {
+  EXPECT_EQ(DecodeSignerBitmap(std::string(1, static_cast<char>(0x09)), 5),
+            std::vector<int>({1, 4}));
+}
+
+TEST(ReputationAlgorithmTest, AllGoodWindowKeepsWeightsStable) {
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.algorithm, "bayes_v4");
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({30, 30, 30, 30}));
+  EXPECT_FALSE(candidate.metric_root_hex.empty());
+  EXPECT_FALSE(candidate.reputation_root_hex.empty());
+  EXPECT_FALSE(candidate.candidate_digest_hex.empty());
+}
+
+
+TEST(ReputationAlgorithmTest, BonusDoesNotDriftBalancedAllGoodWeights) {
+  ReputationConfig config = TestConfig();
+  config.bonus_per_epoch = 1;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 16; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({30, 30, 30, 30}));
+  for (const ValidatorReputation& validator : candidate.validators) {
+    EXPECT_EQ(validator.bonus_credit, 0);
+  }
+}
+
+TEST(ReputationAlgorithmTest, BonusCanHelpBelowMeanHonestValidatorCatchUp) {
+  ReputationConfig config = TestConfig();
+  config.bonus_per_epoch = 1;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 16; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {20, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[0].bonus_credit, 1);
+  EXPECT_EQ(candidate.validators[0].next_weight, 21);
+  EXPECT_EQ(candidate.validators[1].bonus_credit, 0);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest, SlowVoterLosesRecoveryWithoutDirectSlash) {
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[3].inclusions, 0);
+  EXPECT_LT(candidate.validators[3].vote_score, 30);
+  EXPECT_LT(candidate.validators[3].next_weight, 30);
+  EXPECT_EQ(candidate.validators[0].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest, SilentLeaderLosesLeaderRecovery) {
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+  for (int view = 5; view <= 8; ++view) {
+    evidence.push_back(TimeoutEvidence(view, 2));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[0].leader_certified_count, 4);
+  EXPECT_EQ(candidate.validators[0].leader_opportunity_count, 4);
+  EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
+  EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 4);
+  EXPECT_LT(candidate.validators[1].next_weight, candidate.validators[0].next_weight);
+}
+
+TEST(ReputationAlgorithmTest, NarrowSignerTargetOnlyReducesLeaderRecovery) {
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3}, 4),
+                                   Bitmap({1, 2, 3}, 4)));
+  }
+  for (int view = 9; view <= 16; ++view) {
+    const std::string varied_signers =
+        view % 2 == 0 ? Bitmap({1, 2, 4}, 4) : Bitmap({2, 3, 4}, 4);
+    evidence.push_back(CertifiedQc(view, 2, varied_signers,
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64);
+
+  EXPECT_LT(candidate.validators[0].leader_diversity_score,
+            candidate.validators[1].leader_diversity_score);
+  EXPECT_LT(candidate.validators[0].next_weight,
+            candidate.validators[1].next_weight);
+  EXPECT_EQ(candidate.validators[3].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest, CandidateDigestIsDeterministic) {
+  std::vector<MetricEvidence> evidence = {
+      CertifiedQc(1, 1, Bitmap({1, 2, 3}, 4), Bitmap({1, 2, 3, 4}, 4)),
+      TimeoutEvidence(2, 2),
+      CertifiedQc(3, 3, Bitmap({1, 3, 4}, 4), Bitmap({1, 2, 3, 4}, 4)),
+  };
+
+  const ReputationCandidate first = ComputeReputationCandidate(
+      1, 4, 9, evidence, {20, 30, 30, 30}, TestConfig(), "old-root", 7, 128);
+  const ReputationCandidate second = ComputeReputationCandidate(
+      4, 4, 9, evidence, {20, 30, 30, 30}, TestConfig(), "old-root", 7, 128);
+
+  EXPECT_EQ(first.metric_root_hex, second.metric_root_hex);
+  EXPECT_EQ(first.reputation_root_hex, second.reputation_root_hex);
+  EXPECT_EQ(first.next_weight_root_hex, second.next_weight_root_hex);
+  EXPECT_EQ(first.candidate_digest_hex, second.candidate_digest_hex);
+}
+
+TEST(ReputationAlgorithmTest, CandidateDigestIgnoresAuditRoots) {
+  const std::string digest = ReputationCandidateDigest(
+      /*total_replicas=*/4, /*window_index=*/1, /*start_view=*/10,
+      /*end_view=*/12, /*event_count=*/3, /*old_weight_root_hex=*/"old",
+      /*old_weight_version=*/7, /*activation_view=*/64,
+      /*metric_root_hex=*/"metric", /*reputation_root_hex=*/"rep-a",
+      /*next_weight_root_hex=*/"weights", /*next_weights=*/{10, 20, 30, 40});
+  const std::string changed = ReputationCandidateDigest(
+      /*total_replicas=*/4, /*window_index=*/1, /*start_view=*/10,
+      /*end_view=*/12, /*event_count=*/3, /*old_weight_root_hex=*/"old",
+      /*old_weight_version=*/7, /*activation_view=*/64,
+      /*metric_root_hex=*/"metric", /*reputation_root_hex=*/"rep-b",
+      /*next_weight_root_hex=*/"weights", /*next_weights=*/{10, 20, 30, 40});
+
+  EXPECT_EQ(digest, changed);
+}
+
+TEST(ReputationAlgorithmTest, DetectsVerifiedDoubleProposal) {
+  const std::vector<StrongFaultRecord> faults = DetectDoubleProposalFaults({
+      ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-a"),
+      ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-b"),
+  });
+
+  ASSERT_EQ(faults.size(), 1);
+  EXPECT_EQ(faults[0].type, StrongFaultType::kDoubleProposal);
+  EXPECT_EQ(faults[0].validator_id, 2);
+  EXPECT_EQ(faults[0].view_or_round, 9);
+  EXPECT_EQ(faults[0].slot_or_height, 0);
+  EXPECT_EQ(faults[0].first_artifact_digest, "hash-a");
+  EXPECT_EQ(faults[0].second_artifact_digest, "hash-b");
+}
+
+TEST(ReputationAlgorithmTest, IgnoresDuplicateOrUnverifiedProposalArtifacts) {
+  EXPECT_TRUE(DetectDoubleProposalFaults({
+      ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-a"),
+      ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-a"),
+  }).empty());
+
+  EXPECT_TRUE(DetectDoubleProposalFaults({
+      ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-a"),
+      ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-b",
+                       /*signature_verified=*/false),
+  }).empty());
+
+  EXPECT_TRUE(DetectDoubleProposalFaults({
+      ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-a"),
+      ProposalArtifact(/*leader=*/2, /*view=*/10, /*slot=*/0, "hash-b"),
+  }).empty());
+}
+
+TEST(ReputationAlgorithmTest, DoubleProposalPenaltyOverridesSoftReputation) {
+  ReputationConfig config = TestConfig();
+  config.strong_fault_enabled = true;
+  config.double_proposal_detection_enabled = true;
+  config.strong_fault_target_weight = 1;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 7, 64,
+      {ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-a"),
+       ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-b")});
+
+  EXPECT_EQ(candidate.validators[1].strong_fault_count, 1);
+  EXPECT_GT(candidate.validators[1].penalty_points, 0);
+  EXPECT_EQ(candidate.validators[1].recovery_credit, 0);
+  EXPECT_EQ(candidate.validators[1].bonus_credit, 0);
+  EXPECT_EQ(candidate.validators[1].reputation_score, 0);
+  EXPECT_EQ(candidate.validators[1].next_weight, 1);
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({30, 1, 30, 30}));
+  EXPECT_FALSE(candidate.strong_fault_root_hex.empty());
+  EXPECT_FALSE(candidate.penalty_root_hex.empty());
+}
+
+TEST(ReputationAlgorithmTest, DetectsVerifiedDoubleVote) {
+  const std::vector<StrongFaultRecord> faults = DetectDoubleVoteFaults({
+      VoteArtifact(/*signer=*/3, /*view=*/9, /*slot=*/0, "hash-a"),
+      VoteArtifact(/*signer=*/3, /*view=*/9, /*slot=*/0, "hash-b"),
+  });
+
+  ASSERT_EQ(faults.size(), 1);
+  EXPECT_EQ(faults[0].type, StrongFaultType::kDoubleVote);
+  EXPECT_EQ(faults[0].validator_id, 3);
+  EXPECT_EQ(faults[0].view_or_round, 9);
+  EXPECT_EQ(faults[0].slot_or_height, 0);
+  EXPECT_EQ(faults[0].first_artifact_digest, "hash-a");
+  EXPECT_EQ(faults[0].second_artifact_digest, "hash-b");
+}
+
+TEST(ReputationAlgorithmTest, IgnoresDuplicateOrUnverifiedVoteArtifacts) {
+  EXPECT_TRUE(DetectDoubleVoteFaults({
+      VoteArtifact(/*signer=*/3, /*view=*/9, /*slot=*/0, "hash-a"),
+      VoteArtifact(/*signer=*/3, /*view=*/9, /*slot=*/0, "hash-a"),
+  }).empty());
+
+  EXPECT_TRUE(DetectDoubleVoteFaults({
+      VoteArtifact(/*signer=*/3, /*view=*/9, /*slot=*/0, "hash-a"),
+      VoteArtifact(/*signer=*/3, /*view=*/9, /*slot=*/0, "hash-b",
+                   /*signature_verified=*/false),
+  }).empty());
+
+  EXPECT_TRUE(DetectDoubleVoteFaults({
+      VoteArtifact(/*signer=*/3, /*view=*/9, /*slot=*/0, "hash-a"),
+      VoteArtifact(/*signer=*/4, /*view=*/9, /*slot=*/0, "hash-b"),
+  }).empty());
+}
+
+TEST(ReputationAlgorithmTest, DetectsInvalidQcProposal) {
+  const std::vector<StrongFaultRecord> faults =
+      DetectInvalidQcProposalFaults({
+          InvalidQcArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-a"),
+      });
+
+  ASSERT_EQ(faults.size(), 1);
+  EXPECT_EQ(faults[0].type, StrongFaultType::kInvalidQcProposal);
+  EXPECT_EQ(faults[0].validator_id, 2);
+  EXPECT_EQ(faults[0].view_or_round, 9);
+  EXPECT_EQ(faults[0].slot_or_height, 0);
+  EXPECT_EQ(faults[0].first_artifact_digest, "hash-a");
+}
+
+TEST(ReputationAlgorithmTest, IgnoresUnverifiedOrValidQcProposalArtifacts) {
+  EXPECT_TRUE(DetectInvalidQcProposalFaults({
+      InvalidQcArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-a",
+                        /*proposal_signature_verified=*/false),
+  }).empty());
+
+  EXPECT_TRUE(DetectInvalidQcProposalFaults({
+      InvalidQcArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-a",
+                        /*proposal_signature_verified=*/true,
+                        /*qc_verified=*/true),
+  }).empty());
+}
+
+TEST(ReputationAlgorithmTest, DoubleVotePenaltyOverridesSoftReputation) {
+  ReputationConfig config = TestConfig();
+  config.strong_fault_enabled = true;
+  config.double_vote_detection_enabled = true;
+  config.strong_fault_target_weight = 1;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 7, 64,
+      /*signed_proposal_evidence=*/{},
+      {VoteArtifact(/*signer=*/3, /*view=*/9, /*slot=*/0, "hash-a"),
+       VoteArtifact(/*signer=*/3, /*view=*/9, /*slot=*/0, "hash-b")});
+
+  EXPECT_EQ(candidate.validators[2].strong_fault_count, 1);
+  EXPECT_GT(candidate.validators[2].penalty_points, 0);
+  EXPECT_EQ(candidate.validators[2].next_weight, 1);
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({30, 30, 1, 30}));
+}
+
+TEST(ReputationAlgorithmTest, InvalidQcPenaltyOverridesSoftReputation) {
+  ReputationConfig config = TestConfig();
+  config.strong_fault_enabled = true;
+  config.invalid_qc_proposal_detection_enabled = true;
+  config.strong_fault_target_weight = 1;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 7, 64,
+      /*signed_proposal_evidence=*/{}, /*signed_vote_evidence=*/{},
+      {InvalidQcArtifact(/*leader=*/4, /*view=*/9, /*slot=*/0, "hash-a")});
+
+  EXPECT_EQ(candidate.validators[3].strong_fault_count, 1);
+  EXPECT_GT(candidate.validators[3].penalty_points, 0);
+  EXPECT_EQ(candidate.validators[3].next_weight, 1);
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({30, 30, 30, 1}));
+}
+
+TEST(ReputationAlgorithmTest, DetectsWeightUpdateVoteEquivocation) {
+  const std::vector<StrongFaultRecord> faults =
+      DetectWeightUpdateVoteEquivocationFaults({
+          WeightUpdateVoteArtifact(/*validator=*/2, "candidate-a"),
+          WeightUpdateVoteArtifact(/*validator=*/2, "candidate-b"),
+      });
+
+  ASSERT_EQ(faults.size(), 1);
+  EXPECT_EQ(faults[0].type,
+            StrongFaultType::kWeightUpdateVoteEquivocation);
+  EXPECT_EQ(faults[0].validator_id, 2);
+  EXPECT_EQ(faults[0].view_or_round, 64);
+  EXPECT_EQ(faults[0].first_artifact_digest, "candidate-a");
+  EXPECT_EQ(faults[0].second_artifact_digest, "candidate-b");
+}
+
+TEST(ReputationAlgorithmTest,
+     IgnoresDuplicateOrUnverifiedWeightUpdateVoteArtifacts) {
+  EXPECT_TRUE(DetectWeightUpdateVoteEquivocationFaults({
+      WeightUpdateVoteArtifact(/*validator=*/2, "candidate-a"),
+      WeightUpdateVoteArtifact(/*validator=*/2, "candidate-a"),
+  }).empty());
+
+  EXPECT_TRUE(DetectWeightUpdateVoteEquivocationFaults({
+      WeightUpdateVoteArtifact(/*validator=*/2, "candidate-a"),
+      WeightUpdateVoteArtifact(/*validator=*/2, "candidate-b",
+                               /*signature_verified=*/false),
+  }).empty());
+
+  EXPECT_TRUE(DetectWeightUpdateVoteEquivocationFaults({
+      WeightUpdateVoteArtifact(/*validator=*/2, "candidate-a"),
+      WeightUpdateVoteArtifact(/*validator=*/3, "candidate-b"),
+  }).empty());
+}
+
+TEST(ReputationAlgorithmTest, DetectsTimeoutVoteEquivocation) {
+  const std::vector<StrongFaultRecord> faults =
+      DetectTimeoutVoteEquivocationFaults({
+          TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-a"),
+          TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-b"),
+      });
+
+  ASSERT_EQ(faults.size(), 1);
+  EXPECT_EQ(faults[0].type, StrongFaultType::kTimeoutVoteEquivocation);
+  EXPECT_EQ(faults[0].validator_id, 3);
+  EXPECT_EQ(faults[0].view_or_round, 12);
+  EXPECT_EQ(faults[0].first_artifact_digest, "high-qc-a");
+  EXPECT_EQ(faults[0].second_artifact_digest, "high-qc-b");
+}
+
+TEST(ReputationAlgorithmTest, IgnoresDuplicateOrUnverifiedTimeoutVotes) {
+  EXPECT_TRUE(DetectTimeoutVoteEquivocationFaults({
+      TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-a"),
+      TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-a"),
+  }).empty());
+
+  EXPECT_TRUE(DetectTimeoutVoteEquivocationFaults({
+      TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-a"),
+      TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-b",
+                          /*signature_verified=*/false),
+  }).empty());
+
+  EXPECT_TRUE(DetectTimeoutVoteEquivocationFaults({
+      TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-a"),
+      TimeoutVoteArtifact(/*signer=*/3, /*view=*/13, "high-qc-b"),
+  }).empty());
+}
+
+TEST(ReputationAlgorithmTest, DetectsInvalidTcProposal) {
+  const std::vector<StrongFaultRecord> faults =
+      DetectInvalidTcProposalFaults({
+          InvalidTcArtifact(/*leader=*/4, /*view=*/15, /*slot=*/0, "hash-a"),
+      });
+
+  ASSERT_EQ(faults.size(), 1);
+  EXPECT_EQ(faults[0].type, StrongFaultType::kInvalidTcProposal);
+  EXPECT_EQ(faults[0].validator_id, 4);
+  EXPECT_EQ(faults[0].view_or_round, 15);
+  EXPECT_EQ(faults[0].first_artifact_digest, "hash-a");
+}
+
+TEST(ReputationAlgorithmTest, IgnoresUnverifiedOrValidTcProposalArtifacts) {
+  EXPECT_TRUE(DetectInvalidTcProposalFaults({
+      InvalidTcArtifact(/*leader=*/4, /*view=*/15, /*slot=*/0, "hash-a",
+                        /*proposal_signature_verified=*/false),
+  }).empty());
+
+  EXPECT_TRUE(DetectInvalidTcProposalFaults({
+      InvalidTcArtifact(/*leader=*/4, /*view=*/15, /*slot=*/0, "hash-a",
+                        /*proposal_signature_verified=*/true,
+                        /*timeout_cert_verified=*/true),
+  }).empty());
+}
+
+TEST(ReputationAlgorithmTest, ConflictingQcsPenalizeOnlySignerIntersection) {
+  const std::vector<StrongFaultRecord> faults = DetectConflictingQcFaults(
+      {
+          QcArtifact(/*view=*/21, /*slot=*/0, "qc-a", Bitmap({1, 2, 3}, 4)),
+          QcArtifact(/*view=*/21, /*slot=*/0, "qc-b", Bitmap({2, 3, 4}, 4)),
+      },
+      /*total_replicas=*/4);
+
+  ASSERT_EQ(faults.size(), 2);
+  EXPECT_EQ(faults[0].type, StrongFaultType::kConflictingQc);
+  EXPECT_EQ(faults[0].validator_id, 2);
+  EXPECT_EQ(faults[1].type, StrongFaultType::kConflictingQc);
+  EXPECT_EQ(faults[1].validator_id, 3);
+}
+
+TEST(ReputationAlgorithmTest, ConflictingQcIgnoresDuplicatesAndUnverifiedQcs) {
+  EXPECT_TRUE(DetectConflictingQcFaults(
+      {
+          QcArtifact(/*view=*/21, /*slot=*/0, "qc-a", Bitmap({1, 2, 3}, 4)),
+          QcArtifact(/*view=*/21, /*slot=*/0, "qc-a", Bitmap({2, 3, 4}, 4)),
+      },
+      /*total_replicas=*/4).empty());
+
+  EXPECT_TRUE(DetectConflictingQcFaults(
+      {
+          QcArtifact(/*view=*/21, /*slot=*/0, "qc-a", Bitmap({1, 2, 3}, 4)),
+          QcArtifact(/*view=*/21, /*slot=*/0, "qc-b", Bitmap({2, 3, 4}, 4),
+                     /*qc_verified=*/false),
+      },
+      /*total_replicas=*/4).empty());
+}
+
+TEST(ReputationAlgorithmTest, V2StrongFaultCandidatePenaltiesAreDeterministic) {
+  ReputationConfig config = TestConfig();
+  config.strong_fault_enabled = true;
+  config.weight_update_vote_equivocation_detection_enabled = true;
+  config.timeout_vote_equivocation_detection_enabled = true;
+  config.invalid_tc_proposal_detection_enabled = true;
+  config.conflicting_qc_detection_enabled = true;
+  config.strong_fault_target_weight = 1;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 7, 64,
+      /*signed_proposal_evidence=*/{}, /*signed_vote_evidence=*/{},
+      /*invalid_qc_proposal_evidence=*/{},
+      {
+          WeightUpdateVoteArtifact(/*validator=*/1, "candidate-a"),
+          WeightUpdateVoteArtifact(/*validator=*/1, "candidate-b"),
+      },
+      {
+          TimeoutVoteArtifact(/*signer=*/2, /*view=*/12, "high-qc-a"),
+          TimeoutVoteArtifact(/*signer=*/2, /*view=*/12, "high-qc-b"),
+      },
+      {
+          InvalidTcArtifact(/*leader=*/3, /*view=*/15, /*slot=*/0, "hash-a"),
+      },
+      {
+          QcArtifact(/*view=*/21, /*slot=*/0, "qc-a", Bitmap({3, 4}, 4)),
+          QcArtifact(/*view=*/21, /*slot=*/0, "qc-b", Bitmap({4}, 4)),
+      });
+
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({1, 1, 1, 1}));
+  EXPECT_EQ(candidate.validators[0].strong_fault_count, 1);
+  EXPECT_EQ(candidate.validators[1].strong_fault_count, 1);
+  EXPECT_EQ(candidate.validators[2].strong_fault_count, 1);
+  EXPECT_EQ(candidate.validators[3].strong_fault_count, 1);
+  EXPECT_FALSE(candidate.strong_fault_root_hex.empty());
+  EXPECT_FALSE(candidate.penalty_root_hex.empty());
+  EXPECT_FALSE(candidate.candidate_digest_hex.empty());
+}
+
+
+TEST(ReputationAlgorithmTest, CandidateDigestChangesWhenPenaltyRootChanges) {
+  const std::string no_penalty = ReputationCandidateDigest(
+      /*total_replicas=*/4, /*window_index=*/1, /*start_view=*/10,
+      /*end_view=*/12, /*event_count=*/3, /*old_weight_root_hex=*/"old",
+      /*old_weight_version=*/7, /*activation_view=*/64,
+      /*metric_root_hex=*/"metric", /*reputation_root_hex=*/"rep",
+      /*next_weight_root_hex=*/"weights", /*next_weights=*/{10, 20, 30, 40},
+      /*strong_fault_root_hex=*/"", /*penalty_root_hex=*/"");
+  const std::string with_penalty = ReputationCandidateDigest(
+      /*total_replicas=*/4, /*window_index=*/1, /*start_view=*/10,
+      /*end_view=*/12, /*event_count=*/3, /*old_weight_root_hex=*/"old",
+      /*old_weight_version=*/7, /*activation_view=*/64,
+      /*metric_root_hex=*/"metric", /*reputation_root_hex=*/"rep",
+      /*next_weight_root_hex=*/"weights", /*next_weights=*/{10, 20, 30, 40},
+      /*strong_fault_root_hex=*/"fault-root",
+      /*penalty_root_hex=*/"penalty-root");
+
+  EXPECT_NE(no_penalty, with_penalty);
+}
+
+}  // namespace
+}  // namespace reputation
+}  // namespace consensus
+}  // namespace resdb

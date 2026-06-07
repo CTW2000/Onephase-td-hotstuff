@@ -8,22 +8,15 @@
 #include <sstream>
 #include <thread>
 
+#include <google/protobuf/message.h>
+
 #include "common/utils/utils.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/certificate_verifier.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_fault_injector.h"
 
 namespace resdb {
 namespace td_hotstuff {
 namespace {
-
-bool SilentLeaderForExperimentFromEnv() {
-  const char* raw = std::getenv("TD_HS_SILENT_LEADER");
-  if (raw == nullptr) {
-    return false;
-  }
-  const std::string value(raw);
-  return value == "1" || value == "true" || value == "TRUE" || value == "yes" ||
-         value == "YES" || value == "on" || value == "ON";
-}
 
 int PositiveIntFromEnv(const char* name, int default_value) {
   const char* raw = std::getenv(name);
@@ -63,6 +56,12 @@ std::string WeightsForLog(const std::vector<int64_t>& weights) {
   return out.str();
 }
 
+std::string ProtoDigest(const google::protobuf::Message& message) {
+  std::string bytes;
+  message.SerializeToString(&bytes);
+  return SignatureVerifier::CalculateHash(bytes);
+}
+
 }  // namespace
 
 HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
@@ -92,7 +91,7 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
       id, 2 * f_ + 1, verifier, total_num, non_responsive_num, fork_tail_num,
       replica_weights_, quorum_weight_, weight_schedule_,
       leader_selection_schedule_);
-  silent_leader_for_experiment_ = SilentLeaderForExperimentFromEnv();
+  experiment_faults_ = ExperimentFaultConfigFromEnv(total_num_);
   if (timeout_config_.enabled) {
     timeout_manager_ = std::make_unique<TimeoutManager>(
         id_, total_num_, verifier_, weight_schedule_);
@@ -107,6 +106,10 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
   async_verifier_->Start();
   weight_plugin_drain_interval_views_ =
       PositiveIntFromEnv("TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS", 256);
+  qc_diversity_grace_us_ =
+      qc_signer_cooldown_.enabled()
+          ? PositiveIntFromEnv("TD_HS_QC_DIVERSITY_GRACE_US", 0)
+          : 0;
   timeout_empty_proposal_budget_views_ =
       timeout_config_.enabled
           ? PositiveIntFromEnv("TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS",
@@ -162,7 +165,80 @@ int HotStuff::NextLeader(int view) { return LeaderForView(view + 1); }
 bool HotStuff::IsLeader(int view) { return LeaderForView(view) == id_; }
 
 bool HotStuff::IsSilentLeaderForExperiment() const {
-  return silent_leader_for_experiment_;
+  return experiment_faults_.silent_leader;
+}
+
+bool HotStuff::IsUnfairLeaderForExperiment() const {
+  return experiment_faults_.unfair_leader;
+}
+
+bool HotStuff::IsDoubleProposalForExperiment() const {
+  return experiment_faults_.double_proposal;
+}
+
+bool HotStuff::IsDoubleVoteForExperiment() const {
+  return experiment_faults_.double_vote;
+}
+
+bool HotStuff::IsInvalidQcForExperiment() const {
+  return experiment_faults_.invalid_qc;
+}
+
+bool HotStuff::IsWeightUpdateVoteEquivocationForExperiment() const {
+  return experiment_faults_.weight_update_vote_equivocation;
+}
+
+bool HotStuff::IsTimeoutVoteEquivocationForExperiment() const {
+  return experiment_faults_.timeout_vote_equivocation;
+}
+
+bool HotStuff::IsInvalidTcProposalForExperiment() const {
+  return experiment_faults_.invalid_tc_proposal;
+}
+
+std::vector<int> HotStuff::SelectUnfairQcSigners(
+    const std::vector<QcSignerInfo>& signer_infos,
+    int64_t quorum_weight) const {
+  std::vector<QcSignerInfo> candidates;
+  candidates.reserve(signer_infos.size());
+  for (const QcSignerInfo& signer : signer_infos) {
+    if (signer.signer > 0 && signer.weight > 0 &&
+        (experiment_faults_.unfair_leader_signer_group_size <= 0 ||
+         signer.signer <= experiment_faults_.unfair_leader_signer_group_size)) {
+      candidates.push_back(signer);
+    }
+  }
+  std::sort(candidates.begin(), candidates.end(),
+            [](const QcSignerInfo& lhs, const QcSignerInfo& rhs) {
+              return lhs.signer < rhs.signer;
+            });
+  std::vector<int> selected;
+  int64_t selected_weight = 0;
+  for (const QcSignerInfo& signer : candidates) {
+    selected.push_back(signer.signer);
+    selected_weight += signer.weight;
+    if (selected_weight >= quorum_weight) {
+      return selected;
+    }
+  }
+  candidates = signer_infos;
+  std::sort(candidates.begin(), candidates.end(),
+            [](const QcSignerInfo& lhs, const QcSignerInfo& rhs) {
+              return lhs.signer < rhs.signer;
+            });
+  selected.clear();
+  selected_weight = 0;
+  for (const QcSignerInfo& signer : candidates) {
+    if (signer.signer <= 0 || signer.weight <= 0) {
+      continue;
+    }
+    selected.push_back(signer.signer);
+    selected_weight += signer.weight;
+    if (selected_weight >= quorum_weight) {
+      break;
+    }
+  }
+  return selected;
 }
 
 void HotStuff::MarkTimeoutProgressLocked() {
@@ -334,17 +410,65 @@ void HotStuff::AsyncSend() {
   while (!IsStop()) {
     {
       std::unique_lock<std::mutex> lk(n_mutex_);
-      vote_cv_.wait_for(lk, std::chrono::microseconds(1000),
+      const int wait_us =
+          pending_qc_formation_active_.load(std::memory_order_acquire)
+              ? std::max(50, std::min(1000, qc_diversity_grace_us_))
+              : 1000;
+      vote_cv_.wait_for(lk, std::chrono::microseconds(wait_us),
                         [&] { return Ready(); });
     }
     if (IsStop()) {
       return;
+    }
+    std::vector<WeightUpdateVote> experiment_weight_equivocation_votes;
+    {
+      std::unique_lock<std::mutex> lk(mutex_);
+      if (IsWeightUpdateVoteEquivocationForExperiment() &&
+          !weight_update_vote_equivocation_injected_for_experiment_ &&
+          weight_schedule_ != nullptr && verifier_ != nullptr) {
+        const int current_view =
+            proposal_manager_ != nullptr ? proposal_manager_->CurrentView() : 1;
+        const int activation_view = std::max(current_view + 1, 2);
+        const std::string base = "td_hotstuff_weight_update_equivocation|" +
+                                 std::to_string(id_) + "|" +
+                                 std::to_string(current_view) + "|" +
+                                 weight_schedule_->ActiveWeightRoot();
+        std::unique_ptr<WeightUpdateVote> first_vote =
+            BuildWeightUpdateVoteForExperiment(
+                id_, base + "|a", weight_schedule_->ActiveWeightRoot(),
+                weight_schedule_->ActiveWeightVersion(), activation_view,
+                verifier_);
+        std::unique_ptr<WeightUpdateVote> second_vote =
+            BuildWeightUpdateVoteForExperiment(
+                id_, base + "|b", weight_schedule_->ActiveWeightRoot(),
+                weight_schedule_->ActiveWeightVersion(), activation_view,
+                verifier_);
+        if (first_vote != nullptr && second_vote != nullptr) {
+          experiment_weight_equivocation_votes.push_back(*first_vote);
+          experiment_weight_equivocation_votes.push_back(*second_vote);
+        }
+        weight_update_vote_equivocation_injected_for_experiment_ = true;
+      }
+    }
+    for (const WeightUpdateVote& vote : experiment_weight_equivocation_votes) {
+      broadcast_call_(MessageType::WeightUpdateVoteMsg, vote);
+    }
+    bool flushed_pending_qc = false;
+    if (pending_qc_formation_active_.load(std::memory_order_acquire)) {
+      std::unique_lock<std::mutex> lk(mutex_);
+      flushed_pending_qc = FlushPendingQcFormationLocked();
+    }
+    if (flushed_pending_qc) {
+      continue;
     }
     if (!Ready()) {
       continue;
     }
 
     std::unique_ptr<Proposal> proposal = nullptr;
+    std::unique_ptr<Proposal> conflicting_proposal = nullptr;
+    std::unique_ptr<Proposal> invalid_qc_proposal = nullptr;
+    std::unique_ptr<Proposal> invalid_tc_proposal = nullptr;
     WeightPluginOutboundMessages weight_messages;
     bool silent_leader = false;
     bool no_transactions_ready = false;
@@ -367,6 +491,32 @@ void HotStuff::AsyncSend() {
         } else {
           proposal = proposal_manager_->GenerateProposal(txns);
           if (proposal != nullptr) {
+            if (IsInvalidTcProposalForExperiment()) {
+              invalid_tc_proposal =
+                  BuildInvalidTcProposalForExperiment(*proposal, verifier_);
+              if (invalid_tc_proposal == nullptr) {
+                LOG(ERROR) << "invalid-TC experiment failed to create "
+                           << "forged proposal for view:"
+                           << proposal->header().view();
+              }
+            } else if (IsInvalidQcForExperiment()) {
+              invalid_qc_proposal =
+                  BuildInvalidQcProposalForExperiment(*proposal, verifier_,
+                                                      total_num_);
+              if (invalid_qc_proposal == nullptr) {
+                LOG(ERROR) << "invalid-QC experiment failed to create "
+                           << "forged proposal for view:"
+                           << proposal->header().view();
+              }
+            } else if (IsDoubleProposalForExperiment()) {
+              conflicting_proposal =
+                  BuildConflictingProposalForExperiment(*proposal, verifier_);
+              if (conflicting_proposal == nullptr) {
+                LOG(ERROR) << "double-proposal experiment failed to create "
+                           << "conflicting proposal for view:"
+                           << proposal->header().view();
+              }
+            }
             last_valid_proposal_view_ =
                 std::max(last_valid_proposal_view_, proposal->header().view());
           }
@@ -377,8 +527,19 @@ void HotStuff::AsyncSend() {
     }
 
     BroadcastWeightPluginMessages(weight_messages);
+    if (invalid_tc_proposal != nullptr) {
+      broadcast_call_(MessageType::NewProposal, *invalid_tc_proposal);
+      continue;
+    }
+    if (invalid_qc_proposal != nullptr) {
+      broadcast_call_(MessageType::NewProposal, *invalid_qc_proposal);
+      continue;
+    }
     if (proposal != nullptr) {
       broadcast_call_(MessageType::NewProposal, *proposal);
+      if (conflicting_proposal != nullptr) {
+        broadcast_call_(MessageType::NewProposal, *conflicting_proposal);
+      }
       continue;
     }
     if (silent_leader || no_transactions_ready) {
@@ -661,11 +822,6 @@ bool HotStuff::InstallWeightUpdate(const InstallableWeightUpdate& update,
       update.old_weight_version != weight_schedule_->ActiveWeightVersion()) {
     return false;
   }
-  if (update.activation_view <= current_view) {
-    LOG(WARNING) << "drop stale TD-Hotstuff weight update activation_view:"
-                 << update.activation_view << " current_view:" << current_view;
-    return false;
-  }
   if (!weight_schedule_->ScheduleUpdate(
           update.activation_view, update.next_weights, update.old_weight_root,
           update.old_weight_version)) {
@@ -746,6 +902,15 @@ void HotStuff::BroadcastWeightPluginMessagesNow(
   }
   for (const WeightUpdateVote& vote : messages.votes) {
     broadcast_call_(MessageType::WeightUpdateVoteMsg, vote);
+    if (IsWeightUpdateVoteEquivocationForExperiment() &&
+        weight_update_manager_ != nullptr && vote.validator_id() == id_) {
+      std::unique_ptr<WeightUpdateVote> conflicting_vote =
+          BuildConflictingWeightUpdateVoteForExperiment(
+              vote, vote.candidate_digest() + "#equivocation", verifier_);
+      if (conflicting_vote != nullptr) {
+        broadcast_call_(MessageType::WeightUpdateVoteMsg, *conflicting_vote);
+      }
+    }
   }
   for (const WeightUpdateCert& cert : messages.certs) {
     broadcast_call_(MessageType::WeightUpdateCertMsg, cert);
@@ -758,17 +923,30 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   }
   int view = proposal->header().view();
   std::unique_ptr<Certificate> cert = nullptr;
+  std::unique_ptr<Certificate> conflicting_cert = nullptr;
   WeightPluginOutboundMessages weight_messages;
   bool proposal_valid = true;
   bool stale_proposal = false;
   AsyncQcEvidenceRecorder* evidence_recorder = nullptr;
   bool has_qc_evidence = false;
+  ::resdb::consensus::reputation::SignedProposalEvidence proposal_artifact;
+  ::resdb::consensus::reputation::InvalidQcProposalEvidence
+      invalid_qc_artifact;
+  ::resdb::consensus::reputation::InvalidTcProposalEvidence
+      invalid_tc_artifact;
+  ::resdb::consensus::reputation::VerifiedQcArtifactEvidence
+      verified_qc_artifact;
+  bool has_invalid_qc_evidence = false;
+  bool has_invalid_tc_evidence = false;
+  bool has_verified_qc_artifact = false;
   int qc_evidence_view = 0;
   int qc_evidence_leader_id = 0;
+  int qc_evidence_collector_id = 0;
   uint64_t qc_evidence_weight_version = 0;
   int64_t qc_evidence_leader_eligible_min_weight = 10;
   std::string qc_evidence_hash;
   std::string qc_evidence_signer_bitmap;
+  std::string qc_evidence_available_signer_bitmap;
   std::string qc_evidence_active_weight_root;
   {
     // LOG(ERROR)<<"RECEIVE proposer view:"<<proposal->header().view() << "
@@ -786,14 +964,79 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     // Mutate active weight/leader state only at the local pacemaker boundary.
     // Proposal/QC verification below still uses view-indexed schedules.
     weight_messages = DrainWeightPlugin(local_current_view);
-    RecordLeaderOpportunityLocked(view);
     if (view < local_current_view) {
       stale_proposal = true;
       proposal_valid = false;
     } else if (!proposal_manager_->Verify(*proposal)) {
+      if (qc_evidence_recorder_ != nullptr &&
+          proposal_manager_->VerifyEnvelopeForEvidence(*proposal) &&
+          proposal->header().has_timeout_cert() &&
+          !proposal_manager_->VerifyTimeoutCert(
+              proposal->header().timeout_cert())) {
+        evidence_recorder = qc_evidence_recorder_.get();
+        invalid_tc_artifact.protocol_id = "td_hotstuff";
+        invalid_tc_artifact.leader_id = proposal->sender();
+        invalid_tc_artifact.view_or_round = proposal->header().view();
+        invalid_tc_artifact.slot_or_height = proposal->header().slot();
+        invalid_tc_artifact.proposal_hash = proposal->hash();
+        invalid_tc_artifact.proposal_signature_verified = true;
+        invalid_tc_artifact.timeout_cert_verified = false;
+        invalid_tc_artifact.invalid_reason = "invalid_tc_in_proposal";
+        invalid_tc_artifact.weight_version =
+            weight_schedule_ != nullptr
+                ? weight_schedule_->WeightVersionForView(view)
+                : 0;
+        invalid_tc_artifact.active_weight_root =
+            weight_schedule_ != nullptr
+                ? weight_schedule_->WeightRootForView(view)
+                : std::string();
+        has_invalid_tc_evidence = true;
+      } else if (qc_evidence_recorder_ != nullptr &&
+                 proposal_manager_->VerifyEnvelopeForEvidence(*proposal) &&
+                 proposal->header().view() > 1 &&
+                 !proposal->header().qc().hash().empty() &&
+                 !proposal_manager_->VerifyQcForEvidence(
+                     proposal->header().qc())) {
+        evidence_recorder = qc_evidence_recorder_.get();
+        invalid_qc_artifact.protocol_id = "td_hotstuff";
+        invalid_qc_artifact.leader_id = proposal->sender();
+        invalid_qc_artifact.view_or_round = proposal->header().view();
+        invalid_qc_artifact.slot_or_height = proposal->header().slot();
+        invalid_qc_artifact.proposal_hash = proposal->hash();
+        invalid_qc_artifact.proposal_signature_verified = true;
+        invalid_qc_artifact.qc_verified = false;
+        invalid_qc_artifact.invalid_reason = "invalid_qc_in_proposal";
+        invalid_qc_artifact.weight_version =
+            weight_schedule_ != nullptr
+                ? weight_schedule_->WeightVersionForView(view)
+                : 0;
+        invalid_qc_artifact.active_weight_root =
+            weight_schedule_ != nullptr
+                ? weight_schedule_->WeightRootForView(view)
+                : std::string();
+        has_invalid_qc_evidence = true;
+      }
       LOG(ERROR) << " proposal invalid";
       proposal_valid = false;
     } else {
+      if (qc_evidence_recorder_ != nullptr) {
+        evidence_recorder = qc_evidence_recorder_.get();
+        proposal_artifact.protocol_id = "td_hotstuff";
+        proposal_artifact.leader_id = proposal->sender();
+        proposal_artifact.view_or_round = proposal->header().view();
+        proposal_artifact.slot_or_height = proposal->header().slot();
+        proposal_artifact.proposal_hash = proposal->hash();
+        proposal_artifact.signature_verified = true;
+        proposal_artifact.weight_version =
+            weight_schedule_ != nullptr
+                ? weight_schedule_->WeightVersionForView(view)
+                : 0;
+        proposal_artifact.active_weight_root =
+            weight_schedule_ != nullptr
+                ? weight_schedule_->WeightRootForView(view)
+                : std::string();
+        qc_evidence_recorder_->RecordSignedProposalArtifact(proposal_artifact);
+      }
       std::string safety_error;
       if (!proposal_manager_->RecordVote(*proposal, &safety_error)) {
         LOG(ERROR) << "proposal vote safety rejected: " << safety_error;
@@ -810,6 +1053,8 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
         qc_evidence_view = qc.view();
         qc_evidence_leader_id =
             qc_evidence_view > 0 ? proposal_manager_->GetLeader(qc_evidence_view) : 0;
+        qc_evidence_collector_id =
+            qc.collector_id() > 0 ? qc.collector_id() : proposal->sender();
         qc_evidence_weight_version =
             weight_schedule_ != nullptr
                 ? weight_schedule_->WeightVersionForView(qc_evidence_view)
@@ -824,7 +1069,20 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
                 : 10;
         qc_evidence_hash = qc.hash();
         qc_evidence_signer_bitmap = qc.signer_bitmap();
+        qc_evidence_available_signer_bitmap = qc.available_signer_bitmap();
         has_qc_evidence = true;
+        if (!qc.hash().empty()) {
+          verified_qc_artifact.protocol_id = "td_hotstuff";
+          verified_qc_artifact.view_or_round = qc.view();
+          verified_qc_artifact.slot_or_height = qc.slot();
+          verified_qc_artifact.qc_hash = qc.hash();
+          verified_qc_artifact.signer_bitmap = qc.signer_bitmap();
+          verified_qc_artifact.qc_verified = true;
+          verified_qc_artifact.weight_version = qc_evidence_weight_version;
+          verified_qc_artifact.active_weight_root =
+              qc_evidence_active_weight_root;
+          has_verified_qc_artifact = true;
+        }
       }
       WeightPluginOutboundMessages post_verify_messages =
           DrainWeightPlugin(proposal_manager_->CurrentView());
@@ -840,6 +1098,14 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
 
       cert = GenerateCertificate(*proposal);
       assert(cert != nullptr);
+      if (cert != nullptr && IsDoubleVoteForExperiment()) {
+        conflicting_cert =
+            BuildConflictingVoteForExperiment(*proposal, id_, verifier_);
+        if (conflicting_cert == nullptr) {
+          LOG(ERROR) << "double-vote experiment failed to create conflicting "
+                     << "vote for view:" << proposal->header().view();
+        }
+      }
 
       std::vector<std::unique_ptr<Proposal>> committed_p_list =
           proposal_manager_->AddProposal(std::move(proposal));
@@ -880,6 +1146,12 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   }
 
   BroadcastWeightPluginMessages(weight_messages);
+  if (has_invalid_qc_evidence && evidence_recorder != nullptr) {
+    evidence_recorder->RecordInvalidQcProposalArtifact(invalid_qc_artifact);
+  }
+  if (has_invalid_tc_evidence && evidence_recorder != nullptr) {
+    evidence_recorder->RecordInvalidTcProposalArtifact(invalid_tc_artifact);
+  }
   if (stale_proposal) {
     return true;
   }
@@ -888,16 +1160,169 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   }
   auto next_leader = proposal_manager_->GetLeader(view + 1);
 
+  if (conflicting_cert != nullptr) {
+    broadcast_call_(MessageType::Vote, *cert);
+    broadcast_call_(MessageType::Vote, *conflicting_cert);
+  } else {
   SendMessage(MessageType::Vote, *cert, next_leader);
+  }
 
   if (has_qc_evidence && evidence_recorder != nullptr) {
     evidence_recorder->RecordQc(qc_evidence_view, qc_evidence_hash,
                                 qc_evidence_signer_bitmap, qc_evidence_leader_id,
                                 qc_evidence_weight_version,
                                 std::move(qc_evidence_active_weight_root),
-                                qc_evidence_leader_eligible_min_weight);
+                                qc_evidence_leader_eligible_min_weight,
+                                qc_evidence_available_signer_bitmap,
+                                qc_evidence_collector_id);
+  }
+  if (has_verified_qc_artifact && evidence_recorder != nullptr) {
+    evidence_recorder->RecordVerifiedQcArtifact(verified_qc_artifact);
   }
 
+  return true;
+}
+
+void HotStuff::ClearPendingQcFormationLocked() {
+  pending_qc_formation_ = false;
+  pending_qc_view_ = 0;
+  pending_qc_hash_.clear();
+  pending_qc_ready_at_ = std::chrono::steady_clock::time_point();
+  pending_qc_formation_active_.store(false, std::memory_order_release);
+}
+
+bool HotStuff::MaybeFormQcLocked(int view, const std::string& hash,
+                                 bool force) {
+  auto view_it = receive_.find(view);
+  if (view_it == receive_.end()) {
+    return false;
+  }
+  auto hash_it = view_it->second.find(hash);
+  if (hash_it == view_it->second.end()) {
+    return false;
+  }
+  auto& certs = hash_it->second;
+  const int64_t quorum_weight = weight_schedule_->QuorumWeightForView(view);
+  if (CertificateWeight(certs, view) < quorum_weight) {
+    return false;
+  }
+  const auto now = std::chrono::steady_clock::now();
+  if (!force && qc_diversity_grace_us_ > 0 &&
+      static_cast<int>(certs.size()) < total_num_) {
+    if (!pending_qc_formation_ || pending_qc_view_ != view ||
+        pending_qc_hash_ != hash) {
+      pending_qc_formation_ = true;
+      pending_qc_view_ = view;
+      pending_qc_hash_ = hash;
+      pending_qc_ready_at_ =
+          now + std::chrono::microseconds(qc_diversity_grace_us_);
+      pending_qc_formation_active_.store(true, std::memory_order_release);
+      vote_cv_.notify_one();
+      return false;
+    }
+    if (now < pending_qc_ready_at_) {
+      return false;
+    }
+  }
+
+  const std::vector<QcSignerInfo> signer_infos =
+      CertificateSignerInfos(certs, view);
+  const bool unfair_leader = IsUnfairLeaderForExperiment();
+  const bool diversity_enabled = qc_signer_cooldown_.enabled();
+  const auto active_signer_infos_for_view = [this, view]() {
+    std::vector<QcSignerInfo> active_signer_infos;
+    active_signer_infos.reserve(total_num_);
+    for (int signer = 1; signer <= total_num_; ++signer) {
+      const int64_t weight = WeightForSigner(signer, view);
+      if (weight > 0) {
+        active_signer_infos.push_back({signer, weight});
+      }
+    }
+    return active_signer_infos;
+  };
+  std::vector<int> selected_signers;
+  std::vector<int> target_signers;
+  QcSignerCooldownTracker* signer_tracker = &qc_signer_cooldown_;
+  if (diversity_enabled) {
+    const int leader_id = LeaderForView(view);
+    auto inserted = qc_signer_cooldown_by_leader_.emplace(
+        leader_id, QcSignerCooldownTracker(QcSignerDiversityConfigFromEnv()));
+    signer_tracker = &inserted.first->second;
+  }
+  if (unfair_leader) {
+    const std::vector<QcSignerInfo> active_signer_infos =
+        active_signer_infos_for_view();
+    target_signers = SelectUnfairQcSigners(active_signer_infos, quorum_weight);
+    selected_signers = SelectUnfairQcSigners(signer_infos, quorum_weight);
+  } else if (diversity_enabled) {
+    const std::vector<QcSignerInfo> active_signer_infos =
+        active_signer_infos_for_view();
+    target_signers.reserve(active_signer_infos.size());
+    for (const QcSignerInfo& signer : active_signer_infos) {
+      target_signers.push_back(signer.signer);
+    }
+    selected_signers = signer_tracker->SelectSignersForQc(
+        signer_infos, quorum_weight, static_cast<uint64_t>(view));
+  } else {
+    selected_signers = signer_tracker->SelectSignersForQc(
+        signer_infos, quorum_weight, static_cast<uint64_t>(view));
+    target_signers = selected_signers;
+  }
+  int64_t selected_weight = 0;
+  for (int signer : selected_signers) {
+    selected_weight += WeightForSigner(signer, view);
+  }
+  if (selected_signers.empty() || selected_weight < quorum_weight) {
+    selected_signers = CertificateSigners(certs);
+  }
+  if (target_signers.empty()) {
+    target_signers = selected_signers;
+  }
+
+  std::unique_ptr<QC> qc = std::make_unique<QC>();
+  qc->set_hash(hash);
+  qc->set_view(view);
+  qc->set_signer_bitmap(BuildSignerBitmap(selected_signers, total_num_));
+  qc->set_available_signer_bitmap(
+      BuildSignerBitmap(target_signers, total_num_));
+  qc->set_collector_id(id_);
+  for (int signer : selected_signers) {
+    auto it = certs.find(signer);
+    if (it != certs.end()) {
+      *qc->add_signatures() = it->second->sign();
+    }
+  }
+  if (!unfair_leader) {
+    signer_tracker->RecordQcSigners(selected_signers);
+  }
+  if (pending_qc_formation_ && pending_qc_view_ == view &&
+      pending_qc_hash_ == hash) {
+    ClearPendingQcFormationLocked();
+  }
+
+  qc_formed_ = true;
+  if (proposal_received_) {
+    proposal_manager_->AddQC(std::move(qc));
+    StartNewRound();
+    qc_formed_ = proposal_received_ = false;
+  } else {
+    formed_qc_ = std::move(qc);
+  }
+  return true;
+}
+
+bool HotStuff::FlushPendingQcFormationLocked() {
+  if (!pending_qc_formation_) {
+    pending_qc_formation_active_.store(false, std::memory_order_release);
+    return false;
+  }
+  if (std::chrono::steady_clock::now() < pending_qc_ready_at_) {
+    return false;
+  }
+  if (!MaybeFormQcLocked(pending_qc_view_, pending_qc_hash_, /*force=*/true)) {
+    ClearPendingQcFormationLocked();
+    return false;
+  }
   return true;
 }
 
@@ -923,11 +1348,32 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
     return false;
   }
   WeightPluginOutboundMessages weight_messages;
+  AsyncQcEvidenceRecorder* evidence_recorder = nullptr;
+  ::resdb::consensus::reputation::SignedVoteEvidence vote_artifact;
+  bool has_vote_evidence = false;
   {
     std::unique_lock<std::mutex> lk(mutex_);
     // LOG(ERROR)<<"RECEIVE proposer cert :"<<cert->view()<<"
     // from:"<<cert->signer();
     int view = cert->view();
+    if (qc_evidence_recorder_ != nullptr) {
+      evidence_recorder = qc_evidence_recorder_.get();
+      vote_artifact.protocol_id = "td_hotstuff";
+      vote_artifact.signer_id = cert->signer();
+      vote_artifact.view_or_round = cert->view();
+      vote_artifact.slot_or_height = cert->slot();
+      vote_artifact.proposal_hash = cert->hash();
+      vote_artifact.signature_verified = true;
+      vote_artifact.weight_version =
+          weight_schedule_ != nullptr
+              ? weight_schedule_->WeightVersionForView(view)
+              : 0;
+      vote_artifact.active_weight_root =
+          weight_schedule_ != nullptr
+              ? weight_schedule_->WeightRootForView(view)
+              : std::string();
+      has_vote_evidence = true;
+    }
     const int local_current_view = proposal_manager_->CurrentView();
     if (view < local_current_view) {
       return true;
@@ -946,40 +1392,10 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
     const int64_t quorum_weight = weight_schedule_->QuorumWeightForView(view);
     if (previous_weight < quorum_weight && current_weight >= quorum_weight) {
       MarkTimeoutProgressLocked();
-      const std::vector<QcSignerInfo> signer_infos =
-          CertificateSignerInfos(certs, view);
-      std::vector<int> selected_signers =
-          qc_signer_cooldown_.SelectSignersForQc(signer_infos, quorum_weight,
-                                                 static_cast<uint64_t>(view));
-      int64_t selected_weight = 0;
-      for (int signer : selected_signers) {
-        selected_weight += WeightForSigner(signer, view);
-      }
-      if (selected_signers.empty() || selected_weight < quorum_weight) {
-        selected_signers = CertificateSigners(certs);
-      }
-      std::unique_ptr<QC> qc = std::make_unique<QC>();
-      qc->set_hash(hash);
-      qc->set_view(view);
-      qc->set_signer_bitmap(BuildSignerBitmap(selected_signers, total_num_));
-
-      for (int signer : selected_signers) {
-        auto it = certs.find(signer);
-        if (it != certs.end()) {
-          *qc->add_signatures() = it->second->sign();
-        }
-      }
-      qc_signer_cooldown_.RecordQcSigners(selected_signers);
-
-      qc_formed_ = true;
-      if (proposal_received_) {
-        // LOG(ERROR) << "after qc formed";
-        proposal_manager_->AddQC(std::move(qc));
-        StartNewRound();
-        qc_formed_ = proposal_received_ = false;
-      } else {
-        formed_qc_ = std::move(qc);
-      }
+      MaybeFormQcLocked(view, hash, /*force=*/false);
+    } else if (pending_qc_formation_ && pending_qc_view_ == view &&
+               pending_qc_hash_ == hash) {
+      MaybeFormQcLocked(view, hash, /*force=*/false);
     }
     WeightPluginOutboundMessages post_cert_messages =
         DrainWeightPlugin(proposal_manager_->CurrentView());
@@ -993,6 +1409,9 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
                                  post_cert_messages.certs.begin(),
                                  post_cert_messages.certs.end());
   }
+  if (has_vote_evidence && evidence_recorder != nullptr) {
+    evidence_recorder->RecordSignedVoteArtifact(vote_artifact);
+  }
   BroadcastWeightPluginMessages(weight_messages);
   return true;
 }
@@ -1002,6 +1421,9 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
       !timeout_config_.enabled) {
     return false;
   }
+  AsyncQcEvidenceRecorder* evidence_recorder = nullptr;
+  ::resdb::consensus::reputation::SignedTimeoutVoteEvidence timeout_vote_artifact;
+  bool has_timeout_vote_evidence = false;
   TimeoutVote local_vote;
   TimeoutCert cert;
   bool has_local_vote = false;
@@ -1012,6 +1434,25 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
     const int current_view = proposal_manager_->CurrentView();
     if (vote->view() < current_view) {
       return true;
+    }
+    if (qc_evidence_recorder_ != nullptr) {
+      evidence_recorder = qc_evidence_recorder_.get();
+      std::string error;
+      timeout_vote_artifact.protocol_id = "td_hotstuff";
+      timeout_vote_artifact.signer_id = vote->signer();
+      timeout_vote_artifact.view_or_round = vote->view();
+      timeout_vote_artifact.high_qc_digest = ProtoDigest(vote->high_qc());
+      timeout_vote_artifact.signature_verified =
+          timeout_manager_->VerifyTimeoutVote(*vote, &error);
+      timeout_vote_artifact.weight_version =
+          weight_schedule_ != nullptr
+              ? weight_schedule_->WeightVersionForView(vote->view())
+              : 0;
+      timeout_vote_artifact.active_weight_root =
+          weight_schedule_ != nullptr
+              ? weight_schedule_->WeightRootForView(vote->view())
+              : std::string();
+      has_timeout_vote_evidence = true;
     }
     std::unique_ptr<TimeoutCert> maybe_cert = timeout_manager_->AddVote(*vote);
     if (maybe_cert != nullptr) {
@@ -1044,6 +1485,9 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
   if (formed_cert) {
     BroadcastTimeoutCert(cert);
   }
+  if (has_timeout_vote_evidence && evidence_recorder != nullptr) {
+    evidence_recorder->RecordSignedTimeoutVoteArtifact(timeout_vote_artifact);
+  }
   if (advanced) {
     StartNewRound();
   }
@@ -1069,6 +1513,14 @@ bool HotStuff::ReceiveTimeoutCert(std::unique_ptr<TimeoutCert> cert) {
 void HotStuff::BroadcastTimeoutVote(const TimeoutVote& vote) {
   if (broadcast_call_ != nullptr) {
     broadcast_call_(MessageType::TimeoutVoteMsg, vote);
+    if (IsTimeoutVoteEquivocationForExperiment() && vote.signer() == id_ &&
+        timeout_manager_ != nullptr) {
+      std::unique_ptr<TimeoutVote> conflicting_vote =
+          BuildConflictingTimeoutVoteForExperiment(vote, verifier_);
+      if (conflicting_vote != nullptr) {
+        broadcast_call_(MessageType::TimeoutVoteMsg, *conflicting_vote);
+      }
+    }
   }
 }
 
@@ -1092,6 +1544,7 @@ bool HotStuff::ApplyTimeoutCertLocked(const TimeoutCert& cert) {
   qc_formed_ = false;
   proposal_received_ = false;
   formed_qc_.reset();
+  ClearPendingQcFormationLocked();
   has_sent_ = false;
   MarkTimeoutProgressLocked();
   timeout_empty_proposal_until_view_ =
@@ -1134,13 +1587,40 @@ bool HotStuff::ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote) {
       !weight_update_manager_->enabled()) {
     return false;
   }
+  AsyncQcEvidenceRecorder* evidence_recorder = nullptr;
+  ::resdb::consensus::reputation::SignedWeightUpdateVoteEvidence vote_artifact;
+  bool has_vote_evidence = false;
   WeightPluginOutboundMessages weight_messages;
   {
     std::unique_lock<std::mutex> lk(mutex_);
     const int current_view = proposal_manager_->CurrentView();
+    if (qc_evidence_recorder_ != nullptr) {
+      evidence_recorder = qc_evidence_recorder_.get();
+      std::string error;
+      vote_artifact.protocol_id = "td_hotstuff";
+      vote_artifact.validator_id = vote->validator_id();
+      vote_artifact.old_weight_root = vote->old_weight_root();
+      vote_artifact.old_weight_version = vote->old_weight_version();
+      vote_artifact.activation_view = vote->activation_view();
+      vote_artifact.candidate_digest = vote->candidate_digest();
+      vote_artifact.signature_verified =
+          weight_update_manager_->VerifyVoteEvidence(*vote, &error);
+      vote_artifact.weight_version =
+          weight_schedule_ != nullptr
+              ? weight_schedule_->WeightVersionForView(current_view)
+              : 0;
+      vote_artifact.active_weight_root =
+          weight_schedule_ != nullptr
+              ? weight_schedule_->WeightRootForView(current_view)
+              : std::string();
+      has_vote_evidence = true;
+    }
     weight_update_manager_->HandleVote(*vote,
                                        CurrentWeightSnapshot(current_view));
     weight_messages = DrainWeightPlugin(current_view, /*force=*/true);
+  }
+  if (has_vote_evidence && evidence_recorder != nullptr) {
+    evidence_recorder->RecordSignedWeightUpdateVoteArtifact(vote_artifact);
   }
   BroadcastWeightPluginMessages(weight_messages);
   return true;
@@ -1173,6 +1653,7 @@ std::unique_ptr<Certificate> HotStuff::GenerateCertificate(
   cert->set_hash(proposal.hash());
   cert->set_view(proposal.header().view());
   cert->set_signer(id_);
+  cert->set_slot(proposal.header().slot());
 
   auto hash_signature_or = verifier_->SignMessage(VoteSignaturePayload(*cert));
   if (!hash_signature_or.ok()) {

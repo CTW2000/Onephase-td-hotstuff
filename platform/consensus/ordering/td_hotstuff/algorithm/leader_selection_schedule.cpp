@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <utility>
 
@@ -16,11 +17,39 @@ constexpr const char* kLeaderSelectionEnableEnv =
     "TD_HS_LEADER_SELECTION_ENABLE";
 constexpr const char* kLeaderEligibleMinWeightEnv =
     "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT";
+constexpr const char* kLeaderSelectionCooldownViewsEnv =
+    "TD_HS_LEADER_SELECTION_COOLDOWN_VIEWS";
+constexpr const char* kLeaderSelectionMaxSharePercentEnv =
+    "TD_HS_LEADER_SELECTION_MAX_SHARE_PERCENT";
+constexpr const char* kLeaderSelectionFairnessDebtEnableEnv =
+    "TD_HS_LEADER_SELECTION_FAIRNESS_DEBT_ENABLE";
 constexpr uint64_t kLeaderParamsVersionV1 = 1;
 
 bool EnvEnabled(const char* env_name) {
   const char* value = std::getenv(env_name);
   return value != nullptr && std::string(value) == "1";
+}
+
+bool EnvEnabledDefault(const char* env_name, bool default_value) {
+  const char* value = std::getenv(env_name);
+  if (value == nullptr || std::string(value).empty()) {
+    return default_value;
+  }
+  return std::string(value) == "1";
+}
+
+int64_t BoundedInt64FromEnv(const char* env_name, int64_t default_value,
+                            int64_t min_value, int64_t max_value) {
+  const char* value = std::getenv(env_name);
+  if (value == nullptr || std::string(value).empty()) {
+    return default_value;
+  }
+  try {
+    const int64_t parsed = std::stoll(value);
+    return std::min(max_value, std::max(min_value, parsed));
+  } catch (...) {
+    return default_value;
+  }
 }
 
 uint64_t PositiveUint64FromEnv(const char* env_name, uint64_t default_value) {
@@ -41,14 +70,40 @@ bool AllLeaderWeightsEqual(const std::vector<int64_t>& weights) {
                             std::not_equal_to<int64_t>()) == weights.end();
 }
 
+int SelectLeaderByDebt(const std::vector<int64_t>& active_weights,
+                       const std::vector<int64_t>& debt,
+                       const std::vector<int64_t>& cooldown_remaining,
+                       const std::vector<int64_t>& selected_counts,
+                       int64_t max_slots_per_leader, bool ignore_cooldown,
+                       bool ignore_cap) {
+  int selected = -1;
+  for (size_t i = 0; i < active_weights.size(); ++i) {
+    if (active_weights[i] <= 0) {
+      continue;
+    }
+    if (!ignore_cooldown && cooldown_remaining[i] > 0) {
+      continue;
+    }
+    if (!ignore_cap && max_slots_per_leader > 0 &&
+        selected_counts[i] >= max_slots_per_leader) {
+      continue;
+    }
+    if (selected < 0 || debt[i] > debt[selected] ||
+        (debt[i] == debt[selected] && i < static_cast<size_t>(selected))) {
+      selected = static_cast<int>(i);
+    }
+  }
+  return selected;
+}
+
 std::vector<int> SmoothWeightedRoundRobinSequence(
     const std::vector<int64_t>& weights, int total_replicas,
-    int64_t eligible_min_weight) {
+    const LeaderSelectionConfig& config) {
   std::vector<int64_t> active_weights(weights.size(), 0);
   int64_t total_weight = 0;
   int eligible_count = 0;
   for (size_t i = 0; i < weights.size(); ++i) {
-    if (weights[i] >= eligible_min_weight && weights[i] > 0) {
+    if (weights[i] >= config.eligible_min_weight && weights[i] > 0) {
       active_weights[i] = weights[i];
       total_weight += weights[i];
       ++eligible_count;
@@ -72,25 +127,57 @@ std::vector<int> SmoothWeightedRoundRobinSequence(
     return {};
   }
 
-  std::vector<int64_t> current(weights.size(), 0);
+  const int64_t max_slots_per_leader =
+      config.max_share_percent > 0
+          ? std::max<int64_t>(
+                1, (total_weight * config.max_share_percent + 99) / 100)
+          : 0;
+  std::vector<int64_t> debt(weights.size(), 0);
+  std::vector<int64_t> cooldown_remaining(weights.size(), 0);
+  std::vector<int64_t> selected_counts(weights.size(), 0);
   std::vector<int> sequence;
   sequence.reserve(static_cast<size_t>(total_weight));
   for (int64_t step = 0; step < total_weight; ++step) {
-    int selected = -1;
     for (size_t i = 0; i < active_weights.size(); ++i) {
       if (active_weights[i] <= 0) {
         continue;
       }
-      current[i] += active_weights[i];
-      if (selected < 0 || current[i] > current[selected]) {
-        selected = static_cast<int>(i);
-      }
+      debt[i] += config.fairness_debt_enabled ? active_weights[i] : 1;
+    }
+
+    int selected = SelectLeaderByDebt(
+        active_weights, debt, cooldown_remaining, selected_counts,
+        max_slots_per_leader, /*ignore_cooldown=*/false,
+        /*ignore_cap=*/false);
+    if (selected < 0) {
+      selected = SelectLeaderByDebt(
+          active_weights, debt, cooldown_remaining, selected_counts,
+          max_slots_per_leader, /*ignore_cooldown=*/true,
+          /*ignore_cap=*/false);
+    }
+    if (selected < 0) {
+      selected = SelectLeaderByDebt(
+          active_weights, debt, cooldown_remaining, selected_counts,
+          max_slots_per_leader, /*ignore_cooldown=*/true,
+          /*ignore_cap=*/true);
     }
     if (selected < 0) {
       break;
     }
-    current[selected] -= total_weight;
+
+    debt[selected] -= config.fairness_debt_enabled ? total_weight
+                                                   : eligible_count;
+    ++selected_counts[selected];
     sequence.push_back(selected + 1);
+
+    for (int64_t& remaining : cooldown_remaining) {
+      if (remaining > 0) {
+        --remaining;
+      }
+    }
+    if (config.cooldown_views > 0) {
+      cooldown_remaining[selected] = config.cooldown_views;
+    }
   }
   return sequence;
 }
@@ -111,6 +198,12 @@ LeaderSelectionConfig LeaderSelectionConfigFromEnv() {
   config.enabled = EnvEnabled(kLeaderSelectionEnableEnv);
   config.eligible_min_weight = static_cast<int64_t>(
       PositiveUint64FromEnv(kLeaderEligibleMinWeightEnv, 10));
+  config.cooldown_views =
+      BoundedInt64FromEnv(kLeaderSelectionCooldownViewsEnv, 0, 0, 1000);
+  config.max_share_percent =
+      BoundedInt64FromEnv(kLeaderSelectionMaxSharePercentEnv, 0, 0, 100);
+  config.fairness_debt_enabled =
+      EnvEnabledDefault(kLeaderSelectionFairnessDebtEnableEnv, true);
   return config;
 }
 
@@ -133,7 +226,7 @@ LeaderSelectionSchedule::LeaderSelectionSchedule(
       NormalizeLeaderWeights(leader_weights, total_replicas_);
   record.leader_weight_root = WeightRootHex(record.leader_weights);
   record.leader_sequence = SmoothWeightedRoundRobinSequence(
-      record.leader_weights, total_replicas_, config_.eligible_min_weight);
+      record.leader_weights, total_replicas_, config_);
   records_.push_back(std::move(record));
 }
 
@@ -271,7 +364,7 @@ bool LeaderSelectionSchedule::InstallWeightSnapshot(
   record.leader_weights = normalized;
   record.leader_weight_root = weight_root;
   record.leader_sequence = SmoothWeightedRoundRobinSequence(
-      record.leader_weights, total_replicas_, config_.eligible_min_weight);
+      record.leader_weights, total_replicas_, config_);
   records_.push_back(std::move(record));
   std::sort(records_.begin() + 1, records_.end(),
             [](const Record& lhs, const Record& rhs) {

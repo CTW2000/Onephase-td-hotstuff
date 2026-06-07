@@ -11,6 +11,8 @@
 #include <thread>
 #include <vector>
 
+#include "platform/consensus/reputation/reputation_algorithm.h"
+
 namespace resdb {
 namespace td_hotstuff {
 
@@ -24,17 +26,50 @@ struct ReputationRecoveryConfig {
   uint64_t min_leader_opportunities = 8;
   int64_t leader_eligible_min_weight = 10;
   bool leader_recovery_enabled = false;
+  bool strong_fault_enabled = false;
+  bool double_proposal_detection_enabled = false;
+  bool double_vote_detection_enabled = false;
+  bool invalid_qc_proposal_detection_enabled = false;
+  bool weight_update_vote_equivocation_detection_enabled = false;
+  bool timeout_vote_equivocation_detection_enabled = false;
+  bool invalid_tc_proposal_detection_enabled = false;
+  bool conflicting_qc_detection_enabled = false;
+  int64_t strong_fault_target_weight = 1;
 };
 
 struct ReputationQcEvent {
   int qc_view = 0;
   std::string qc_hash;
   std::string signer_bitmap;
+  std::string available_signer_bitmap;
   int leader_id = 0;
+  int qc_collector_id = 0;
   bool leader_opportunity = false;
   uint64_t weight_version = 0;
   std::string active_weight_root;
   int64_t leader_eligible_min_weight = 0;
+  bool signed_proposal_artifact = false;
+  std::string protocol_id;
+  int proposal_slot = 0;
+  std::string proposal_hash;
+  bool proposal_signature_verified = false;
+  bool signed_vote_artifact = false;
+  int vote_signer_id = 0;
+  std::string vote_proposal_hash;
+  bool vote_signature_verified = false;
+  bool invalid_qc_proposal_artifact = false;
+  bool qc_verified = false;
+  std::string invalid_reason;
+  bool weight_update_vote_artifact = false;
+  std::string old_weight_root;
+  uint64_t old_weight_version = 0;
+  int activation_view = 0;
+  std::string candidate_digest;
+  bool timeout_vote_artifact = false;
+  std::string high_qc_digest;
+  bool invalid_tc_proposal_artifact = false;
+  bool timeout_cert_verified = false;
+  bool verified_qc_artifact = false;
 };
 
 struct ValidatorVoteScore {
@@ -50,12 +85,14 @@ struct ValidatorVoteScore {
   int decay_applied = 0;
   int recovery_credit = 0;
   int bonus_credit = 0;
+  uint64_t strong_fault_count = 0;
+  int64_t penalty_points = 0;
   int64_t current_weight = 1;
   int64_t next_weight = 1;
 };
 
 struct VoteScoreCandidate {
-  std::string algorithm = "bayes_v3";
+  std::string algorithm = "bayes_v4";
   int local_node_id = 0;
   int total_replicas = 0;
   uint64_t window_index = 0;
@@ -66,9 +103,13 @@ struct VoteScoreCandidate {
   uint64_t old_weight_version = 0;
   int activation_view = 0;
   std::vector<ValidatorVoteScore> validators;
+  std::vector<::resdb::consensus::reputation::StrongFaultRecord> strong_faults;
   std::vector<int64_t> next_weights;
   std::vector<int64_t> leader_weights;
   std::string metric_root_hex;
+  std::string reputation_root_hex;
+  std::string strong_fault_root_hex;
+  std::string penalty_root_hex;
   std::string next_weight_root_hex;
   std::string leader_weight_root_hex;
   uint64_t leader_params_version = 0;
@@ -78,6 +119,9 @@ struct VoteScoreCandidate {
 
 std::vector<int> DecodeSignerBitmap(const std::string& signer_bitmap,
                                     int total_replicas);
+
+::resdb::consensus::reputation::MetricEvidence ToMetricEvidence(
+    const ReputationQcEvent& event);
 
 VoteScoreCandidate ComputeBayesianReputationCandidate(
     int node_id, int total_replicas, uint64_t window_index,
@@ -106,7 +150,10 @@ std::string VoteScoreCandidateDigest(
     const std::string& leader_weight_root_hex = "",
     uint64_t leader_params_version = 0,
     const std::string& leader_randomness_ref = "",
-    const std::vector<int64_t>& leader_weights = {});
+    const std::vector<int64_t>& leader_weights = {},
+    const std::string& reputation_root_hex = "",
+    const std::string& strong_fault_root_hex = "",
+    const std::string& penalty_root_hex = "");
 
 std::string VoteScoreCandidateToJson(const VoteScoreCandidate& candidate);
 
@@ -134,11 +181,28 @@ class AsyncVoteScoreReputationPlugin {
   bool RecordQc(int qc_view, const std::string& qc_hash,
                 const std::string& signer_bitmap, int leader_id,
                 uint64_t weight_version, std::string active_weight_root,
-                int64_t leader_eligible_min_weight = 0);
+                int64_t leader_eligible_min_weight = 0,
+                std::string available_signer_bitmap = "",
+                int qc_collector_id = 0);
   bool RecordLeaderOpportunity(int view, int leader_id,
                                uint64_t weight_version,
                                std::string active_weight_root,
                                int64_t leader_eligible_min_weight = 0);
+  bool RecordSignedProposalArtifact(
+      const ::resdb::consensus::reputation::SignedProposalEvidence& artifact);
+  bool RecordSignedVoteArtifact(
+      const ::resdb::consensus::reputation::SignedVoteEvidence& artifact);
+  bool RecordInvalidQcProposalArtifact(
+      const ::resdb::consensus::reputation::InvalidQcProposalEvidence& artifact);
+  bool RecordSignedWeightUpdateVoteArtifact(
+      const ::resdb::consensus::reputation::SignedWeightUpdateVoteEvidence&
+          artifact);
+  bool RecordSignedTimeoutVoteArtifact(
+      const ::resdb::consensus::reputation::SignedTimeoutVoteEvidence& artifact);
+  bool RecordInvalidTcProposalArtifact(
+      const ::resdb::consensus::reputation::InvalidTcProposalEvidence& artifact);
+  bool RecordVerifiedQcArtifact(
+      const ::resdb::consensus::reputation::VerifiedQcArtifactEvidence& artifact);
   std::vector<VoteScoreCandidate> TakeCompletedCandidates();
   void UpdateCurrentWeights(std::vector<int64_t> current_weights,
                             std::string old_weight_root_hex,
@@ -184,6 +248,7 @@ class AsyncVoteScoreReputationPlugin {
   size_t output_records_since_flush_ = 0;
   size_t current_window_qc_count_ = 0;
   std::vector<ReputationQcEvent> current_window_;
+  std::vector<uint64_t> cumulative_strong_fault_counts_;
   std::deque<VoteScoreCandidate> completed_candidates_;
 };
 

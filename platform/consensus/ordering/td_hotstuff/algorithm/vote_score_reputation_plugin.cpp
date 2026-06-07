@@ -6,17 +6,18 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <set>
 #include <sstream>
 #include <utility>
 
 #include <glog/logging.h>
 
-#include "common/crypto/hash.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_digest.h"
 
 namespace resdb {
 namespace td_hotstuff {
+namespace reputation = ::resdb::consensus::reputation;
 namespace {
 
 constexpr const char* kEnableEnv = "TD_HS_REPUTATION_ENABLE";
@@ -36,11 +37,29 @@ constexpr const char* kMinLeaderOpportunitiesEnv =
     "TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES";
 constexpr const char* kLeaderRecoveryEnableEnv =
     "TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE";
+constexpr const char* kStrongFaultEnableEnv = "TD_HS_STRONG_FAULT_ENABLE";
+constexpr const char* kDoubleProposalDetectEnableEnv =
+    "TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE";
+constexpr const char* kDoubleVoteDetectEnableEnv =
+    "TD_HS_DOUBLE_VOTE_DETECT_ENABLE";
+constexpr const char* kInvalidQcProposalDetectEnableEnv =
+    "TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE";
+constexpr const char* kWeightUpdateVoteEquivocationDetectEnableEnv =
+    "TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE";
+constexpr const char* kTimeoutVoteEquivocationDetectEnableEnv =
+    "TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE";
+constexpr const char* kInvalidTcProposalDetectEnableEnv =
+    "TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE";
+constexpr const char* kConflictingQcDetectEnableEnv =
+    "TD_HS_CONFLICTING_QC_DETECT_ENABLE";
+constexpr const char* kStrongFaultTargetWeightEnv =
+    "TD_HS_STRONG_FAULT_TARGET_WEIGHT";
 constexpr const char* kMinCandidateQcsEnv =
     "TD_HS_REPUTATION_MIN_CANDIDATE_QCS";
-constexpr const char* kAlgorithmBayesV3 = "bayes_v3";
-constexpr const char* kWeightUpdateEpochViewsEnv = "TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS";
-constexpr const char* kWeightUpdateActivationDelayEnv = "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY";
+constexpr const char* kWeightUpdateEpochViewsEnv =
+    "TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS";
+constexpr const char* kWeightUpdateActivationDelayEnv =
+    "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY";
 constexpr size_t kDefaultWindowSize = 4096;
 constexpr size_t kDefaultQueueCapacity = 65536;
 constexpr size_t kFlushEveryCandidates = 16;
@@ -57,9 +76,7 @@ bool EnvFlagEnabled(const char* env_name) {
   return enabled != nullptr && std::string(enabled) == "1";
 }
 
-bool ReputationEnabledFromEnv() {
-  return EnvFlagEnabled(kEnableEnv);
-}
+bool ReputationEnabledFromEnv() { return EnvFlagEnabled(kEnableEnv); }
 
 size_t SizeFromEnv(const char* env_name, size_t default_value) {
   const char* raw_value = std::getenv(env_name);
@@ -74,26 +91,6 @@ size_t SizeFromEnv(const char* env_name, size_t default_value) {
                  << ", use default:" << default_value;
     return default_value;
   }
-}
-
-size_t CompleteWindowQcThreshold(size_t window_size, size_t epoch_views) {
-  const size_t expected_qcs =
-      epoch_views == 0 ? window_size : std::min(window_size, epoch_views);
-  if (expected_qcs <= 1) {
-    return 1;
-  }
-  return std::max<size_t>(1, (expected_qcs * 3 + 3) / 4);
-}
-
-size_t MinCandidateQcCountFromEnv(size_t window_size, size_t epoch_views) {
-  const size_t default_value = CompleteWindowQcThreshold(window_size,
-                                                        epoch_views);
-  const size_t configured = SizeFromEnv(kMinCandidateQcsEnv, default_value);
-  const size_t max_reasonable =
-      std::max<size_t>(1, epoch_views == 0 ? window_size
-                                           : std::min(window_size,
-                                                      epoch_views));
-  return std::max<size_t>(1, std::min(configured, max_reasonable));
 }
 
 int IntFromEnv(const char* env_name, int default_value) {
@@ -120,6 +117,39 @@ int IntFromEnvInRange(const char* env_name, int default_value, int min_value,
     return default_value;
   }
   return value;
+}
+
+size_t CompleteWindowQcThreshold(size_t window_size, size_t epoch_views) {
+  const size_t expected_qcs =
+      epoch_views == 0 ? window_size : std::min(window_size, epoch_views);
+  if (expected_qcs <= 1) {
+    return 1;
+  }
+  return std::max<size_t>(1, (expected_qcs * 3 + 3) / 4);
+}
+
+size_t MinCandidateQcCountFromEnv(size_t window_size, size_t epoch_views) {
+  const size_t default_value =
+      CompleteWindowQcThreshold(window_size, epoch_views);
+  const size_t configured = SizeFromEnv(kMinCandidateQcsEnv, default_value);
+  const size_t max_reasonable =
+      std::max<size_t>(1, epoch_views == 0 ? window_size
+                                           : std::min(window_size, epoch_views));
+  return std::max<size_t>(1, std::min(configured, max_reasonable));
+}
+
+int64_t ClampWeight(int64_t weight) {
+  return std::max<int64_t>(kMinWeight, std::min<int64_t>(kMaxWeight, weight));
+}
+
+std::vector<int64_t> NormalizeWeights(const std::vector<int64_t>& weights,
+                                      int total_replicas) {
+  std::vector<int64_t> normalized(std::max(total_replicas, 0), kMinWeight);
+  for (int i = 0; i < total_replicas && i < static_cast<int>(weights.size());
+       ++i) {
+    normalized[i] = ClampWeight(weights[i]);
+  }
+  return normalized;
 }
 
 ReputationRecoveryConfig RecoveryConfigFromValues(
@@ -169,11 +199,74 @@ ReputationRecoveryConfig RecoveryConfigFromEnv(int legacy_default_decay) {
       kMinDecayOpportunitiesEnv, kDefaultMinDecayOpportunities, 1, 1000000);
   const int min_leader_opportunities = IntFromEnvInRange(
       kMinLeaderOpportunitiesEnv, kDefaultMinLeaderOpportunities, 1, 1000000);
+  const bool strong_fault_enabled = EnvFlagEnabled(kStrongFaultEnableEnv);
   ReputationRecoveryConfig config = RecoveryConfigFromValues(
       decay, recovery, bonus, min_weight, max_weight,
       min_decay_opportunities, min_leader_opportunities);
   config.leader_recovery_enabled = EnvFlagEnabled(kLeaderRecoveryEnableEnv);
+  config.strong_fault_enabled = strong_fault_enabled;
+  config.double_proposal_detection_enabled =
+      strong_fault_enabled &&
+      (std::getenv(kDoubleProposalDetectEnableEnv) == nullptr ||
+       EnvFlagEnabled(kDoubleProposalDetectEnableEnv));
+  config.double_vote_detection_enabled =
+      strong_fault_enabled &&
+      (std::getenv(kDoubleVoteDetectEnableEnv) == nullptr ||
+       EnvFlagEnabled(kDoubleVoteDetectEnableEnv));
+  config.invalid_qc_proposal_detection_enabled =
+      strong_fault_enabled &&
+      (std::getenv(kInvalidQcProposalDetectEnableEnv) == nullptr ||
+       EnvFlagEnabled(kInvalidQcProposalDetectEnableEnv));
+  config.weight_update_vote_equivocation_detection_enabled =
+      strong_fault_enabled &&
+      (std::getenv(kWeightUpdateVoteEquivocationDetectEnableEnv) == nullptr ||
+       EnvFlagEnabled(kWeightUpdateVoteEquivocationDetectEnableEnv));
+  config.timeout_vote_equivocation_detection_enabled =
+      strong_fault_enabled &&
+      (std::getenv(kTimeoutVoteEquivocationDetectEnableEnv) == nullptr ||
+       EnvFlagEnabled(kTimeoutVoteEquivocationDetectEnableEnv));
+  config.invalid_tc_proposal_detection_enabled =
+      strong_fault_enabled &&
+      (std::getenv(kInvalidTcProposalDetectEnableEnv) == nullptr ||
+       EnvFlagEnabled(kInvalidTcProposalDetectEnableEnv));
+  config.conflicting_qc_detection_enabled =
+      strong_fault_enabled &&
+      (std::getenv(kConflictingQcDetectEnableEnv) == nullptr ||
+       EnvFlagEnabled(kConflictingQcDetectEnableEnv));
+  config.strong_fault_target_weight =
+      IntFromEnvInRange(kStrongFaultTargetWeightEnv, 1, 1, 100);
   return config;
+}
+
+reputation::ReputationConfig ToNeutralConfig(
+    const ReputationRecoveryConfig& config) {
+  reputation::ReputationConfig neutral;
+  neutral.decay_per_epoch = config.decay_per_epoch;
+  neutral.max_recovery_per_epoch = config.max_recovery_per_epoch;
+  neutral.bonus_per_epoch = config.bonus_per_epoch;
+  neutral.min_weight = config.min_weight;
+  neutral.max_weight = config.max_weight;
+  neutral.min_decay_opportunities = config.min_decay_opportunities;
+  neutral.min_leader_opportunities = config.min_leader_opportunities;
+  neutral.leader_eligible_min_weight = config.leader_eligible_min_weight;
+  neutral.leader_recovery_enabled = config.leader_recovery_enabled;
+  neutral.strong_fault_enabled = config.strong_fault_enabled;
+  neutral.double_proposal_detection_enabled =
+      config.double_proposal_detection_enabled;
+  neutral.double_vote_detection_enabled =
+      config.double_vote_detection_enabled;
+  neutral.invalid_qc_proposal_detection_enabled =
+      config.invalid_qc_proposal_detection_enabled;
+  neutral.weight_update_vote_equivocation_detection_enabled =
+      config.weight_update_vote_equivocation_detection_enabled;
+  neutral.timeout_vote_equivocation_detection_enabled =
+      config.timeout_vote_equivocation_detection_enabled;
+  neutral.invalid_tc_proposal_detection_enabled =
+      config.invalid_tc_proposal_detection_enabled;
+  neutral.conflicting_qc_detection_enabled =
+      config.conflicting_qc_detection_enabled;
+  neutral.strong_fault_target_weight = config.strong_fault_target_weight;
+  return neutral;
 }
 
 std::string OutputDirFromEnv() {
@@ -190,220 +283,88 @@ std::string OutputPath(const std::string& output_dir, int node_id) {
   return path.string();
 }
 
-std::string HexEncodeBytes(const std::string& data) {
-  static constexpr char kHex[] = "0123456789abcdef";
-  std::string hex;
-  hex.reserve(data.size() * 2);
-  for (unsigned char ch : data) {
-    hex.push_back(kHex[ch >> 4]);
-    hex.push_back(kHex[ch & 0x0f]);
-  }
-  return hex;
-}
-
-std::string HashHex(const std::string& data) {
-  return HexEncodeBytes(utils::CalculateSHA256Hash(data));
-}
-
-int64_t ClampWeight(int64_t weight) {
-  return std::max<int64_t>(kMinWeight, std::min<int64_t>(kMaxWeight, weight));
-}
-
-int64_t ClampWeight(int64_t weight, const ReputationRecoveryConfig& config) {
-  return std::max<int64_t>(config.min_weight,
-                           std::min<int64_t>(config.max_weight, weight));
-}
-
-std::vector<int64_t> NormalizeWeights(const std::vector<int64_t>& weights,
-                                      int total_replicas) {
-  std::vector<int64_t> normalized(std::max(total_replicas, 0), kMinWeight);
-  for (int i = 0; i < total_replicas && i < static_cast<int>(weights.size());
-       ++i) {
-    normalized[i] = ClampWeight(weights[i]);
-  }
-  return normalized;
-}
-
-int RoundedDivide(uint64_t numerator, uint64_t denominator) {
-  if (denominator == 0) {
-    return 0;
-  }
-  return static_cast<int>((numerator + denominator / 2) / denominator);
-}
-
-int VoteScore(uint64_t inclusions, uint64_t opportunities) {
-  const uint64_t numerator = 100 * (1 + inclusions);
-  const uint64_t denominator = 2 + opportunities;
-  return std::max(0, std::min(100, RoundedDivide(numerator, denominator)));
-}
-
-int LeaderCertifiedScore(uint64_t certified_count,
-                         uint64_t leader_opportunities) {
-  if (leader_opportunities == 0) {
-    return 100;
-  }
-  return VoteScore(certified_count, leader_opportunities);
-}
-
-uint64_t FairExpectedSignerOpportunities(uint64_t selected_signer_slots,
-                                         int total_replicas,
-                                         uint64_t event_count) {
-  if (selected_signer_slots == 0 || total_replicas <= 0 || event_count == 0) {
-    return 0;
-  }
-  const uint64_t expected =
-      static_cast<uint64_t>(RoundedDivide(selected_signer_slots,
-                                          static_cast<uint64_t>(total_replicas)));
-  return std::max<uint64_t>(1, std::min<uint64_t>(event_count, expected));
-}
-
-int RecoveryCreditForScore(int score, int max_recovery_per_epoch) {
-  if (max_recovery_per_epoch <= 0) {
-    return 0;
-  }
-  constexpr int kNoRecoveryBelow = 30;
-  constexpr int kFullRecoveryAt = 67;
-  const int bounded_score = std::max(0, std::min(100, score));
-  if (bounded_score >= kFullRecoveryAt) {
-    return max_recovery_per_epoch;
-  }
-  if (bounded_score < kNoRecoveryBelow) {
-    return 0;
-  }
-  return RoundedDivide(static_cast<uint64_t>(bounded_score - kNoRecoveryBelow) *
-                           static_cast<uint64_t>(max_recovery_per_epoch),
-                       kFullRecoveryAt - kNoRecoveryBelow);
-}
-
-bool HasNearFairInclusion(uint64_t inclusions, uint64_t opportunities) {
-  if (opportunities == 0 || inclusions == 0) {
-    return false;
-  }
-  return RoundedDivide(inclusions * 100, opportunities) >= 75;
-}
-
-std::vector<bool> SignerMask(const std::vector<int>& signers,
-                             int total_replicas) {
-  std::vector<bool> mask(std::max(total_replicas, 0), false);
-  for (int signer : signers) {
-    if (signer >= 1 && signer <= total_replicas) {
-      mask[signer - 1] = true;
+bool HasDirectStrongFaultEvidence(const std::vector<ReputationQcEvent>& window) {
+  for (const ReputationQcEvent& event : window) {
+    if (event.invalid_qc_proposal_artifact ||
+        event.invalid_tc_proposal_artifact) {
+      return true;
     }
   }
-  return mask;
+  return false;
 }
 
-int WeightedEffectiveDiversityScore(const std::vector<int>& signers,
-                                    const std::vector<int64_t>& weights,
-                                    int total_replicas) {
-  if (signers.empty() || total_replicas <= 0) {
-    return 0;
-  }
-  int64_t sum_weight = 0;
-  int64_t square_sum = 0;
-  for (int signer : signers) {
-    if (signer < 1 || signer > total_replicas ||
-        signer > static_cast<int>(weights.size())) {
+bool IsDirectStrongFaultEvidence(const ReputationQcEvent& event) {
+  return event.invalid_qc_proposal_artifact ||
+         event.invalid_tc_proposal_artifact;
+}
+
+bool HasDoubleProposalEvidence(const std::vector<ReputationQcEvent>& window) {
+  std::map<std::string, std::string> hash_by_key;
+  for (const ReputationQcEvent& event : window) {
+    if (!event.signed_proposal_artifact || !event.proposal_signature_verified ||
+        event.protocol_id.empty() || event.leader_id <= 0 ||
+        event.qc_view <= 0 || event.proposal_hash.empty()) {
       continue;
     }
-    const int64_t weight = std::max<int64_t>(1, weights[signer - 1]);
-    sum_weight += weight;
-    square_sum += weight * weight;
+    std::ostringstream key;
+    key << event.protocol_id << '|' << event.weight_version << '|'
+        << event.leader_id << '|' << event.qc_view << '|'
+        << event.proposal_slot;
+    auto [it, inserted] = hash_by_key.emplace(key.str(), event.proposal_hash);
+    if (!inserted && it->second != event.proposal_hash) {
+      return true;
+    }
   }
-  if (sum_weight <= 0 || square_sum <= 0) {
-    return 0;
-  }
-  const int target_effective_signers = std::max(
-      1, std::min(total_replicas, (total_replicas * 2) / 3 + 1));
-  const uint64_t numerator = static_cast<uint64_t>(sum_weight * sum_weight) * 100;
-  const uint64_t denominator = static_cast<uint64_t>(square_sum) *
-                               static_cast<uint64_t>(target_effective_signers);
-  return std::max(0, std::min(100, RoundedDivide(numerator, denominator)));
+  return false;
 }
 
-int WeightedSignerVariationScore(const std::vector<int>& previous_signers,
-                                 const std::vector<int>& current_signers,
-                                 const std::vector<int64_t>& weights,
-                                 int total_replicas) {
-  if (previous_signers.empty() || current_signers.empty() ||
-      total_replicas <= 0) {
-    return 100;
-  }
-  const std::vector<bool> previous = SignerMask(previous_signers, total_replicas);
-  const std::vector<bool> current = SignerMask(current_signers, total_replicas);
-  int64_t intersection_weight = 0;
-  int64_t union_weight = 0;
-  for (int i = 0; i < total_replicas; ++i) {
-    const bool in_previous = previous[i];
-    const bool in_current = current[i];
-    if (!in_previous && !in_current) {
+bool HasDoubleVoteEvidence(const std::vector<ReputationQcEvent>& window) {
+  std::map<std::string, std::string> hash_by_key;
+  for (const ReputationQcEvent& event : window) {
+    if (!event.signed_vote_artifact || !event.vote_signature_verified ||
+        event.protocol_id.empty() || event.vote_signer_id <= 0 ||
+        event.qc_view <= 0 || event.vote_proposal_hash.empty()) {
       continue;
     }
-    const int64_t weight = i < static_cast<int>(weights.size())
-                               ? std::max<int64_t>(1, weights[i])
-                               : 1;
-    union_weight += weight;
-    if (in_previous && in_current) {
-      intersection_weight += weight;
+    std::ostringstream key;
+    key << event.protocol_id << '|' << event.weight_version << '|'
+        << event.vote_signer_id << '|' << event.qc_view << '|'
+        << event.proposal_slot;
+    auto [it, inserted] = hash_by_key.emplace(key.str(),
+                                              event.vote_proposal_hash);
+    if (!inserted && it->second != event.vote_proposal_hash) {
+      return true;
     }
   }
-  if (union_weight <= 0) {
-    return 100;
-  }
-  const int repeated_score = RoundedDivide(
-      static_cast<uint64_t>(intersection_weight) * 100,
-      static_cast<uint64_t>(union_weight));
-  return std::max(0, std::min(100, 100 - repeated_score));
+  return false;
 }
 
-std::string MetricCanonical(const VoteScoreCandidate& candidate) {
-  std::ostringstream out;
-  out << "td_hotstuff_reputation_metric_v3|" << candidate.algorithm << '|'
-      << candidate.total_replicas << '|' << candidate.window_index << '|'
-      << candidate.start_qc_view << '|' << candidate.end_qc_view << '|'
-      << candidate.event_count;
-  for (const auto& validator : candidate.validators) {
-    out << '|' << validator.validator_id << ':' << validator.opportunities << ':'
-        << validator.inclusions << ':' << validator.vote_score << ':'
-        << validator.leader_certified_count << ':'
-        << validator.leader_opportunity_count << ':'
-        << validator.leader_score << ':'
-        << validator.leader_diversity_score << ':'
-        << validator.reputation_score << ':' << validator.decay_applied << ':'
-        << validator.recovery_credit << ':' << validator.bonus_credit << ':'
-        << validator.current_weight << ':' << validator.next_weight;
+bool HasWeightUpdateVoteEquivocationEvidence(
+    const std::vector<ReputationQcEvent>& window) {
+  std::map<std::string, std::string> digest_by_key;
+  for (const ReputationQcEvent& event : window) {
+    if (!event.weight_update_vote_artifact ||
+        !event.vote_signature_verified || event.vote_signer_id <= 0 ||
+        event.old_weight_root.empty() || event.candidate_digest.empty()) {
+      continue;
+    }
+    std::ostringstream key;
+    key << event.vote_signer_id << '|' << event.old_weight_root << '|'
+        << event.old_weight_version << '|' << event.activation_view;
+    auto [it, inserted] = digest_by_key.emplace(key.str(),
+                                                event.candidate_digest);
+    if (!inserted && it->second != event.candidate_digest) {
+      return true;
+    }
   }
-  return out.str();
+  return false;
 }
 
-std::string CandidateCanonicalFromParts(
-    int total_replicas, uint64_t window_index, int start_qc_view,
-    int end_qc_view, uint64_t event_count,
-    const std::string& old_weight_root_hex, uint64_t old_weight_version,
-    int activation_view, const std::string& metric_root_hex,
-    const std::string& next_weight_root_hex,
-    const std::vector<int64_t>& next_weights,
-    const std::string& leader_weight_root_hex,
-    uint64_t leader_params_version,
-    const std::string& leader_randomness_ref,
-    const std::vector<int64_t>& leader_weights) {
-  (void)window_index;
-  (void)event_count;
-  (void)metric_root_hex;
-  std::ostringstream out;
-  out << "td_hotstuff_reputation_candidate_v3|" << total_replicas << '|'
-      << start_qc_view << '|' << end_qc_view << '|' << old_weight_root_hex
-      << '|' << old_weight_version << '|' << activation_view << '|'
-      << next_weight_root_hex << '|' << leader_weight_root_hex << '|'
-      << leader_params_version << '|' << leader_randomness_ref;
-  for (size_t i = 0; i < next_weights.size(); ++i) {
-    out << '|' << (i + 1) << ':' << next_weights[i];
-  }
-  out << "|leader";
-  for (size_t i = 0; i < leader_weights.size(); ++i) {
-    out << '|' << (i + 1) << ':' << leader_weights[i];
-  }
-  return out.str();
+bool HasSparseStrongFaultEvidence(const std::vector<ReputationQcEvent>& window) {
+  return HasDirectStrongFaultEvidence(window) ||
+         HasDoubleProposalEvidence(window) ||
+         HasDoubleVoteEvidence(window) ||
+         HasWeightUpdateVoteEquivocationEvidence(window);
 }
 
 int ActivationViewForWindow(int end_qc_view, size_t epoch_views,
@@ -411,31 +372,250 @@ int ActivationViewForWindow(int end_qc_view, size_t epoch_views,
   if (end_qc_view <= 0 || epoch_views == 0) {
     return 0;
   }
-  const size_t delay = activation_epoch_delay;
   // A QC at the epoch boundary was formed under the old schedule. Make
   // activation the first following view so delayed boundary QCs verify against
   // the same schedule that produced them.
   return static_cast<int>(((static_cast<size_t>(end_qc_view) / epoch_views) +
-                           delay) * epoch_views + 1);
+                           activation_epoch_delay) *
+                              epoch_views +
+                          1);
+}
+
+ValidatorVoteScore ToTdValidator(
+    const reputation::ValidatorReputation& validator) {
+  ValidatorVoteScore td;
+  td.validator_id = validator.validator_id;
+  td.opportunities = validator.opportunities;
+  td.inclusions = validator.inclusions;
+  td.vote_score = validator.vote_score;
+  td.leader_certified_count = validator.leader_certified_count;
+  td.leader_opportunity_count = validator.leader_opportunity_count;
+  td.leader_score = validator.leader_score;
+  td.leader_diversity_score = validator.leader_diversity_score;
+  td.reputation_score = validator.reputation_score;
+  td.decay_applied = validator.decay_applied;
+  td.recovery_credit = validator.recovery_credit;
+  td.bonus_credit = validator.bonus_credit;
+  td.strong_fault_count = validator.strong_fault_count;
+  td.penalty_points = validator.penalty_points;
+  td.current_weight = validator.current_weight;
+  td.next_weight = validator.next_weight;
+  return td;
+}
+
+reputation::ValidatorReputation ToNeutralValidator(
+    const ValidatorVoteScore& validator) {
+  reputation::ValidatorReputation neutral;
+  neutral.validator_id = validator.validator_id;
+  neutral.opportunities = validator.opportunities;
+  neutral.inclusions = validator.inclusions;
+  neutral.vote_score = validator.vote_score;
+  neutral.leader_certified_count = validator.leader_certified_count;
+  neutral.leader_opportunity_count = validator.leader_opportunity_count;
+  neutral.leader_score = validator.leader_score;
+  neutral.leader_diversity_score = validator.leader_diversity_score;
+  neutral.reputation_score = validator.reputation_score;
+  neutral.decay_applied = validator.decay_applied;
+  neutral.recovery_credit = validator.recovery_credit;
+  neutral.bonus_credit = validator.bonus_credit;
+  neutral.strong_fault_count = validator.strong_fault_count;
+  neutral.penalty_points = validator.penalty_points;
+  neutral.current_weight = validator.current_weight;
+  neutral.next_weight = validator.next_weight;
+  return neutral;
+}
+
+VoteScoreCandidate ToTdCandidate(
+    const reputation::ReputationCandidate& candidate) {
+  VoteScoreCandidate td;
+  td.algorithm = candidate.algorithm;
+  td.local_node_id = candidate.local_node_id;
+  td.total_replicas = candidate.total_replicas;
+  td.window_index = candidate.window_index;
+  td.start_qc_view = candidate.start_view;
+  td.end_qc_view = candidate.end_view;
+  td.event_count = candidate.event_count;
+  td.old_weight_root_hex = candidate.old_weight_root_hex;
+  td.old_weight_version = candidate.old_weight_version;
+  td.activation_view = candidate.activation_view;
+  td.next_weights = candidate.next_weights;
+  td.strong_faults = candidate.strong_faults;
+  td.metric_root_hex = candidate.metric_root_hex;
+  td.reputation_root_hex = candidate.reputation_root_hex;
+  td.strong_fault_root_hex = candidate.strong_fault_root_hex;
+  td.penalty_root_hex = candidate.penalty_root_hex;
+  td.next_weight_root_hex = WeightRootHex(td.next_weights);
+  td.validators.reserve(candidate.validators.size());
+  for (const auto& validator : candidate.validators) {
+    td.validators.push_back(ToTdValidator(validator));
+  }
+  td.candidate_digest_hex = VoteScoreCandidateDigest(
+      td.total_replicas, td.window_index, td.start_qc_view, td.end_qc_view,
+      td.event_count, td.old_weight_root_hex, td.old_weight_version,
+      td.activation_view, td.metric_root_hex, td.next_weight_root_hex,
+      td.next_weights, /*leader_weight_root_hex=*/"",
+      /*leader_params_version=*/0, /*leader_randomness_ref=*/"",
+      /*leader_weights=*/{}, td.reputation_root_hex,
+      td.strong_fault_root_hex, td.penalty_root_hex);
+  return td;
+}
+
+reputation::ReputationCandidate ToNeutralCandidate(
+    const VoteScoreCandidate& candidate) {
+  reputation::ReputationCandidate neutral;
+  neutral.algorithm = candidate.algorithm;
+  neutral.local_node_id = candidate.local_node_id;
+  neutral.total_replicas = candidate.total_replicas;
+  neutral.window_index = candidate.window_index;
+  neutral.start_view = candidate.start_qc_view;
+  neutral.end_view = candidate.end_qc_view;
+  neutral.event_count = candidate.event_count;
+  neutral.old_weight_root_hex = candidate.old_weight_root_hex;
+  neutral.old_weight_version = candidate.old_weight_version;
+  neutral.activation_view = candidate.activation_view;
+  neutral.next_weights = candidate.next_weights;
+  neutral.strong_faults = candidate.strong_faults;
+  neutral.metric_root_hex = candidate.metric_root_hex;
+  neutral.reputation_root_hex = candidate.reputation_root_hex;
+  neutral.strong_fault_root_hex = candidate.strong_fault_root_hex;
+  neutral.penalty_root_hex = candidate.penalty_root_hex;
+  neutral.next_weight_root_hex = candidate.next_weight_root_hex;
+  neutral.candidate_digest_hex = candidate.candidate_digest_hex;
+  neutral.validators.reserve(candidate.validators.size());
+  for (const auto& validator : candidate.validators) {
+    neutral.validators.push_back(ToNeutralValidator(validator));
+  }
+  return neutral;
 }
 
 }  // namespace
 
 std::vector<int> DecodeSignerBitmap(const std::string& signer_bitmap,
                                     int total_replicas) {
-  std::vector<int> signers;
-  for (int validator_id = 1; validator_id <= total_replicas; ++validator_id) {
-    const int bit = validator_id - 1;
-    const size_t byte_index = static_cast<size_t>(bit / 8);
-    if (byte_index >= signer_bitmap.size()) {
-      continue;
-    }
-    const unsigned char byte = static_cast<unsigned char>(signer_bitmap[byte_index]);
-    if ((byte & (1 << (bit % 8))) != 0) {
-      signers.push_back(validator_id);
-    }
+  return reputation::DecodeSignerBitmap(signer_bitmap, total_replicas);
+}
+
+reputation::MetricEvidence ToMetricEvidence(const ReputationQcEvent& event) {
+  reputation::MetricEvidence evidence;
+  evidence.view_or_round = event.qc_view;
+  evidence.leader_id = event.leader_id;
+  evidence.collector_id = event.qc_collector_id;
+  evidence.artifact_digest = event.qc_hash;
+  evidence.signer_bitmap = event.signer_bitmap;
+  evidence.available_signer_bitmap = event.available_signer_bitmap;
+  evidence.active_weight_root = event.active_weight_root;
+  evidence.weight_version = event.weight_version;
+  evidence.leader_eligible_min_weight = event.leader_eligible_min_weight;
+  if (!event.qc_hash.empty()) {
+    evidence.artifact_family = reputation::ArtifactFamily::kQc;
+    evidence.outcome_class = reputation::OutcomeClass::kCertified;
+  } else if (event.leader_opportunity) {
+    evidence.artifact_family = reputation::ArtifactFamily::kTimeout;
+    evidence.outcome_class = reputation::OutcomeClass::kTimeoutOrViewChange;
   }
-  return signers;
+  return evidence;
+}
+
+reputation::SignedProposalEvidence ToSignedProposalEvidence(
+    const ReputationQcEvent& event) {
+  reputation::SignedProposalEvidence artifact;
+  artifact.protocol_id = event.protocol_id;
+  artifact.leader_id = event.leader_id;
+  artifact.view_or_round = event.qc_view;
+  artifact.slot_or_height = event.proposal_slot;
+  artifact.proposal_hash = event.proposal_hash;
+  artifact.signature_verified = event.proposal_signature_verified;
+  artifact.active_weight_root = event.active_weight_root;
+  artifact.weight_version = event.weight_version;
+  return artifact;
+}
+
+reputation::SignedVoteEvidence ToSignedVoteEvidence(
+    const ReputationQcEvent& event) {
+  reputation::SignedVoteEvidence artifact;
+  artifact.protocol_id = event.protocol_id;
+  artifact.signer_id = event.vote_signer_id;
+  artifact.view_or_round = event.qc_view;
+  artifact.slot_or_height = event.proposal_slot;
+  artifact.proposal_hash = event.vote_proposal_hash;
+  artifact.signature_verified = event.vote_signature_verified;
+  artifact.active_weight_root = event.active_weight_root;
+  artifact.weight_version = event.weight_version;
+  return artifact;
+}
+
+reputation::InvalidQcProposalEvidence ToInvalidQcProposalEvidence(
+    const ReputationQcEvent& event) {
+  reputation::InvalidQcProposalEvidence artifact;
+  artifact.protocol_id = event.protocol_id;
+  artifact.leader_id = event.leader_id;
+  artifact.view_or_round = event.qc_view;
+  artifact.slot_or_height = event.proposal_slot;
+  artifact.proposal_hash = event.proposal_hash;
+  artifact.proposal_signature_verified = event.proposal_signature_verified;
+  artifact.qc_verified = event.qc_verified;
+  artifact.invalid_reason = event.invalid_reason;
+  artifact.active_weight_root = event.active_weight_root;
+  artifact.weight_version = event.weight_version;
+  return artifact;
+}
+
+reputation::SignedWeightUpdateVoteEvidence ToSignedWeightUpdateVoteEvidence(
+    const ReputationQcEvent& event) {
+  reputation::SignedWeightUpdateVoteEvidence artifact;
+  artifact.protocol_id = event.protocol_id;
+  artifact.validator_id = event.vote_signer_id;
+  artifact.old_weight_root = event.old_weight_root;
+  artifact.old_weight_version = event.old_weight_version;
+  artifact.activation_view = event.activation_view;
+  artifact.candidate_digest = event.candidate_digest;
+  artifact.signature_verified = event.vote_signature_verified;
+  artifact.active_weight_root = event.active_weight_root;
+  artifact.weight_version = event.weight_version;
+  return artifact;
+}
+
+reputation::SignedTimeoutVoteEvidence ToSignedTimeoutVoteEvidence(
+    const ReputationQcEvent& event) {
+  reputation::SignedTimeoutVoteEvidence artifact;
+  artifact.protocol_id = event.protocol_id;
+  artifact.signer_id = event.vote_signer_id;
+  artifact.view_or_round = event.qc_view;
+  artifact.high_qc_digest = event.high_qc_digest;
+  artifact.signature_verified = event.vote_signature_verified;
+  artifact.active_weight_root = event.active_weight_root;
+  artifact.weight_version = event.weight_version;
+  return artifact;
+}
+
+reputation::InvalidTcProposalEvidence ToInvalidTcProposalEvidence(
+    const ReputationQcEvent& event) {
+  reputation::InvalidTcProposalEvidence artifact;
+  artifact.protocol_id = event.protocol_id;
+  artifact.leader_id = event.leader_id;
+  artifact.view_or_round = event.qc_view;
+  artifact.slot_or_height = event.proposal_slot;
+  artifact.proposal_hash = event.proposal_hash;
+  artifact.proposal_signature_verified = event.proposal_signature_verified;
+  artifact.timeout_cert_verified = event.timeout_cert_verified;
+  artifact.invalid_reason = event.invalid_reason;
+  artifact.active_weight_root = event.active_weight_root;
+  artifact.weight_version = event.weight_version;
+  return artifact;
+}
+
+reputation::VerifiedQcArtifactEvidence ToVerifiedQcArtifactEvidence(
+    const ReputationQcEvent& event) {
+  reputation::VerifiedQcArtifactEvidence artifact;
+  artifact.protocol_id = event.protocol_id;
+  artifact.view_or_round = event.qc_view;
+  artifact.slot_or_height = event.proposal_slot;
+  artifact.qc_hash = event.qc_hash;
+  artifact.signer_bitmap = event.signer_bitmap;
+  artifact.qc_verified = event.qc_verified;
+  artifact.active_weight_root = event.active_weight_root;
+  artifact.weight_version = event.weight_version;
+  return artifact;
 }
 
 VoteScoreCandidate ComputeBayesianReputationCandidate(
@@ -457,196 +637,66 @@ VoteScoreCandidate ComputeBayesianReputationCandidateWithConfig(
     const ReputationRecoveryConfig& recovery_config,
     const std::string& old_weight_root_hex, uint64_t old_weight_version,
     int activation_view) {
-  VoteScoreCandidate candidate;
-  candidate.algorithm = kAlgorithmBayesV3;
-  candidate.local_node_id = node_id;
-  candidate.total_replicas = total_replicas;
-  candidate.window_index = window_index;
-  candidate.event_count = events.size();
-  if (!events.empty()) {
-    candidate.start_qc_view = events.front().qc_view;
-    candidate.end_qc_view = events.back().qc_view;
-  }
-
-  const std::vector<int64_t> weights = NormalizeWeights(current_weights, total_replicas);
-  candidate.old_weight_root_hex = old_weight_root_hex.empty()
-                                      ? WeightRootHex(weights)
-                                      : old_weight_root_hex;
-  candidate.old_weight_version = old_weight_version;
-  candidate.activation_view = activation_view;
-  candidate.validators.resize(std::max(total_replicas, 0));
-  for (int i = 0; i < total_replicas; ++i) {
-    ValidatorVoteScore& validator = candidate.validators[i];
-    validator.validator_id = i + 1;
-    validator.current_weight = weights[i];
-    validator.next_weight = weights[i];
-  }
-
-  std::vector<uint64_t> diversity_sum(std::max(total_replicas, 0), 0);
-  std::vector<uint64_t> diversity_count(std::max(total_replicas, 0), 0);
-  std::vector<uint64_t> variation_sum(std::max(total_replicas, 0), 0);
-  std::vector<uint64_t> variation_count(std::max(total_replicas, 0), 0);
-  std::vector<std::vector<int>> previous_signers_by_leader(
-      std::max(total_replicas, 0));
-
-  std::vector<ReputationQcEvent> ordered_events = events;
-  std::sort(ordered_events.begin(), ordered_events.end(),
-            [](const ReputationQcEvent& lhs, const ReputationQcEvent& rhs) {
-              return lhs.qc_view < rhs.qc_view;
-            });
-
-  uint64_t selected_signer_slots = 0;
-  uint64_t qc_event_count = 0;
-  uint64_t certified_leader_event_count = 0;
-  bool has_explicit_leader_opportunities = false;
-  std::set<std::pair<int, std::string>> seen_qcs;
-  for (const ReputationQcEvent& event : ordered_events) {
-    std::vector<int> signers;
-    const int leader = event.leader_id;
-    if (event.leader_opportunity && leader >= 1 && leader <= total_replicas) {
-      has_explicit_leader_opportunities = true;
-      ++candidate.validators[leader - 1].leader_opportunity_count;
-    }
-
-    if (!event.qc_hash.empty()) {
-      if (!seen_qcs.insert({event.qc_view, event.qc_hash}).second) {
-        continue;
-      }
-      signers = DecodeSignerBitmap(event.signer_bitmap, total_replicas);
-      ++qc_event_count;
-      selected_signer_slots += signers.size();
-      for (int signer : signers) {
-        if (signer >= 1 && signer <= total_replicas) {
-          ++candidate.validators[signer - 1].inclusions;
-        }
-      }
-      if (leader >= 1 && leader <= total_replicas) {
-        ++certified_leader_event_count;
-        ValidatorVoteScore& leader_score = candidate.validators[leader - 1];
-        ++leader_score.leader_certified_count;
-        diversity_sum[leader - 1] += WeightedEffectiveDiversityScore(
-            signers, weights, total_replicas);
-        ++diversity_count[leader - 1];
-        if (!previous_signers_by_leader[leader - 1].empty()) {
-          variation_sum[leader - 1] += WeightedSignerVariationScore(
-              previous_signers_by_leader[leader - 1], signers, weights,
-              total_replicas);
-          ++variation_count[leader - 1];
-        }
-        previous_signers_by_leader[leader - 1] = std::move(signers);
-      }
-    }
-  }
-
-  const uint64_t fair_opportunities = FairExpectedSignerOpportunities(
-      selected_signer_slots, total_replicas, qc_event_count);
-  (void)has_explicit_leader_opportunities;
-  const bool has_enough_decay_evidence =
-      fair_opportunities >= recovery_config.min_decay_opportunities;
-  for (ValidatorVoteScore& validator : candidate.validators) {
-    validator.opportunities = fair_opportunities;
-  }
-  int64_t total_current_weight = 0;
-  for (const ValidatorVoteScore& validator : candidate.validators) {
-    total_current_weight += validator.current_weight;
-  }
-  const int64_t mean_current_weight =
-      candidate.validators.empty()
-          ? 0
-          : RoundedDivide(static_cast<uint64_t>(total_current_weight),
-                          candidate.validators.size());
-
-  for (ValidatorVoteScore& validator : candidate.validators) {
-    validator.vote_score = VoteScore(validator.inclusions,
-                                     validator.opportunities);
-    const int idx = validator.validator_id - 1;
-    const int diversity_score =
-        idx >= 0 && idx < static_cast<int>(diversity_count.size()) &&
-                diversity_count[idx] > 0
-            ? RoundedDivide(diversity_sum[idx], diversity_count[idx])
-            : 100;
-    const bool has_repeated_leader_signer_group =
-        idx >= 0 && idx < static_cast<int>(variation_count.size()) &&
-        variation_count[idx] > 0;
-    const int variation_score =
-        has_repeated_leader_signer_group
-            ? RoundedDivide(variation_sum[idx], variation_count[idx])
-            : 100;
-    if (!has_repeated_leader_signer_group) {
-      validator.leader_diversity_score = 100;
-    } else if (diversity_score >= 90) {
-      validator.leader_diversity_score = diversity_score;
+  std::vector<reputation::MetricEvidence> evidence;
+  std::vector<reputation::SignedProposalEvidence> signed_proposal_evidence;
+  std::vector<reputation::SignedVoteEvidence> signed_vote_evidence;
+  std::vector<reputation::InvalidQcProposalEvidence>
+      invalid_qc_proposal_evidence;
+  std::vector<reputation::SignedWeightUpdateVoteEvidence>
+      signed_weight_update_vote_evidence;
+  std::vector<reputation::SignedTimeoutVoteEvidence>
+      signed_timeout_vote_evidence;
+  std::vector<reputation::InvalidTcProposalEvidence>
+      invalid_tc_proposal_evidence;
+  std::vector<reputation::VerifiedQcArtifactEvidence>
+      verified_qc_artifact_evidence;
+  evidence.reserve(events.size());
+  for (const ReputationQcEvent& event : events) {
+    if (event.signed_proposal_artifact) {
+      signed_proposal_evidence.push_back(ToSignedProposalEvidence(event));
+    } else if (event.signed_vote_artifact) {
+      signed_vote_evidence.push_back(ToSignedVoteEvidence(event));
+    } else if (event.invalid_qc_proposal_artifact) {
+      invalid_qc_proposal_evidence.push_back(ToInvalidQcProposalEvidence(event));
+    } else if (event.weight_update_vote_artifact) {
+      signed_weight_update_vote_evidence.push_back(
+          ToSignedWeightUpdateVoteEvidence(event));
+    } else if (event.timeout_vote_artifact) {
+      signed_timeout_vote_evidence.push_back(ToSignedTimeoutVoteEvidence(event));
+    } else if (event.invalid_tc_proposal_artifact) {
+      invalid_tc_proposal_evidence.push_back(ToInvalidTcProposalEvidence(event));
+    } else if (event.verified_qc_artifact) {
+      verified_qc_artifact_evidence.push_back(ToVerifiedQcArtifactEvidence(event));
     } else {
-      validator.leader_diversity_score = std::max(
-          0, std::min(100,
-                      RoundedDivide(diversity_score + variation_score, 2)));
+      evidence.push_back(ToMetricEvidence(event));
     }
-    const uint64_t leader_opportunities =
-        validator.leader_opportunity_count;
-    validator.leader_score = LeaderCertifiedScore(
-        validator.leader_certified_count, leader_opportunities);
-
-    int recovery_score = validator.vote_score;
-    if (validator.inclusions > 0) {
-      recovery_score = std::max(recovery_score, 67);
-    }
-    const bool has_strong_leader_failure_signal =
-        leader_opportunities > 0 && validator.leader_certified_count == 0 &&
-        validator.leader_score < 50;
-    if (recovery_config.leader_recovery_enabled &&
-        (leader_opportunities >= recovery_config.min_leader_opportunities ||
-         has_strong_leader_failure_signal)) {
-      recovery_score = std::min(recovery_score, validator.leader_score);
-    }
-    const bool near_fair_vote = HasNearFairInclusion(
-        validator.inclusions, validator.opportunities);
-    const int64_t available_decay =
-        std::max<int64_t>(0,
-                          validator.current_weight -
-                              recovery_config.min_weight);
-    validator.decay_applied =
-        has_enough_decay_evidence
-            ? static_cast<int>(std::min<int64_t>(
-                  available_decay, recovery_config.decay_per_epoch))
-            : 0;
-    validator.recovery_credit = std::min(
-        validator.decay_applied,
-        RecoveryCreditForScore(recovery_score,
-                               recovery_config.max_recovery_per_epoch));
-    const bool earns_bonus =
-        has_enough_decay_evidence &&
-        ((recovery_score >= 95 && validator.vote_score >= 95) ||
-         (near_fair_vote && recovery_score >= 67 &&
-          validator.current_weight < mean_current_weight));
-    validator.bonus_credit =
-        earns_bonus ? recovery_config.bonus_per_epoch : 0;
-    validator.reputation_score =
-        validator.recovery_credit >= validator.decay_applied &&
-                validator.bonus_credit > 0
-            ? 100
-            : std::max(0, std::min(100, recovery_score));
-    validator.next_weight = ClampWeight(
-        validator.current_weight - validator.decay_applied +
-            validator.recovery_credit + validator.bonus_credit,
-        recovery_config);
   }
-
-  RecomputeVoteScoreCandidateRoots(&candidate);
-  return candidate;
+  const std::vector<int64_t> weights =
+      NormalizeWeights(current_weights, total_replicas);
+  const std::string effective_old_weight_root =
+      old_weight_root_hex.empty() ? WeightRootHex(weights) : old_weight_root_hex;
+  return ToTdCandidate(reputation::ComputeReputationCandidate(
+      node_id, total_replicas, window_index, evidence, weights,
+      ToNeutralConfig(recovery_config), effective_old_weight_root,
+      old_weight_version, activation_view, signed_proposal_evidence,
+      signed_vote_evidence, invalid_qc_proposal_evidence,
+      signed_weight_update_vote_evidence, signed_timeout_vote_evidence,
+      invalid_tc_proposal_evidence, verified_qc_artifact_evidence));
 }
 
 void RecomputeVoteScoreCandidateRoots(VoteScoreCandidate* candidate) {
   if (candidate == nullptr) {
     return;
   }
-  candidate->next_weights.clear();
-  candidate->next_weights.reserve(candidate->validators.size());
-  for (const ValidatorVoteScore& validator : candidate->validators) {
-    candidate->next_weights.push_back(validator.next_weight);
-  }
-  candidate->leader_weights.clear();
-  candidate->metric_root_hex = HashHex(MetricCanonical(*candidate));
+  reputation::ReputationCandidate neutral = ToNeutralCandidate(*candidate);
+  reputation::RecomputeReputationCandidateRoots(&neutral);
+  candidate->next_weights = neutral.next_weights;
+  candidate->metric_root_hex = neutral.metric_root_hex;
+  candidate->reputation_root_hex = neutral.reputation_root_hex;
+  candidate->strong_fault_root_hex = neutral.strong_fault_root_hex;
+  candidate->penalty_root_hex = neutral.penalty_root_hex;
   candidate->next_weight_root_hex = WeightRootHex(candidate->next_weights);
+  candidate->leader_weights.clear();
   candidate->leader_weight_root_hex.clear();
   candidate->leader_params_version = 0;
   candidate->leader_randomness_ref.clear();
@@ -656,9 +706,10 @@ void RecomputeVoteScoreCandidateRoots(VoteScoreCandidate* candidate) {
       candidate->event_count, candidate->old_weight_root_hex,
       candidate->old_weight_version, candidate->activation_view,
       candidate->metric_root_hex, candidate->next_weight_root_hex,
-      candidate->next_weights, candidate->leader_weight_root_hex,
-      candidate->leader_params_version, candidate->leader_randomness_ref,
-      candidate->leader_weights);
+      candidate->next_weights, /*leader_weight_root_hex=*/"",
+      /*leader_params_version=*/0, /*leader_randomness_ref=*/"",
+      /*leader_weights=*/{}, candidate->reputation_root_hex,
+      candidate->strong_fault_root_hex, candidate->penalty_root_hex);
 }
 
 std::string VoteScoreCandidateDigest(
@@ -671,17 +722,24 @@ std::string VoteScoreCandidateDigest(
     const std::string& leader_weight_root_hex,
     uint64_t leader_params_version,
     const std::string& leader_randomness_ref,
-    const std::vector<int64_t>& leader_weights) {
-  return HashHex(CandidateCanonicalFromParts(
+    const std::vector<int64_t>& leader_weights,
+    const std::string& reputation_root_hex,
+    const std::string& strong_fault_root_hex,
+    const std::string& penalty_root_hex) {
+  (void)leader_weight_root_hex;
+  (void)leader_params_version;
+  (void)leader_randomness_ref;
+  (void)leader_weights;
+  return reputation::ReputationCandidateDigest(
       total_replicas, window_index, start_qc_view, end_qc_view, event_count,
       old_weight_root_hex, old_weight_version, activation_view, metric_root_hex,
-      next_weight_root_hex, next_weights, leader_weight_root_hex,
-      leader_params_version, leader_randomness_ref, leader_weights));
+      reputation_root_hex, next_weight_root_hex, next_weights,
+      strong_fault_root_hex, penalty_root_hex);
 }
 
 std::string VoteScoreCandidateToJson(const VoteScoreCandidate& candidate) {
   std::ostringstream out;
-  out << "{\"schema\":\"td_hotstuff_reputation_bayes_v3\""
+  out << "{\"schema\":\"td_hotstuff_reputation_bayes_v4\""
       << ",\"algorithm\":\"" << candidate.algorithm << "\""
       << ",\"local_node_id\":" << candidate.local_node_id
       << ",\"total_replicas\":" << candidate.total_replicas
@@ -693,6 +751,9 @@ std::string VoteScoreCandidateToJson(const VoteScoreCandidate& candidate) {
       << ",\"old_weight_version\":" << candidate.old_weight_version
       << ",\"activation_view\":" << candidate.activation_view
       << ",\"metric_root\":\"" << candidate.metric_root_hex << "\""
+      << ",\"reputation_root\":\"" << candidate.reputation_root_hex << "\""
+      << ",\"strong_fault_root\":\"" << candidate.strong_fault_root_hex << "\""
+      << ",\"penalty_root\":\"" << candidate.penalty_root_hex << "\""
       << ",\"next_weight_root\":\"" << candidate.next_weight_root_hex << "\""
       << ",\"candidate_digest\":\"" << candidate.candidate_digest_hex << "\""
       << ",\"next_weights\":[";
@@ -723,6 +784,8 @@ std::string VoteScoreCandidateToJson(const VoteScoreCandidate& candidate) {
         << ",\"decay_applied\":" << validator.decay_applied
         << ",\"recovery_credit\":" << validator.recovery_credit
         << ",\"bonus_credit\":" << validator.bonus_credit
+        << ",\"strong_fault_count\":" << validator.strong_fault_count
+        << ",\"penalty_points\":" << validator.penalty_points
         << ",\"current_weight\":" << validator.current_weight
         << ",\"next_weight\":" << validator.next_weight << '}';
   }
@@ -749,7 +812,8 @@ AsyncVoteScoreReputationPlugin::AsyncVoteScoreReputationPlugin(
           MinCandidateQcCountFromEnv(window_size_, epoch_views_)),
       queue_capacity_(queue_capacity == 0 ? kDefaultQueueCapacity
                                           : queue_capacity),
-      recovery_config_(RecoveryConfigFromEnv(max_delta)) {}
+      recovery_config_(RecoveryConfigFromEnv(max_delta)),
+      cumulative_strong_fault_counts_(std::max(total_replicas, 0), 0) {}
 
 AsyncVoteScoreReputationPlugin::~AsyncVoteScoreReputationPlugin() { Stop(); }
 
@@ -823,7 +887,8 @@ bool AsyncVoteScoreReputationPlugin::RecordQc(
 bool AsyncVoteScoreReputationPlugin::RecordQc(
     int qc_view, const std::string& qc_hash,
     const std::string& signer_bitmap, int leader_id, uint64_t weight_version,
-    std::string active_weight_root, int64_t leader_eligible_min_weight) {
+    std::string active_weight_root, int64_t leader_eligible_min_weight,
+    std::string available_signer_bitmap, int qc_collector_id) {
   if (!enabled_ || qc_hash.empty()) {
     return false;
   }
@@ -831,7 +896,9 @@ bool AsyncVoteScoreReputationPlugin::RecordQc(
   event.qc_view = qc_view;
   event.qc_hash = qc_hash;
   event.signer_bitmap = signer_bitmap;
+  event.available_signer_bitmap = std::move(available_signer_bitmap);
   event.leader_id = leader_id;
+  event.qc_collector_id = qc_collector_id;
   event.weight_version = weight_version;
   event.active_weight_root = std::move(active_weight_root);
   event.leader_eligible_min_weight = leader_eligible_min_weight;
@@ -846,7 +913,6 @@ bool AsyncVoteScoreReputationPlugin::RecordQc(
     return false;
   }
   queue_.push_back(std::move(event));
-  // The plugin worker drains in batches; shutdown still uses cv_ to wake it.
   return true;
 }
 
@@ -871,6 +937,236 @@ bool AsyncVoteScoreReputationPlugin::RecordLeaderOpportunity(
   }
   if (queue_.size() >= queue_capacity_) {
     DropRecord(view);
+    return false;
+  }
+  queue_.push_back(std::move(event));
+  return true;
+}
+
+bool AsyncVoteScoreReputationPlugin::RecordSignedProposalArtifact(
+    const reputation::SignedProposalEvidence& artifact) {
+  if (!enabled_ || !recovery_config_.strong_fault_enabled ||
+      !recovery_config_.double_proposal_detection_enabled ||
+      artifact.protocol_id.empty() || artifact.leader_id <= 0 ||
+      artifact.view_or_round <= 0 || artifact.proposal_hash.empty()) {
+    return false;
+  }
+  ReputationQcEvent event;
+  event.signed_proposal_artifact = true;
+  event.protocol_id = artifact.protocol_id;
+  event.qc_view = artifact.view_or_round;
+  event.leader_id = artifact.leader_id;
+  event.proposal_slot = artifact.slot_or_height;
+  event.proposal_hash = artifact.proposal_hash;
+  event.proposal_signature_verified = artifact.signature_verified;
+  event.weight_version = artifact.weight_version;
+  event.active_weight_root = artifact.active_weight_root;
+
+  std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  if (queue_.size() >= queue_capacity_) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  queue_.push_back(std::move(event));
+  return true;
+}
+
+bool AsyncVoteScoreReputationPlugin::RecordSignedVoteArtifact(
+    const reputation::SignedVoteEvidence& artifact) {
+  if (!enabled_ || !recovery_config_.strong_fault_enabled ||
+      !recovery_config_.double_vote_detection_enabled ||
+      artifact.protocol_id.empty() || artifact.signer_id <= 0 ||
+      artifact.view_or_round <= 0 || artifact.proposal_hash.empty()) {
+    return false;
+  }
+  ReputationQcEvent event;
+  event.signed_vote_artifact = true;
+  event.protocol_id = artifact.protocol_id;
+  event.qc_view = artifact.view_or_round;
+  event.proposal_slot = artifact.slot_or_height;
+  event.vote_signer_id = artifact.signer_id;
+  event.vote_proposal_hash = artifact.proposal_hash;
+  event.vote_signature_verified = artifact.signature_verified;
+  event.weight_version = artifact.weight_version;
+  event.active_weight_root = artifact.active_weight_root;
+
+  std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  if (queue_.size() >= queue_capacity_) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  queue_.push_back(std::move(event));
+  return true;
+}
+
+bool AsyncVoteScoreReputationPlugin::RecordInvalidQcProposalArtifact(
+    const reputation::InvalidQcProposalEvidence& artifact) {
+  if (!enabled_ || !recovery_config_.strong_fault_enabled ||
+      !recovery_config_.invalid_qc_proposal_detection_enabled ||
+      artifact.protocol_id.empty() || artifact.leader_id <= 0 ||
+      artifact.view_or_round <= 0 || artifact.proposal_hash.empty()) {
+    return false;
+  }
+  ReputationQcEvent event;
+  event.invalid_qc_proposal_artifact = true;
+  event.protocol_id = artifact.protocol_id;
+  event.qc_view = artifact.view_or_round;
+  event.leader_id = artifact.leader_id;
+  event.proposal_slot = artifact.slot_or_height;
+  event.proposal_hash = artifact.proposal_hash;
+  event.proposal_signature_verified = artifact.proposal_signature_verified;
+  event.qc_verified = artifact.qc_verified;
+  event.invalid_reason = artifact.invalid_reason;
+  event.weight_version = artifact.weight_version;
+  event.active_weight_root = artifact.active_weight_root;
+
+  std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  if (queue_.size() >= queue_capacity_) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  queue_.push_back(std::move(event));
+  return true;
+}
+
+bool AsyncVoteScoreReputationPlugin::RecordSignedWeightUpdateVoteArtifact(
+    const reputation::SignedWeightUpdateVoteEvidence& artifact) {
+  if (!enabled_ || !recovery_config_.strong_fault_enabled ||
+      !recovery_config_.weight_update_vote_equivocation_detection_enabled ||
+      artifact.protocol_id.empty() || artifact.validator_id <= 0 ||
+      artifact.old_weight_root.empty() || artifact.activation_view <= 0 ||
+      artifact.candidate_digest.empty()) {
+    return false;
+  }
+  ReputationQcEvent event;
+  event.weight_update_vote_artifact = true;
+  event.protocol_id = artifact.protocol_id;
+  event.qc_view = artifact.activation_view;
+  event.vote_signer_id = artifact.validator_id;
+  event.old_weight_root = artifact.old_weight_root;
+  event.old_weight_version = artifact.old_weight_version;
+  event.activation_view = artifact.activation_view;
+  event.candidate_digest = artifact.candidate_digest;
+  event.vote_signature_verified = artifact.signature_verified;
+  event.weight_version = artifact.weight_version;
+  event.active_weight_root = artifact.active_weight_root;
+
+  std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    DropRecord(artifact.activation_view);
+    return false;
+  }
+  if (queue_.size() >= queue_capacity_) {
+    DropRecord(artifact.activation_view);
+    return false;
+  }
+  queue_.push_back(std::move(event));
+  return true;
+}
+
+bool AsyncVoteScoreReputationPlugin::RecordSignedTimeoutVoteArtifact(
+    const reputation::SignedTimeoutVoteEvidence& artifact) {
+  if (!enabled_ || !recovery_config_.strong_fault_enabled ||
+      !recovery_config_.timeout_vote_equivocation_detection_enabled ||
+      artifact.protocol_id.empty() || artifact.signer_id <= 0 ||
+      artifact.view_or_round <= 0 || artifact.high_qc_digest.empty()) {
+    return false;
+  }
+  ReputationQcEvent event;
+  event.timeout_vote_artifact = true;
+  event.protocol_id = artifact.protocol_id;
+  event.qc_view = artifact.view_or_round;
+  event.vote_signer_id = artifact.signer_id;
+  event.high_qc_digest = artifact.high_qc_digest;
+  event.vote_signature_verified = artifact.signature_verified;
+  event.weight_version = artifact.weight_version;
+  event.active_weight_root = artifact.active_weight_root;
+
+  std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  if (queue_.size() >= queue_capacity_) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  queue_.push_back(std::move(event));
+  return true;
+}
+
+bool AsyncVoteScoreReputationPlugin::RecordInvalidTcProposalArtifact(
+    const reputation::InvalidTcProposalEvidence& artifact) {
+  if (!enabled_ || !recovery_config_.strong_fault_enabled ||
+      !recovery_config_.invalid_tc_proposal_detection_enabled ||
+      artifact.protocol_id.empty() || artifact.leader_id <= 0 ||
+      artifact.view_or_round <= 0 || artifact.proposal_hash.empty()) {
+    return false;
+  }
+  ReputationQcEvent event;
+  event.invalid_tc_proposal_artifact = true;
+  event.protocol_id = artifact.protocol_id;
+  event.qc_view = artifact.view_or_round;
+  event.leader_id = artifact.leader_id;
+  event.proposal_slot = artifact.slot_or_height;
+  event.proposal_hash = artifact.proposal_hash;
+  event.proposal_signature_verified = artifact.proposal_signature_verified;
+  event.timeout_cert_verified = artifact.timeout_cert_verified;
+  event.invalid_reason = artifact.invalid_reason;
+  event.weight_version = artifact.weight_version;
+  event.active_weight_root = artifact.active_weight_root;
+
+  std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  if (queue_.size() >= queue_capacity_) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  queue_.push_back(std::move(event));
+  return true;
+}
+
+bool AsyncVoteScoreReputationPlugin::RecordVerifiedQcArtifact(
+    const reputation::VerifiedQcArtifactEvidence& artifact) {
+  if (!enabled_ || !recovery_config_.strong_fault_enabled ||
+      !recovery_config_.conflicting_qc_detection_enabled ||
+      artifact.protocol_id.empty() || artifact.view_or_round <= 0 ||
+      artifact.qc_hash.empty() || artifact.signer_bitmap.empty()) {
+    return false;
+  }
+  ReputationQcEvent event;
+  event.verified_qc_artifact = true;
+  event.protocol_id = artifact.protocol_id;
+  event.qc_view = artifact.view_or_round;
+  event.proposal_slot = artifact.slot_or_height;
+  event.qc_hash = artifact.qc_hash;
+  event.signer_bitmap = artifact.signer_bitmap;
+  event.qc_verified = artifact.qc_verified;
+  event.weight_version = artifact.weight_version;
+  event.active_weight_root = artifact.active_weight_root;
+
+  std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    DropRecord(artifact.view_or_round);
+    return false;
+  }
+  if (queue_.size() >= queue_capacity_) {
+    DropRecord(artifact.view_or_round);
     return false;
   }
   queue_.push_back(std::move(event));
@@ -929,6 +1225,16 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
       old_weight_root_hex = old_weight_root_hex_;
       old_weight_version = old_weight_version_;
     }
+    if (window.empty() && recovery_config_.strong_fault_enabled &&
+        HasSparseStrongFaultEvidence(current_window_)) {
+      window = std::move(current_window_);
+      current_window_.clear();
+      current_window_qc_count_ = 0;
+      window_index = window_index_++;
+      current_weights = current_weights_;
+      old_weight_root_hex = old_weight_root_hex_;
+      old_weight_version = old_weight_version_;
+    }
   }
   FlushWindow(output, std::move(window), window_index, std::move(current_weights),
               std::move(old_weight_root_hex), old_weight_version);
@@ -948,22 +1254,22 @@ void AsyncVoteScoreReputationPlugin::FlushWindow(
     }
   }
   const uint64_t qc_record_count = unique_qcs.size();
-  if (qc_record_count < min_candidate_qc_count_) {
+  const bool sparse_direct_strong_fault_window =
+      recovery_config_.strong_fault_enabled && qc_record_count < min_candidate_qc_count_ &&
+      HasSparseStrongFaultEvidence(window);
+  if (qc_record_count < min_candidate_qc_count_ &&
+      !sparse_direct_strong_fault_window) {
     return;
   }
-  int observed_start_view = 0;
   int observed_end_view = 0;
   for (const ReputationQcEvent& event : window) {
     if (event.qc_hash.empty() || event.qc_view <= 0) {
       continue;
     }
-    if (observed_start_view == 0 || event.qc_view < observed_start_view) {
-      observed_start_view = event.qc_view;
-    }
     observed_end_view = std::max(observed_end_view, event.qc_view);
   }
-  int evidence_end_view = observed_end_view > 0 ? observed_end_view
-                                                : window.back().qc_view;
+  const int evidence_end_view =
+      observed_end_view > 0 ? observed_end_view : window.back().qc_view;
   int window_end_view = evidence_end_view;
   if (epoch_views_ > 0 && evidence_end_view > 0) {
     window_end_view = static_cast<int>(
@@ -976,11 +1282,63 @@ void AsyncVoteScoreReputationPlugin::FlushWindow(
       node_id_, total_replicas_, window_index, window, current_weights,
       recovery_config_, old_weight_root_hex, old_weight_version,
       activation_view);
+
+  bool applied_cumulative_strong_fault = false;
+  if (recovery_config_.strong_fault_enabled) {
+    if (cumulative_strong_fault_counts_.size() !=
+        static_cast<size_t>(std::max(total_replicas_, 0))) {
+      cumulative_strong_fault_counts_.assign(std::max(total_replicas_, 0), 0);
+    }
+    for (const reputation::StrongFaultRecord& fault :
+         candidate.strong_faults) {
+      if (fault.validator_id < 1 || fault.validator_id > total_replicas_) {
+        continue;
+      }
+      ++cumulative_strong_fault_counts_[fault.validator_id - 1];
+    }
+
+    const int64_t target_weight = std::max<int64_t>(
+        recovery_config_.min_weight,
+        std::min<int64_t>(recovery_config_.max_weight,
+                          recovery_config_.strong_fault_target_weight));
+    for (size_t i = 0; i < candidate.validators.size() &&
+                       i < cumulative_strong_fault_counts_.size();
+         ++i) {
+      const uint64_t fault_count = cumulative_strong_fault_counts_[i];
+      if (fault_count == 0) {
+        if (sparse_direct_strong_fault_window && i < current_weights.size()) {
+          ValidatorVoteScore& validator = candidate.validators[i];
+          validator.next_weight = current_weights[i];
+          if (i < candidate.next_weights.size()) {
+            candidate.next_weights[i] = current_weights[i];
+          }
+        }
+        continue;
+      }
+      ValidatorVoteScore& validator = candidate.validators[i];
+      validator.strong_fault_count =
+          std::max<uint64_t>(validator.strong_fault_count, fault_count);
+      validator.recovery_credit = 0;
+      validator.bonus_credit = 0;
+      validator.reputation_score = 0;
+      validator.penalty_points = std::max<int64_t>(
+          validator.penalty_points,
+          std::max<int64_t>(0, validator.next_weight - target_weight));
+      validator.next_weight = target_weight;
+      if (i < candidate.next_weights.size()) {
+        candidate.next_weights[i] = target_weight;
+      }
+      applied_cumulative_strong_fault = true;
+    }
+  }
+
   if (epoch_views_ > 0 && window_end_view > 0) {
     candidate.start_qc_view = window_end_view - static_cast<int>(epoch_views_) + 1;
     candidate.end_qc_view = window_end_view;
-    candidate.event_count = qc_record_count;
+    candidate.event_count = sparse_direct_strong_fault_window ? 0 : qc_record_count;
     candidate.activation_view = activation_view;
+    RecomputeVoteScoreCandidateRoots(&candidate);
+  } else if (applied_cumulative_strong_fault) {
     RecomputeVoteScoreCandidateRoots(&candidate);
   }
   output << VoteScoreCandidateToJson(candidate) << '\n';

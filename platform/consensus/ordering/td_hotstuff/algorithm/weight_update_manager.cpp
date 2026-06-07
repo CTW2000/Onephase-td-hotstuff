@@ -90,10 +90,16 @@ bool CandidateHasCanonicalEpochWindow(const CandidateWeightUpdate& update,
          update.start_qc_view() == update.end_qc_view() - epoch_views + 1;
 }
 
+bool CandidateHasSparsePluginPenaltyRoots(const CandidateWeightUpdate& update) {
+  return update.event_count() == 0 && !update.strong_fault_root().empty() &&
+         !update.penalty_root().empty();
+}
+
 bool CandidateShouldEnterConsensus(const CandidateWeightUpdate& update,
                                    const WeightSnapshot& snapshot,
                                    int epoch_views) {
-  return CandidateHasCanonicalEpochWindow(update, epoch_views) &&
+  return (CandidateHasCanonicalEpochWindow(update, epoch_views) ||
+          CandidateHasSparsePluginPenaltyRoots(update)) &&
          CandidateChangesWeights(update, snapshot);
 }
 
@@ -169,6 +175,9 @@ CandidateWeightUpdate BuildCandidateWeightUpdate(
   update.set_end_qc_view(candidate.end_qc_view);
   update.set_event_count(candidate.event_count);
   update.set_metric_root(candidate.metric_root_hex);
+  update.set_reputation_root(candidate.reputation_root_hex);
+  update.set_strong_fault_root(candidate.strong_fault_root_hex);
+  update.set_penalty_root(candidate.penalty_root_hex);
   update.set_next_weight_root(candidate.next_weight_root_hex);
   update.set_candidate_digest(candidate.candidate_digest_hex);
   for (size_t i = 0; i < candidate.next_weights.size(); ++i) {
@@ -185,6 +194,22 @@ std::string WeightUpdateVotePayload(const CandidateWeightUpdate& update,
   out << "td_hotstuff_weight_update_vote_v1|"
       << update.candidate_digest() << '|' << validator_id << '|'
       << update.old_weight_root() << '|' << update.old_weight_version() << '|'
+      << update.activation_view();
+  return out.str();
+}
+
+std::string WeightUpdateVotePayload(const WeightUpdateVote& vote) {
+  std::ostringstream out;
+  out << "td_hotstuff_weight_update_vote_v1|"
+      << vote.candidate_digest() << '|' << vote.validator_id() << '|'
+      << vote.old_weight_root() << '|' << vote.old_weight_version() << '|'
+      << vote.activation_view();
+  return out.str();
+}
+
+std::string WeightUpdateVoteScheduleKey(const CandidateWeightUpdate& update) {
+  std::ostringstream out;
+  out << update.old_weight_root() << '|' << update.old_weight_version() << '|'
       << update.activation_view();
   return out.str();
 }
@@ -367,6 +392,28 @@ bool WeightUpdateManager::VerifyVote(const WeightUpdateVote& vote,
   return true;
 }
 
+bool WeightUpdateManager::VerifyVoteEvidence(const WeightUpdateVote& vote,
+                                             std::string* error) const {
+  if (verifier_ == nullptr) {
+    return SetError(error, "missing verifier");
+  }
+  if (vote.candidate_digest().empty() || vote.old_weight_root().empty() ||
+      vote.activation_view() <= 0) {
+    return SetError(error, "missing vote evidence fields");
+  }
+  if (vote.validator_id() != vote.signature().node_id()) {
+    return SetError(error, "vote signer mismatch");
+  }
+  if (vote.validator_id() < 1 || vote.validator_id() > total_replicas_) {
+    return SetError(error, "vote signer out of range");
+  }
+  if (!verifier_->VerifyMessage(WeightUpdateVotePayload(vote),
+                                vote.signature())) {
+    return SetError(error, "vote signature invalid");
+  }
+  return true;
+}
+
 bool WeightUpdateManager::VerifyCert(const WeightUpdateCert& cert,
                                      const WeightSchedule& schedule,
                                      std::string* error) const {
@@ -423,7 +470,8 @@ bool WeightUpdateManager::ValidateCandidateFields(
       update.end_qc_view(), update.event_count(), update.old_weight_root(),
       update.old_weight_version(), update.activation_view(),
       update.metric_root(), update.next_weight_root(), next_weights,
-      "", 0, "", {});
+      "", 0, "", {}, update.reputation_root(), update.strong_fault_root(),
+      update.penalty_root());
   if (update.candidate_digest() != expected_digest) {
     return SetError(error, "candidate digest mismatch");
   }
@@ -444,11 +492,13 @@ bool WeightUpdateManager::VerifyCandidateWithSnapshot(
     return SetError(error, "local recomputation mismatch");
   }
   if (update.next_weight_root() != local_candidate.next_weight_root_hex ||
+      update.strong_fault_root() != local_candidate.strong_fault_root_hex ||
+      update.penalty_root() != local_candidate.penalty_root_hex ||
       update.activation_view() != local_candidate.activation_view ||
       update.old_weight_root() != local_candidate.old_weight_root_hex ||
       update.old_weight_version() !=
           static_cast<int64_t>(local_candidate.old_weight_version)) {
-    return SetError(error, "candidate fields do not match local recomputation");
+    return SetError(error, "candidate fields do not match local decision output");
   }
   return true;
 }
@@ -523,8 +573,11 @@ bool WeightUpdateManager::VerifyCertWithSnapshot(
 void WeightUpdateManager::TryVoteForCandidate(
     const CandidateWeightUpdate& candidate, const WeightSnapshot& snapshot) {
   auto local_it = local_weight_candidates_.find(candidate.candidate_digest());
+  const std::string vote_schedule_key =
+      WeightUpdateVoteScheduleKey(candidate);
   if (local_it == local_weight_candidates_.end() ||
-      voted_weight_candidate_digests_.count(candidate.candidate_digest()) > 0) {
+      voted_weight_candidate_digests_.count(candidate.candidate_digest()) > 0 ||
+      voted_weight_candidate_schedule_keys_.count(vote_schedule_key) > 0) {
     return;
   }
   std::unique_ptr<WeightUpdateVote> vote =
@@ -533,6 +586,7 @@ void WeightUpdateManager::TryVoteForCandidate(
     return;
   }
   voted_weight_candidate_digests_.insert(candidate.candidate_digest());
+  voted_weight_candidate_schedule_keys_.insert(vote_schedule_key);
   AddWeightUpdateVote(*vote, snapshot);
   outbound_messages_.votes.push_back(*vote);
 }
@@ -587,6 +641,7 @@ void WeightUpdateManager::ClearPluginState() {
   weight_update_votes_.clear();
   pending_weight_update_certs_.clear();
   voted_weight_candidate_digests_.clear();
+  voted_weight_candidate_schedule_keys_.clear();
   broadcast_candidate_digests_.clear();
   broadcast_weight_cert_digests_.clear();
   outbound_messages_.candidates.clear();

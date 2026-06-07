@@ -73,6 +73,115 @@ std::string HexEncode(const std::string& data) {
 
 std::string SerializeQcEvidenceRecord(const QcEvidenceRecord& record) {
   std::ostringstream out;
+  if (record.type == ReputationEvidenceType::kSignedProposalArtifact) {
+    out << "{\"schema\":\"td_hotstuff_signed_proposal_artifact_v1\","
+        << "\"node_id\":" << record.node_id << ","
+        << "\"total_replicas\":" << record.total_replicas << ","
+        << "\"protocol_id\":\"" << record.protocol_id << "\","
+        << "\"view\":" << record.qc_view << ","
+        << "\"slot\":" << record.proposal_slot << ","
+        << "\"leader_id\":" << record.leader_id << ","
+        << "\"weight_version\":" << record.weight_version << ","
+        << "\"active_weight_root\":\"" << record.active_weight_root << "\","
+        << "\"proposal_hash_hex\":\"" << HexEncode(record.proposal_hash)
+        << "\",\"signature_verified\":"
+        << (record.proposal_signature_verified ? "true" : "false") << "}";
+    return out.str();
+  }
+  if (record.type == ReputationEvidenceType::kSignedVoteArtifact) {
+    out << "{\"schema\":\"td_hotstuff_signed_vote_artifact_v1\","
+        << "\"node_id\":" << record.node_id << ","
+        << "\"total_replicas\":" << record.total_replicas << ","
+        << "\"protocol_id\":\"" << record.protocol_id << "\","
+        << "\"view\":" << record.qc_view << ","
+        << "\"slot\":" << record.proposal_slot << ","
+        << "\"signer_id\":" << record.vote_signer_id << ","
+        << "\"weight_version\":" << record.weight_version << ","
+        << "\"active_weight_root\":\"" << record.active_weight_root << "\","
+        << "\"proposal_hash_hex\":\"" << HexEncode(record.vote_proposal_hash)
+        << "\",\"signature_verified\":"
+        << (record.vote_signature_verified ? "true" : "false") << "}";
+    return out.str();
+  }
+  if (record.type == ReputationEvidenceType::kInvalidQcProposalArtifact) {
+    out << "{\"schema\":\"td_hotstuff_invalid_qc_proposal_artifact_v1\","
+        << "\"node_id\":" << record.node_id << ","
+        << "\"total_replicas\":" << record.total_replicas << ","
+        << "\"protocol_id\":\"" << record.protocol_id << "\","
+        << "\"view\":" << record.qc_view << ","
+        << "\"slot\":" << record.proposal_slot << ","
+        << "\"leader_id\":" << record.leader_id << ","
+        << "\"weight_version\":" << record.weight_version << ","
+        << "\"active_weight_root\":\"" << record.active_weight_root << "\","
+        << "\"proposal_hash_hex\":\"" << HexEncode(record.proposal_hash)
+        << "\",\"proposal_signature_verified\":"
+        << (record.proposal_signature_verified ? "true" : "false")
+        << ",\"qc_verified\":" << (record.qc_verified ? "true" : "false")
+        << ",\"invalid_reason\":\"" << record.invalid_reason << "\"}";
+    return out.str();
+  }
+  if (record.type ==
+      ReputationEvidenceType::kSignedWeightUpdateVoteArtifact) {
+    out << "{\"schema\":\"td_hotstuff_weight_update_vote_artifact_v1\","
+        << "\"node_id\":" << record.node_id << ","
+        << "\"total_replicas\":" << record.total_replicas << ","
+        << "\"protocol_id\":\"" << record.protocol_id << "\","
+        << "\"validator_id\":" << record.vote_signer_id << ","
+        << "\"old_weight_root\":\"" << record.old_weight_root << "\","
+        << "\"old_weight_version\":" << record.old_weight_version << ","
+        << "\"activation_view\":" << record.activation_view << ","
+        << "\"candidate_digest_hex\":\"" << HexEncode(record.candidate_digest)
+        << "\",\"signature_verified\":"
+        << (record.vote_signature_verified ? "true" : "false") << "}";
+    return out.str();
+  }
+  if (record.type == ReputationEvidenceType::kSignedTimeoutVoteArtifact) {
+    out << "{\"schema\":\"td_hotstuff_timeout_vote_artifact_v1\","
+        << "\"node_id\":" << record.node_id << ","
+        << "\"total_replicas\":" << record.total_replicas << ","
+        << "\"protocol_id\":\"" << record.protocol_id << "\","
+        << "\"view\":" << record.qc_view << ","
+        << "\"signer_id\":" << record.vote_signer_id << ","
+        << "\"weight_version\":" << record.weight_version << ","
+        << "\"active_weight_root\":\"" << record.active_weight_root << "\","
+        << "\"high_qc_digest_hex\":\"" << HexEncode(record.high_qc_digest)
+        << "\",\"signature_verified\":"
+        << (record.vote_signature_verified ? "true" : "false") << "}";
+    return out.str();
+  }
+  if (record.type == ReputationEvidenceType::kInvalidTcProposalArtifact) {
+    out << "{\"schema\":\"td_hotstuff_invalid_tc_proposal_artifact_v1\","
+        << "\"node_id\":" << record.node_id << ","
+        << "\"total_replicas\":" << record.total_replicas << ","
+        << "\"protocol_id\":\"" << record.protocol_id << "\","
+        << "\"view\":" << record.qc_view << ","
+        << "\"slot\":" << record.proposal_slot << ","
+        << "\"leader_id\":" << record.leader_id << ","
+        << "\"weight_version\":" << record.weight_version << ","
+        << "\"active_weight_root\":\"" << record.active_weight_root << "\","
+        << "\"proposal_hash_hex\":\"" << HexEncode(record.proposal_hash)
+        << "\",\"proposal_signature_verified\":"
+        << (record.proposal_signature_verified ? "true" : "false")
+        << ",\"timeout_cert_verified\":"
+        << (record.timeout_cert_verified ? "true" : "false")
+        << ",\"invalid_reason\":\"" << record.invalid_reason << "\"}";
+    return out.str();
+  }
+  if (record.type == ReputationEvidenceType::kVerifiedQcArtifact) {
+    out << "{\"schema\":\"td_hotstuff_verified_qc_artifact_v1\","
+        << "\"node_id\":" << record.node_id << ","
+        << "\"total_replicas\":" << record.total_replicas << ","
+        << "\"protocol_id\":\"" << record.protocol_id << "\","
+        << "\"view\":" << record.qc_view << ","
+        << "\"slot\":" << record.proposal_slot << ","
+        << "\"weight_version\":" << record.weight_version << ","
+        << "\"active_weight_root\":\"" << record.active_weight_root << "\","
+        << "\"qc_hash_hex\":\"" << HexEncode(record.qc_hash) << "\","
+        << "\"signer_bitmap_hex\":\"" << HexEncode(record.signer_bitmap)
+        << "\",\"qc_verified\":" << (record.qc_verified ? "true" : "false")
+        << "}";
+    return out.str();
+  }
   if (record.leader_opportunity && record.qc_hash.empty()) {
     out << "{\"schema\":\"td_hotstuff_leader_opportunity_evidence_v1\","
         << "\"node_id\":" << record.node_id << ","
@@ -90,13 +199,19 @@ std::string SerializeQcEvidenceRecord(const QcEvidenceRecord& record) {
       << "\"total_replicas\":" << record.total_replicas << ","
       << "\"qc_view\":" << record.qc_view << ","
       << "\"leader_id\":" << record.leader_id << ","
+      << "\"qc_collector_id\":" << record.qc_collector_id << ","
       << "\"weight_version\":" << record.weight_version << ","
       << "\"active_weight_root\":\"" << record.active_weight_root << "\","
       << "\"leader_eligible_min_weight\":"
       << record.leader_eligible_min_weight << ","
       << "\"qc_hash_hex\":\"" << HexEncode(record.qc_hash) << "\","
       << "\"signer_bitmap_hex\":\"" << HexEncode(record.signer_bitmap)
-      << "\"}";
+      << "\"";
+  if (!record.available_signer_bitmap.empty()) {
+    out << ",\"available_signer_bitmap_hex\":\""
+        << HexEncode(record.available_signer_bitmap) << "\"";
+  }
+  out << "}";
   return out.str();
 }
 
@@ -148,7 +263,7 @@ std::unique_ptr<AsyncQcEvidenceRecorder> AsyncQcEvidenceRecorder::CreateFromEnv(
 }
 
 void AsyncQcEvidenceRecorder::Start() {
-  if (!enabled_ || started_) {
+  if (!enabled_ || started_ || !write_json_) {
     return;
   }
   stopping_.store(false);
@@ -157,15 +272,14 @@ void AsyncQcEvidenceRecorder::Start() {
 }
 
 void AsyncQcEvidenceRecorder::Stop() {
-  if (!started_) {
-    return;
+  if (started_) {
+    stopping_.store(true);
+    cv_.notify_all();
+    if (worker_.joinable()) {
+      worker_.join();
+    }
+    started_ = false;
   }
-  stopping_.store(true);
-  cv_.notify_all();
-  if (worker_.joinable()) {
-    worker_.join();
-  }
-  started_ = false;
   if (reputation_plugin_ != nullptr) {
     reputation_plugin_->Stop();
   }
@@ -199,9 +313,17 @@ bool AsyncQcEvidenceRecorder::RecordQc(int qc_view, const std::string& qc_hash,
                                        const std::string& signer_bitmap,
                                        int leader_id, uint64_t weight_version,
                                        std::string active_weight_root,
-                                       int64_t leader_eligible_min_weight) {
+                                       int64_t leader_eligible_min_weight,
+                                       std::string available_signer_bitmap,
+                                       int qc_collector_id) {
   if (!enabled_ || qc_hash.empty()) {
     return false;
+  }
+  if (!write_json_ && reputation_plugin_ != nullptr) {
+    return reputation_plugin_->RecordQc(
+        qc_view, qc_hash, signer_bitmap, leader_id, weight_version,
+        std::move(active_weight_root), leader_eligible_min_weight,
+        std::move(available_signer_bitmap), qc_collector_id);
   }
   QcEvidenceRecord record;
   record.type = ReputationEvidenceType::kCertifiedQc;
@@ -209,11 +331,13 @@ bool AsyncQcEvidenceRecorder::RecordQc(int qc_view, const std::string& qc_hash,
   record.total_replicas = total_replicas_;
   record.qc_view = qc_view;
   record.leader_id = leader_id;
+  record.qc_collector_id = qc_collector_id;
   record.weight_version = weight_version;
   record.active_weight_root = std::move(active_weight_root);
   record.leader_eligible_min_weight = leader_eligible_min_weight;
   record.qc_hash = qc_hash;
   record.signer_bitmap = signer_bitmap;
+  record.available_signer_bitmap = std::move(available_signer_bitmap);
   return Enqueue(record);
 }
 
@@ -222,6 +346,11 @@ bool AsyncQcEvidenceRecorder::RecordLeaderOpportunity(
     std::string active_weight_root, int64_t leader_eligible_min_weight) {
   if (!enabled_ || view <= 0 || leader_id <= 0) {
     return false;
+  }
+  if (!write_json_ && reputation_plugin_ != nullptr) {
+    return reputation_plugin_->RecordLeaderOpportunity(
+        view, leader_id, weight_version, std::move(active_weight_root),
+        leader_eligible_min_weight);
   }
   QcEvidenceRecord record;
   record.type = ReputationEvidenceType::kLeaderOpportunity;
@@ -233,6 +362,180 @@ bool AsyncQcEvidenceRecorder::RecordLeaderOpportunity(
   record.weight_version = weight_version;
   record.active_weight_root = std::move(active_weight_root);
   record.leader_eligible_min_weight = leader_eligible_min_weight;
+  return Enqueue(record);
+}
+
+bool AsyncQcEvidenceRecorder::RecordSignedProposalArtifact(
+    const ::resdb::consensus::reputation::SignedProposalEvidence& artifact) {
+  if (!enabled_ || artifact.protocol_id.empty() || artifact.leader_id <= 0 ||
+      artifact.view_or_round <= 0 || artifact.proposal_hash.empty()) {
+    return false;
+  }
+  if (!write_json_ && reputation_plugin_ != nullptr) {
+    return reputation_plugin_->RecordSignedProposalArtifact(artifact);
+  }
+  QcEvidenceRecord record;
+  record.type = ReputationEvidenceType::kSignedProposalArtifact;
+  record.node_id = node_id_;
+  record.total_replicas = total_replicas_;
+  record.protocol_id = artifact.protocol_id;
+  record.qc_view = artifact.view_or_round;
+  record.leader_id = artifact.leader_id;
+  record.proposal_slot = artifact.slot_or_height;
+  record.proposal_hash = artifact.proposal_hash;
+  record.proposal_signature_verified = artifact.signature_verified;
+  record.weight_version = artifact.weight_version;
+  record.active_weight_root = artifact.active_weight_root;
+  return Enqueue(record);
+}
+
+bool AsyncQcEvidenceRecorder::RecordSignedVoteArtifact(
+    const ::resdb::consensus::reputation::SignedVoteEvidence& artifact) {
+  if (!enabled_ || artifact.protocol_id.empty() || artifact.signer_id <= 0 ||
+      artifact.view_or_round <= 0 || artifact.proposal_hash.empty()) {
+    return false;
+  }
+  if (!write_json_ && reputation_plugin_ != nullptr) {
+    return reputation_plugin_->RecordSignedVoteArtifact(artifact);
+  }
+  QcEvidenceRecord record;
+  record.type = ReputationEvidenceType::kSignedVoteArtifact;
+  record.node_id = node_id_;
+  record.total_replicas = total_replicas_;
+  record.protocol_id = artifact.protocol_id;
+  record.qc_view = artifact.view_or_round;
+  record.proposal_slot = artifact.slot_or_height;
+  record.vote_signer_id = artifact.signer_id;
+  record.vote_proposal_hash = artifact.proposal_hash;
+  record.vote_signature_verified = artifact.signature_verified;
+  record.weight_version = artifact.weight_version;
+  record.active_weight_root = artifact.active_weight_root;
+  return Enqueue(record);
+}
+
+bool AsyncQcEvidenceRecorder::RecordInvalidQcProposalArtifact(
+    const ::resdb::consensus::reputation::InvalidQcProposalEvidence& artifact) {
+  if (!enabled_ || artifact.protocol_id.empty() || artifact.leader_id <= 0 ||
+      artifact.view_or_round <= 0 || artifact.proposal_hash.empty()) {
+    return false;
+  }
+  if (!write_json_ && reputation_plugin_ != nullptr) {
+    return reputation_plugin_->RecordInvalidQcProposalArtifact(artifact);
+  }
+  QcEvidenceRecord record;
+  record.type = ReputationEvidenceType::kInvalidQcProposalArtifact;
+  record.node_id = node_id_;
+  record.total_replicas = total_replicas_;
+  record.protocol_id = artifact.protocol_id;
+  record.qc_view = artifact.view_or_round;
+  record.leader_id = artifact.leader_id;
+  record.proposal_slot = artifact.slot_or_height;
+  record.proposal_hash = artifact.proposal_hash;
+  record.proposal_signature_verified = artifact.proposal_signature_verified;
+  record.qc_verified = artifact.qc_verified;
+  record.invalid_reason = artifact.invalid_reason;
+  record.weight_version = artifact.weight_version;
+  record.active_weight_root = artifact.active_weight_root;
+  return Enqueue(record);
+}
+
+bool AsyncQcEvidenceRecorder::RecordSignedWeightUpdateVoteArtifact(
+    const ::resdb::consensus::reputation::SignedWeightUpdateVoteEvidence&
+        artifact) {
+  if (!enabled_ || artifact.protocol_id.empty() || artifact.validator_id <= 0 ||
+      artifact.old_weight_root.empty() || artifact.activation_view <= 0 ||
+      artifact.candidate_digest.empty()) {
+    return false;
+  }
+  if (!write_json_ && reputation_plugin_ != nullptr) {
+    return reputation_plugin_->RecordSignedWeightUpdateVoteArtifact(artifact);
+  }
+  QcEvidenceRecord record;
+  record.type = ReputationEvidenceType::kSignedWeightUpdateVoteArtifact;
+  record.node_id = node_id_;
+  record.total_replicas = total_replicas_;
+  record.protocol_id = artifact.protocol_id;
+  record.vote_signer_id = artifact.validator_id;
+  record.old_weight_root = artifact.old_weight_root;
+  record.old_weight_version = artifact.old_weight_version;
+  record.activation_view = artifact.activation_view;
+  record.candidate_digest = artifact.candidate_digest;
+  record.vote_signature_verified = artifact.signature_verified;
+  record.weight_version = artifact.weight_version;
+  record.active_weight_root = artifact.active_weight_root;
+  return Enqueue(record);
+}
+
+bool AsyncQcEvidenceRecorder::RecordSignedTimeoutVoteArtifact(
+    const ::resdb::consensus::reputation::SignedTimeoutVoteEvidence& artifact) {
+  if (!enabled_ || artifact.protocol_id.empty() || artifact.signer_id <= 0 ||
+      artifact.view_or_round <= 0 || artifact.high_qc_digest.empty()) {
+    return false;
+  }
+  if (!write_json_ && reputation_plugin_ != nullptr) {
+    return reputation_plugin_->RecordSignedTimeoutVoteArtifact(artifact);
+  }
+  QcEvidenceRecord record;
+  record.type = ReputationEvidenceType::kSignedTimeoutVoteArtifact;
+  record.node_id = node_id_;
+  record.total_replicas = total_replicas_;
+  record.protocol_id = artifact.protocol_id;
+  record.qc_view = artifact.view_or_round;
+  record.vote_signer_id = artifact.signer_id;
+  record.high_qc_digest = artifact.high_qc_digest;
+  record.vote_signature_verified = artifact.signature_verified;
+  record.weight_version = artifact.weight_version;
+  record.active_weight_root = artifact.active_weight_root;
+  return Enqueue(record);
+}
+
+bool AsyncQcEvidenceRecorder::RecordInvalidTcProposalArtifact(
+    const ::resdb::consensus::reputation::InvalidTcProposalEvidence& artifact) {
+  if (!enabled_ || artifact.protocol_id.empty() || artifact.leader_id <= 0 ||
+      artifact.view_or_round <= 0 || artifact.proposal_hash.empty()) {
+    return false;
+  }
+  if (!write_json_ && reputation_plugin_ != nullptr) {
+    return reputation_plugin_->RecordInvalidTcProposalArtifact(artifact);
+  }
+  QcEvidenceRecord record;
+  record.type = ReputationEvidenceType::kInvalidTcProposalArtifact;
+  record.node_id = node_id_;
+  record.total_replicas = total_replicas_;
+  record.protocol_id = artifact.protocol_id;
+  record.qc_view = artifact.view_or_round;
+  record.leader_id = artifact.leader_id;
+  record.proposal_slot = artifact.slot_or_height;
+  record.proposal_hash = artifact.proposal_hash;
+  record.proposal_signature_verified = artifact.proposal_signature_verified;
+  record.timeout_cert_verified = artifact.timeout_cert_verified;
+  record.invalid_reason = artifact.invalid_reason;
+  record.weight_version = artifact.weight_version;
+  record.active_weight_root = artifact.active_weight_root;
+  return Enqueue(record);
+}
+
+bool AsyncQcEvidenceRecorder::RecordVerifiedQcArtifact(
+    const ::resdb::consensus::reputation::VerifiedQcArtifactEvidence& artifact) {
+  if (!enabled_ || artifact.protocol_id.empty() || artifact.view_or_round <= 0 ||
+      artifact.qc_hash.empty() || artifact.signer_bitmap.empty()) {
+    return false;
+  }
+  if (!write_json_ && reputation_plugin_ != nullptr) {
+    return reputation_plugin_->RecordVerifiedQcArtifact(artifact);
+  }
+  QcEvidenceRecord record;
+  record.type = ReputationEvidenceType::kVerifiedQcArtifact;
+  record.node_id = node_id_;
+  record.total_replicas = total_replicas_;
+  record.protocol_id = artifact.protocol_id;
+  record.qc_view = artifact.view_or_round;
+  record.proposal_slot = artifact.slot_or_height;
+  record.qc_hash = artifact.qc_hash;
+  record.signer_bitmap = artifact.signer_bitmap;
+  record.qc_verified = artifact.qc_verified;
+  record.weight_version = artifact.weight_version;
+  record.active_weight_root = artifact.active_weight_root;
   return Enqueue(record);
 }
 
@@ -309,7 +612,94 @@ void AsyncQcEvidenceRecorder::WorkerLoop() {
       }
     }
     if (reputation_plugin_ != nullptr) {
-      if (record.leader_opportunity && record.qc_hash.empty()) {
+      if (record.type == ReputationEvidenceType::kSignedProposalArtifact) {
+        ::resdb::consensus::reputation::SignedProposalEvidence artifact;
+        artifact.protocol_id = record.protocol_id;
+        artifact.leader_id = record.leader_id;
+        artifact.view_or_round = record.qc_view;
+        artifact.slot_or_height = record.proposal_slot;
+        artifact.proposal_hash = record.proposal_hash;
+        artifact.signature_verified = record.proposal_signature_verified;
+        artifact.active_weight_root = record.active_weight_root;
+        artifact.weight_version = record.weight_version;
+        reputation_plugin_->RecordSignedProposalArtifact(artifact);
+      } else if (record.type == ReputationEvidenceType::kSignedVoteArtifact) {
+        ::resdb::consensus::reputation::SignedVoteEvidence artifact;
+        artifact.protocol_id = record.protocol_id;
+        artifact.signer_id = record.vote_signer_id;
+        artifact.view_or_round = record.qc_view;
+        artifact.slot_or_height = record.proposal_slot;
+        artifact.proposal_hash = record.vote_proposal_hash;
+        artifact.signature_verified = record.vote_signature_verified;
+        artifact.active_weight_root = record.active_weight_root;
+        artifact.weight_version = record.weight_version;
+        reputation_plugin_->RecordSignedVoteArtifact(artifact);
+      } else if (record.type ==
+                 ReputationEvidenceType::kInvalidQcProposalArtifact) {
+        ::resdb::consensus::reputation::InvalidQcProposalEvidence artifact;
+        artifact.protocol_id = record.protocol_id;
+        artifact.leader_id = record.leader_id;
+        artifact.view_or_round = record.qc_view;
+        artifact.slot_or_height = record.proposal_slot;
+        artifact.proposal_hash = record.proposal_hash;
+        artifact.proposal_signature_verified =
+            record.proposal_signature_verified;
+        artifact.qc_verified = record.qc_verified;
+        artifact.invalid_reason = record.invalid_reason;
+        artifact.active_weight_root = record.active_weight_root;
+        artifact.weight_version = record.weight_version;
+        reputation_plugin_->RecordInvalidQcProposalArtifact(artifact);
+      } else if (record.type ==
+                 ReputationEvidenceType::kSignedWeightUpdateVoteArtifact) {
+        ::resdb::consensus::reputation::SignedWeightUpdateVoteEvidence artifact;
+        artifact.protocol_id = record.protocol_id;
+        artifact.validator_id = record.vote_signer_id;
+        artifact.old_weight_root = record.old_weight_root;
+        artifact.old_weight_version = record.old_weight_version;
+        artifact.activation_view = record.activation_view;
+        artifact.candidate_digest = record.candidate_digest;
+        artifact.signature_verified = record.vote_signature_verified;
+        artifact.active_weight_root = record.active_weight_root;
+        artifact.weight_version = record.weight_version;
+        reputation_plugin_->RecordSignedWeightUpdateVoteArtifact(artifact);
+      } else if (record.type ==
+                 ReputationEvidenceType::kSignedTimeoutVoteArtifact) {
+        ::resdb::consensus::reputation::SignedTimeoutVoteEvidence artifact;
+        artifact.protocol_id = record.protocol_id;
+        artifact.signer_id = record.vote_signer_id;
+        artifact.view_or_round = record.qc_view;
+        artifact.high_qc_digest = record.high_qc_digest;
+        artifact.signature_verified = record.vote_signature_verified;
+        artifact.active_weight_root = record.active_weight_root;
+        artifact.weight_version = record.weight_version;
+        reputation_plugin_->RecordSignedTimeoutVoteArtifact(artifact);
+      } else if (record.type ==
+                 ReputationEvidenceType::kInvalidTcProposalArtifact) {
+        ::resdb::consensus::reputation::InvalidTcProposalEvidence artifact;
+        artifact.protocol_id = record.protocol_id;
+        artifact.leader_id = record.leader_id;
+        artifact.view_or_round = record.qc_view;
+        artifact.slot_or_height = record.proposal_slot;
+        artifact.proposal_hash = record.proposal_hash;
+        artifact.proposal_signature_verified =
+            record.proposal_signature_verified;
+        artifact.timeout_cert_verified = record.timeout_cert_verified;
+        artifact.invalid_reason = record.invalid_reason;
+        artifact.active_weight_root = record.active_weight_root;
+        artifact.weight_version = record.weight_version;
+        reputation_plugin_->RecordInvalidTcProposalArtifact(artifact);
+      } else if (record.type == ReputationEvidenceType::kVerifiedQcArtifact) {
+        ::resdb::consensus::reputation::VerifiedQcArtifactEvidence artifact;
+        artifact.protocol_id = record.protocol_id;
+        artifact.view_or_round = record.qc_view;
+        artifact.slot_or_height = record.proposal_slot;
+        artifact.qc_hash = record.qc_hash;
+        artifact.signer_bitmap = record.signer_bitmap;
+        artifact.qc_verified = record.qc_verified;
+        artifact.active_weight_root = record.active_weight_root;
+        artifact.weight_version = record.weight_version;
+        reputation_plugin_->RecordVerifiedQcArtifact(artifact);
+      } else if (record.leader_opportunity && record.qc_hash.empty()) {
         reputation_plugin_->RecordLeaderOpportunity(
             record.qc_view, record.leader_id, record.weight_version,
             record.active_weight_root, record.leader_eligible_min_weight);
@@ -318,7 +708,9 @@ void AsyncQcEvidenceRecorder::WorkerLoop() {
                                      record.signer_bitmap, record.leader_id,
                                      record.weight_version,
                                      record.active_weight_root,
-                                     record.leader_eligible_min_weight);
+                                     record.leader_eligible_min_weight,
+                                     record.available_signer_bitmap,
+                                     record.qc_collector_id);
       }
     }
   }

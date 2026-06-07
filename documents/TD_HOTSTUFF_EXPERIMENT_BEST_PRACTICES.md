@@ -20,7 +20,7 @@ The slowest part is usually not editing code. It is repeated distributed experim
 
 Run this checklist before trusting any result:
 
-- Operate on the server checkout: `/usr/TD-hotstuff/Onephase-td-hotstuff` on `10.10.131.205`.
+- Operate on the server checkout on `10.10.131.205`.
 - Verify branch, HEAD, and working-tree status from the server checkout.
 - If the experiment depends on code changes, rebuild the benchmark binary before deployment.
 - Verify all replica server checkouts are synced when their source trees matter for the run.

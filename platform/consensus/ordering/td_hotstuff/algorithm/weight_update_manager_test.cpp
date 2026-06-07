@@ -115,6 +115,26 @@ TEST(WeightUpdateManagerTest, SignsVoteForMatchingFutureCandidate) {
   EXPECT_EQ(vote->signature().node_id(), 1);
 }
 
+TEST(WeightUpdateManagerTest, VerifiesWeightUpdateVoteEvidenceWithoutCandidate) {
+  WeightUpdateConfig config;
+  config.enabled = true;
+  MockSignatureVerifier verifier;
+  WeightUpdateVote vote;
+  vote.set_candidate_digest("candidate-a");
+  vote.set_validator_id(2);
+  vote.set_old_weight_root("old-root");
+  vote.set_old_weight_version(7);
+  vote.set_activation_view(64);
+  *vote.mutable_signature() = SignatureFrom(2);
+  EXPECT_CALL(verifier, VerifyMessage(WeightUpdateVotePayload(vote), _))
+      .WillOnce(Return(true));
+
+  WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
+                              config);
+  std::string error;
+  EXPECT_TRUE(manager.VerifyVoteEvidence(vote, &error)) << error;
+}
+
 TEST(WeightUpdateManagerTest, CandidateLeavesLeaderProfileEmptyForWeightV1) {
   WeightSchedule schedule(/*total_replicas=*/4, {10, 20, 30, 40});
   WeightUpdateConfig config;
@@ -131,6 +151,8 @@ TEST(WeightUpdateManagerTest, CandidateLeavesLeaderProfileEmptyForWeightV1) {
   EXPECT_TRUE(update.leader_weight_root().empty());
   EXPECT_EQ(update.leader_params_version(), 0);
   EXPECT_TRUE(update.leader_randomness_ref().empty());
+  EXPECT_EQ(update.reputation_root(), local.reputation_root_hex);
+  EXPECT_FALSE(update.reputation_root().empty());
 
   MockSignatureVerifier verifier;
   WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
@@ -138,6 +160,87 @@ TEST(WeightUpdateManagerTest, CandidateLeavesLeaderProfileEmptyForWeightV1) {
   std::string error;
   EXPECT_TRUE(manager.VerifyCandidate(update, local, schedule, &error))
       << error;
+}
+
+TEST(WeightUpdateManagerTest, AllowsDifferentAuditReputationRootForSameDecision) {
+  WeightSchedule schedule(/*total_replicas=*/4, {10, 20, 30, 40});
+  WeightUpdateConfig config;
+  config.enabled = true;
+  config.epoch_views = 2;
+  config.activation_epoch_delay = 1;
+
+  VoteScoreCandidate local = MakeCandidate(schedule, 8192);
+  UseNonWarmupWindow(&local);
+  CandidateWeightUpdate update = BuildCandidateWeightUpdate(local);
+  update.set_reputation_root("different-reputation-root");
+
+  MockSignatureVerifier verifier;
+  WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
+                              config);
+  std::string error;
+  EXPECT_TRUE(manager.VerifyCandidate(update, local, schedule, &error))
+      << error;
+}
+
+TEST(WeightUpdateManagerTest, RejectsChangedPenaltyRootForSameWeights) {
+  WeightSchedule schedule(/*total_replicas=*/4, {10, 20, 30, 40});
+  WeightUpdateConfig config;
+  config.enabled = true;
+  config.epoch_views = 2;
+  config.activation_epoch_delay = 1;
+
+  VoteScoreCandidate local = MakeCandidate(schedule, 8192);
+  UseNonWarmupWindow(&local);
+  CandidateWeightUpdate update = BuildCandidateWeightUpdate(local);
+  update.set_penalty_root("different-penalty-root");
+
+  MockSignatureVerifier verifier;
+  WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
+                              config);
+  std::string error;
+  EXPECT_FALSE(manager.VerifyCandidate(update, local, schedule, &error));
+  EXPECT_NE(error.find("candidate digest mismatch"), std::string::npos);
+}
+
+TEST(WeightUpdateManagerTest, VotesForLocallyRecomputedStrongFaultPenalty) {
+  WeightSchedule schedule(/*total_replicas=*/4, {30, 30, 30, 30});
+  WeightUpdateConfig config;
+  config.enabled = true;
+  config.epoch_views = 64;
+  config.activation_epoch_delay = 1;
+
+  VoteScoreCandidate local = MakeCandidate(schedule, 129);
+  local.window_index = 0;
+  local.start_qc_view = 1;
+  local.end_qc_view = 64;
+  local.event_count = 0;
+  local.activation_view = 129;
+  local.strong_faults.clear();
+  consensus::reputation::StrongFaultRecord fault;
+  fault.type = consensus::reputation::StrongFaultType::kInvalidTcProposal;
+  fault.validator_id = 1;
+  fault.view_or_round = 5;
+  fault.slot_or_height = 0;
+  fault.first_artifact_digest = "signed-invalid-tc-proposal";
+  local.strong_faults.push_back(fault);
+  local.validators[0].strong_fault_count = 1;
+  local.validators[0].reputation_score = 0;
+  local.validators[0].penalty_points = 29;
+  local.validators[0].next_weight = 1;
+  local.next_weights[0] = 1;
+  RecomputeVoteScoreCandidateRoots(&local);
+  const CandidateWeightUpdate update = BuildCandidateWeightUpdate(local);
+
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(WeightUpdateVotePayload(update, 1)))
+      .WillOnce(Return(SignatureFrom(1)));
+
+  WeightUpdateManager manager(/*node_id=*/1, /*total_replicas=*/4, &verifier,
+                              config);
+  std::unique_ptr<WeightUpdateVote> vote =
+      manager.CreateVote(update, local, schedule);
+  ASSERT_NE(vote, nullptr);
+  EXPECT_EQ(vote->candidate_digest(), update.candidate_digest());
 }
 
 TEST(WeightUpdateManagerTest, RejectsStaleLeaderProfileFields) {

@@ -29,6 +29,8 @@ class ProposalManager {
 
   std::unique_ptr<Proposal> GenerateProposal(const std::vector<std::unique_ptr<Transaction>>& txns);
   bool Verify(const Proposal& proposal);
+  bool VerifyEnvelopeForEvidence(const Proposal& proposal);
+  bool VerifyQcForEvidence(const QC& qc);
   bool VerifyCert(const Certificate& cert);
   bool RecordVote(const Proposal& proposal, std::string* error = nullptr);
 
@@ -74,6 +76,8 @@ class ProposalManager {
 
   QC generic_qc_, lock_qc_;
   TimeoutCert highest_timeout_cert_;
+  int signed_proposal_view_ = 0;
+  std::unique_ptr<Proposal> signed_proposal_for_view_;
   SignatureVerifier* verifier_;
   CertificateVerifier certificate_verifier_;
   SafetyRules safety_rules_;

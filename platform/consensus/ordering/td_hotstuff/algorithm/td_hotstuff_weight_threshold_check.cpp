@@ -9,6 +9,7 @@
 #include "common/crypto/mock_signature_verifier.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/certificate_verifier.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_fault_injector.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -197,6 +198,57 @@ TEST(TdHotstuffLeaderSelectionTest,
   wrong_context.mutable_header()->set_leader_context_hash("wrong-context");
   wrong_context.set_hash(manager.GetHash(wrong_context));
   EXPECT_FALSE(manager.Verify(wrong_context));
+}
+
+
+TEST(TdHotstuffProposalSafetyTest, ReusesSignedProposalForSameView) {
+  const int leader = DefaultLeaderForView(/*view=*/1, /*total_num=*/4);
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(_))
+      .Times(1)
+      .WillOnce(Return(SignatureFrom(leader)));
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+
+  TestProposalManager manager(leader, &verifier, nullptr);
+  std::vector<std::unique_ptr<Transaction>> txns;
+  std::unique_ptr<Proposal> first = manager.GenerateProposal(txns);
+  std::unique_ptr<Proposal> second = manager.GenerateProposal(txns);
+
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(second, nullptr);
+  EXPECT_EQ(first->header().view(), second->header().view());
+  EXPECT_EQ(first->header().slot(), second->header().slot());
+  EXPECT_EQ(first->hash(), second->hash());
+  EXPECT_EQ(first->signature().signature(), second->signature().signature());
+  EXPECT_TRUE(manager.Verify(*first));
+  EXPECT_TRUE(manager.Verify(*second));
+}
+
+TEST(TdHotstuffDoubleProposalExperimentTest,
+     ConflictingProposalKeepsViewAndSlotButHasDifferentValidHash) {
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(_))
+      .WillRepeatedly(Return(SignatureFrom(2)));
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+
+  TestProposalManager manager(/*node_id=*/2, &verifier, nullptr);
+  std::vector<std::unique_ptr<Transaction>> txns;
+  std::unique_ptr<Proposal> normal = manager.GenerateProposal(txns);
+  ASSERT_NE(normal, nullptr);
+
+  std::unique_ptr<Proposal> conflict =
+      BuildConflictingProposalForExperiment(*normal, &verifier);
+  ASSERT_NE(conflict, nullptr);
+
+  EXPECT_EQ(conflict->sender(), normal->sender());
+  EXPECT_EQ(conflict->header().view(), normal->header().view());
+  EXPECT_EQ(conflict->header().slot(), normal->header().slot());
+  EXPECT_EQ(conflict->header().prehash(), normal->header().prehash());
+  EXPECT_EQ(conflict->transactions_size(), normal->transactions_size());
+  EXPECT_NE(conflict->header().proposal_id(), normal->header().proposal_id());
+  EXPECT_NE(conflict->hash(), normal->hash());
+  EXPECT_TRUE(manager.Verify(*normal));
+  EXPECT_TRUE(manager.Verify(*conflict));
 }
 
 }  // namespace
