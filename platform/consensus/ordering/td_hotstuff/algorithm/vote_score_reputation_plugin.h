@@ -40,6 +40,15 @@ struct ReputationRecoveryConfig {
   int peertrust_debt_recovery = 5;
   int peertrust_debt_max = 95;
   int peertrust_debt_trigger_score = 67;
+  bool sybil_graph_enabled = false;
+  int sybil_graph_iterations = 0;
+  int sybil_graph_max_discount = 40;
+  int sybil_graph_debt_increment = 20;
+  int sybil_graph_debt_recovery = 5;
+  int sybil_graph_debt_max = 95;
+  int sybil_graph_debt_trigger_score = 67;
+  int sybil_graph_seed_min_reputation = 67;
+  uint64_t sybil_graph_min_edges = 1;
 };
 
 
@@ -97,6 +106,13 @@ struct ValidatorVoteScore {
   int peertrust_leader_debt = 0;
   int peertrust_debt_delta = 0;
   uint64_t feedback_count = 0;
+  int sybil_rank_score = 100;
+  int sybil_cut_score = 100;
+  int sybil_graph_score = 100;
+  int sybil_graph_debt = 0;
+  int sybil_graph_debt_delta = 0;
+  uint64_t graph_degree = 0;
+  int seed_trust_score = 100;
   int reputation_score = 100;
   int decay_applied = 0;
   int recovery_credit = 0;
@@ -153,7 +169,8 @@ VoteScoreCandidate ComputeBayesianReputationCandidateWithConfig(
     const ReputationRecoveryConfig& recovery_config,
     const std::string& old_weight_root_hex = "",
     uint64_t old_weight_version = 0, int activation_view = 0,
-    const std::vector<int>& prior_peertrust_leader_debt = {});
+    const std::vector<int>& prior_peertrust_leader_debt = {},
+    const std::vector<int>& prior_sybil_graph_debt = {});
 
 void RecomputeVoteScoreCandidateRoots(VoteScoreCandidate* candidate);
 
@@ -236,7 +253,8 @@ class AsyncVoteScoreReputationPlugin {
                    std::vector<int64_t> current_weights,
                    std::string old_weight_root_hex,
                    uint64_t old_weight_version,
-                   std::vector<int> peertrust_leader_debt);
+                   std::vector<int> peertrust_leader_debt,
+                   std::vector<int> sybil_graph_debt);
   void DropRecord(int qc_view);
 
   int node_id_;
@@ -268,6 +286,7 @@ class AsyncVoteScoreReputationPlugin {
   std::vector<ReputationQcEvent> current_window_;
   std::vector<uint64_t> cumulative_strong_fault_counts_;
   std::vector<int> peertrust_leader_debt_;
+  std::vector<int> sybil_graph_debt_;
   std::deque<VoteScoreCandidate> completed_candidates_;
 };
 

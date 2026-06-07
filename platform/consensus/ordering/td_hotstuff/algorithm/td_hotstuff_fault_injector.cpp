@@ -99,8 +99,10 @@ bool ResignProposalForExperiment(Proposal* proposal,
 ExperimentFaultConfig ExperimentFaultConfigFromEnv(int total_replicas) {
   ExperimentFaultConfig config;
   config.silent_leader = EnvFlagEnabled("TD_HS_SILENT_LEADER");
+  config.sybil_graph_attack = EnvFlagEnabled("TD_HS_SYBIL_GRAPH_ATTACK");
   config.unfair_leader = EnvFlagEnabled("TD_HS_UNFAIR_LEADER") ||
-                         EnvFlagEnabled("TD_HS_PEERTRUST_CLIQUE");
+                         EnvFlagEnabled("TD_HS_PEERTRUST_CLIQUE") ||
+                         config.sybil_graph_attack;
   config.double_proposal = EnvFlagEnabled("TD_HS_DOUBLE_PROPOSAL");
   config.double_vote = EnvFlagEnabled("TD_HS_DOUBLE_VOTE");
   config.invalid_qc = EnvFlagEnabled("TD_HS_INVALID_QC");
@@ -118,6 +120,8 @@ ExperimentFaultConfig ExperimentFaultConfigFromEnv(int total_replicas) {
     config.peertrust_clique_reviewer_ids = PositiveIntListFromEnv(
         "TD_HS_PEERTRUST_CLIQUE_SIGNER_IDS", total_replicas);
   }
+  config.sybil_graph_reviewer_ids = PositiveIntListFromEnv(
+      "TD_HS_SYBIL_GRAPH_REVIEWER_IDS", total_replicas);
   return config;
 }
 

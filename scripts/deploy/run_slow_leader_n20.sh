@@ -9,6 +9,11 @@ cd "$DEPLOY_DIR"
 . ./script/env.sh
 . ./td_hotstuff_stable_env.sh
 
+# Silent-leader experiments require the TD-Hotstuff timeout path; otherwise a
+# silent leader can stall the view and the run measures a config mistake.
+: "${TD_HS_SLOW_LEADER_TIMEOUT_ENABLE:=1}"
+export TD_HS_TIMEOUT_ENABLE="$TD_HS_SLOW_LEADER_TIMEOUT_ENABLE"
+
 RESULT_DIR="$DEPLOY_DIR/experiment_results/slow_leader_n20"
 mkdir -p "$RESULT_DIR"
 

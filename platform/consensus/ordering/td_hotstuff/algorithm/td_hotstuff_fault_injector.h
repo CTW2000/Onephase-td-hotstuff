@@ -14,6 +14,7 @@ namespace td_hotstuff {
 struct ExperimentFaultConfig {
   bool silent_leader = false;
   bool unfair_leader = false;
+  bool sybil_graph_attack = false;
   bool double_proposal = false;
   bool double_vote = false;
   bool invalid_qc = false;
@@ -22,6 +23,7 @@ struct ExperimentFaultConfig {
   bool invalid_tc_proposal = false;
   int unfair_leader_signer_group_size = 0;
   std::vector<int> peertrust_clique_reviewer_ids;
+  std::vector<int> sybil_graph_reviewer_ids;
 };
 
 ExperimentFaultConfig ExperimentFaultConfigFromEnv(int total_replicas);

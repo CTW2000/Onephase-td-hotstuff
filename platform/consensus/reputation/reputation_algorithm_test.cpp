@@ -23,6 +23,19 @@ std::string Bitmap(std::initializer_list<int> signers, int total_replicas) {
   return bitmap;
 }
 
+std::string BitmapFromVector(const std::vector<int>& signers,
+                             int total_replicas) {
+  std::string bitmap((total_replicas + 7) / 8, '\0');
+  for (int signer : signers) {
+    if (signer < 1 || signer > total_replicas) {
+      continue;
+    }
+    const int bit = signer - 1;
+    bitmap[bit / 8] = static_cast<char>(bitmap[bit / 8] | (1 << (bit % 8)));
+  }
+  return bitmap;
+}
+
 ReputationConfig TestConfig() {
   ReputationConfig config;
   config.decay_per_epoch = 5;
@@ -593,6 +606,180 @@ TEST(ReputationAlgorithmTest, CandidateDigestIgnoresAuditRoots) {
       /*next_weight_root_hex=*/"weights", /*next_weights=*/{10, 20, 30, 40});
 
   EXPECT_EQ(digest, changed);
+}
+
+TEST(ReputationAlgorithmTest, SybilGraphDisabledKeepsAuditNeutral) {
+  ReputationConfig config = TestConfig();
+  config.sybil_graph_enabled = false;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, view, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config);
+
+  for (const ValidatorReputation& validator : candidate.validators) {
+    EXPECT_EQ(validator.sybil_rank_score, 100);
+    EXPECT_EQ(validator.sybil_cut_score, 100);
+    EXPECT_EQ(validator.sybil_graph_score, 100);
+    EXPECT_EQ(validator.sybil_graph_debt, 0);
+    EXPECT_EQ(validator.sybil_graph_debt_delta, 0);
+  }
+}
+
+TEST(ReputationAlgorithmTest, SybilGraphAllGoodRotatingEvidenceStaysHigh) {
+  ReputationConfig config = TestConfig();
+  config.sybil_graph_enabled = true;
+  config.sybil_graph_min_edges = 1;
+  const int total_replicas = 20;
+  const std::vector<int64_t> weights(total_replicas, 30);
+  std::vector<int> all_signers;
+  for (int id = 1; id <= total_replicas; ++id) {
+    all_signers.push_back(id);
+  }
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 20; ++view) {
+    evidence.push_back(CertifiedQc(
+        view, ((view - 1) % total_replicas) + 1,
+        BitmapFromVector(all_signers, total_replicas),
+        BitmapFromVector(all_signers, total_replicas)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, total_replicas, 1, evidence, weights, config);
+
+  for (const ValidatorReputation& validator : candidate.validators) {
+    EXPECT_GE(validator.sybil_rank_score, 90);
+    EXPECT_GE(validator.sybil_cut_score, 90);
+    EXPECT_GE(validator.sybil_graph_score, 90);
+    EXPECT_EQ(validator.sybil_graph_debt, 0);
+    EXPECT_EQ(validator.strong_fault_count, 0);
+  }
+}
+
+TEST(ReputationAlgorithmTest,
+     SybilGraphDenseClusterWithFewAttackEdgesDropsCluster) {
+  ReputationConfig config = TestConfig();
+  config.sybil_graph_enabled = true;
+  config.sybil_graph_min_edges = 1;
+  config.sybil_graph_debt_increment = 40;
+  config.sybil_graph_debt_trigger_score = 75;
+  const int total_replicas = 20;
+  const std::vector<int64_t> weights(total_replicas, 30);
+  const std::vector<int> sybil_reviewers = {1, 2, 3, 4, 5, 6, 7, 8,
+                                            9, 10, 11, 12, 13, 14};
+  std::vector<int> all_signers;
+  for (int id = 1; id <= total_replicas; ++id) {
+    all_signers.push_back(id);
+  }
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 16; ++view) {
+    const int leader = ((view - 1) % 8) + 1;
+    evidence.push_back(CertifiedQc(
+        view, leader, BitmapFromVector(sybil_reviewers, total_replicas),
+        BitmapFromVector(sybil_reviewers, total_replicas)));
+  }
+  for (int view = 17; view <= 32; ++view) {
+    const int leader = 15 + ((view - 17) % 6);
+    evidence.push_back(CertifiedQc(
+        view, leader, BitmapFromVector(all_signers, total_replicas),
+        BitmapFromVector(all_signers, total_replicas)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, total_replicas, 1, evidence, weights, config);
+
+  int sybil_score_sum = 0;
+  int honest_score_sum = 0;
+  int sybil_weight_sum = 0;
+  int honest_weight_sum = 0;
+  for (int id = 1; id <= total_replicas; ++id) {
+    const ValidatorReputation& validator = candidate.validators[id - 1];
+    if (id <= 8) {
+      sybil_score_sum += validator.sybil_graph_score;
+      sybil_weight_sum += validator.next_weight;
+      EXPECT_GT(validator.sybil_graph_debt, 0);
+    } else if (id >= 15) {
+      honest_score_sum += validator.sybil_graph_score;
+      honest_weight_sum += validator.next_weight;
+      EXPECT_EQ(validator.strong_fault_count, 0);
+      EXPECT_EQ(validator.penalty_points, 0);
+    }
+  }
+  EXPECT_LT(sybil_score_sum / 8, honest_score_sum / 6);
+  EXPECT_LT(sybil_weight_sum / 8, honest_weight_sum / 6);
+}
+
+TEST(ReputationAlgorithmTest,
+     SybilGraphBroadHonestEndorsementsWeakenDiscount) {
+  ReputationConfig config = TestConfig();
+  config.sybil_graph_enabled = true;
+  config.sybil_graph_min_edges = 1;
+  const int total_replicas = 20;
+  const std::vector<int64_t> weights(total_replicas, 30);
+  std::vector<int> all_signers;
+  for (int id = 1; id <= total_replicas; ++id) {
+    all_signers.push_back(id);
+  }
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 16; ++view) {
+    const int leader = ((view - 1) % 8) + 1;
+    evidence.push_back(CertifiedQc(
+        view, leader, BitmapFromVector(all_signers, total_replicas),
+        BitmapFromVector(all_signers, total_replicas)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, total_replicas, 1, evidence, weights, config);
+
+  for (int id = 1; id <= 8; ++id) {
+    const ValidatorReputation& validator = candidate.validators[id - 1];
+    EXPECT_GE(validator.sybil_graph_score, 90);
+    EXPECT_EQ(validator.sybil_graph_debt, 0);
+  }
+}
+
+TEST(ReputationAlgorithmTest, SybilGraphDebtPersistsAcrossQuietWindow) {
+  ReputationConfig config = TestConfig();
+  config.sybil_graph_enabled = true;
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, /*evidence=*/{}, {30, 30, 30, 30}, config, "", 0, 0,
+      {}, {}, {}, {}, {}, {}, {}, /*prior_peertrust_leader_debt=*/{},
+      /*prior_sybil_graph_debt=*/{30, 0, 0, 0});
+
+  EXPECT_EQ(candidate.validators[0].sybil_graph_debt, 30);
+  EXPECT_EQ(candidate.validators[0].next_weight, 30);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest, SybilGraphDebtGatesLaterRecovery) {
+  ReputationConfig config = TestConfig();
+  config.sybil_graph_enabled = true;
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, {CertifiedQc(1, 1, Bitmap({1, 2, 3, 4}, 4),
+                            Bitmap({1, 2, 3, 4}, 4))},
+      {30, 30, 30, 30}, config, "", 0, 0, {}, {}, {}, {}, {}, {}, {},
+      /*prior_peertrust_leader_debt=*/{}, /*prior_sybil_graph_debt=*/{80, 0, 0, 0});
+
+  EXPECT_EQ(candidate.validators[0].sybil_graph_debt, 75);
+  EXPECT_EQ(candidate.validators[0].next_weight, 25);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest, SybilGraphDebtDoesNotRecoverFromVoterOnlyEvidence) {
+  ReputationConfig config = TestConfig();
+  config.sybil_graph_enabled = true;
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, {CertifiedQc(1, 2, Bitmap({1, 2, 3, 4}, 4),
+                            Bitmap({1, 2, 3, 4}, 4))},
+      {30, 30, 30, 30}, config, "", 0, 0, {}, {}, {}, {}, {}, {}, {},
+      /*prior_peertrust_leader_debt=*/{}, /*prior_sybil_graph_debt=*/{80, 0, 0, 0});
+
+  EXPECT_EQ(candidate.validators[0].sybil_graph_debt, 80);
+  EXPECT_EQ(candidate.validators[0].next_weight, 25);
+  EXPECT_EQ(candidate.validators[1].sybil_graph_debt, 0);
 }
 
 TEST(ReputationAlgorithmTest, DetectsVerifiedDoubleProposal) {

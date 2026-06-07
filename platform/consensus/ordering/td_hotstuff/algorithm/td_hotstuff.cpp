@@ -196,25 +196,26 @@ bool HotStuff::IsInvalidTcProposalForExperiment() const {
 std::vector<int> HotStuff::SelectUnfairQcSigners(
     const std::vector<QcSignerInfo>& signer_infos, int64_t quorum_weight,
     int view) const {
-  const bool fixed_peertrust_clique =
-      !experiment_faults_.peertrust_clique_reviewer_ids.empty();
+  const std::vector<int>& fixed_reviewer_ids =
+      !experiment_faults_.peertrust_clique_reviewer_ids.empty()
+          ? experiment_faults_.peertrust_clique_reviewer_ids
+          : experiment_faults_.sybil_graph_reviewer_ids;
+  const bool fixed_reviewer_group = !fixed_reviewer_ids.empty();
   std::vector<QcSignerInfo> candidates;
   candidates.reserve(signer_infos.size());
   for (const QcSignerInfo& signer : signer_infos) {
     if (signer.signer <= 0 || signer.weight <= 0) {
       continue;
     }
-    const bool signer_in_fixed_peertrust_clique =
-        fixed_peertrust_clique &&
-        std::find(experiment_faults_.peertrust_clique_reviewer_ids.begin(),
-                  experiment_faults_.peertrust_clique_reviewer_ids.end(),
-                  signer.signer) !=
-            experiment_faults_.peertrust_clique_reviewer_ids.end();
+    const bool signer_in_fixed_reviewer_group =
+        fixed_reviewer_group &&
+        std::find(fixed_reviewer_ids.begin(), fixed_reviewer_ids.end(),
+                  signer.signer) != fixed_reviewer_ids.end();
     const bool signer_in_legacy_prefix_group =
-        !fixed_peertrust_clique &&
+        !fixed_reviewer_group &&
         (experiment_faults_.unfair_leader_signer_group_size <= 0 ||
          signer.signer <= experiment_faults_.unfair_leader_signer_group_size);
-    if (signer_in_fixed_peertrust_clique || signer_in_legacy_prefix_group) {
+    if (signer_in_fixed_reviewer_group || signer_in_legacy_prefix_group) {
       candidates.push_back(signer);
     }
   }
@@ -224,7 +225,7 @@ std::vector<int> HotStuff::SelectUnfairQcSigners(
             });
   std::vector<int> selected;
   int64_t selected_weight = 0;
-  if (fixed_peertrust_clique && !candidates.empty()) {
+  if (fixed_reviewer_group && !candidates.empty()) {
     const size_t offset = static_cast<size_t>(
         (std::max(view, 0) + id_ * 131) % static_cast<int>(candidates.size()));
     for (size_t i = 0; i < candidates.size(); ++i) {

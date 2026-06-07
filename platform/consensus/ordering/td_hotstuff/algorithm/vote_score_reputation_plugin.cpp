@@ -47,6 +47,24 @@ constexpr const char* kPeerTrustDebtMaxEnv =
     "TD_HS_REPUTATION_PEERTRUST_DEBT_MAX";
 constexpr const char* kPeerTrustDebtTriggerScoreEnv =
     "TD_HS_REPUTATION_PEERTRUST_DEBT_TRIGGER_SCORE";
+constexpr const char* kSybilGraphEnableEnv =
+    "TD_HS_REPUTATION_SYBIL_GRAPH_ENABLE";
+constexpr const char* kSybilGraphIterationsEnv =
+    "TD_HS_REPUTATION_SYBIL_GRAPH_ITERATIONS";
+constexpr const char* kSybilGraphMaxDiscountEnv =
+    "TD_HS_REPUTATION_SYBIL_GRAPH_MAX_DISCOUNT";
+constexpr const char* kSybilGraphDebtIncrementEnv =
+    "TD_HS_REPUTATION_SYBIL_GRAPH_DEBT_INCREMENT";
+constexpr const char* kSybilGraphDebtRecoveryEnv =
+    "TD_HS_REPUTATION_SYBIL_GRAPH_DEBT_RECOVERY";
+constexpr const char* kSybilGraphDebtMaxEnv =
+    "TD_HS_REPUTATION_SYBIL_GRAPH_DEBT_MAX";
+constexpr const char* kSybilGraphDebtTriggerScoreEnv =
+    "TD_HS_REPUTATION_SYBIL_GRAPH_DEBT_TRIGGER_SCORE";
+constexpr const char* kSybilGraphSeedMinReputationEnv =
+    "TD_HS_REPUTATION_SYBIL_GRAPH_SEED_MIN_REPUTATION";
+constexpr const char* kSybilGraphMinEdgesEnv =
+    "TD_HS_REPUTATION_SYBIL_GRAPH_MIN_EDGES";
 constexpr const char* kStrongFaultEnableEnv = "TD_HS_STRONG_FAULT_ENABLE";
 constexpr const char* kDoubleProposalDetectEnableEnv =
     "TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE";
@@ -82,6 +100,14 @@ constexpr int kDefaultPeerTrustDebtIncrement = 20;
 constexpr int kDefaultPeerTrustDebtRecovery = 5;
 constexpr int kDefaultPeerTrustDebtMax = 95;
 constexpr int kDefaultPeerTrustDebtTriggerScore = 67;
+constexpr int kDefaultSybilGraphIterations = 0;
+constexpr int kDefaultSybilGraphMaxDiscount = 40;
+constexpr int kDefaultSybilGraphDebtIncrement = 20;
+constexpr int kDefaultSybilGraphDebtRecovery = 5;
+constexpr int kDefaultSybilGraphDebtMax = 95;
+constexpr int kDefaultSybilGraphDebtTriggerScore = 67;
+constexpr int kDefaultSybilGraphSeedMinReputation = 67;
+constexpr int kDefaultSybilGraphMinEdges = 1;
 constexpr int64_t kMinWeight = 1;
 constexpr int64_t kMaxWeight = 100;
 
@@ -228,6 +254,25 @@ ReputationRecoveryConfig RecoveryConfigFromEnv(int legacy_default_decay) {
   config.peertrust_debt_trigger_score = IntFromEnvInRange(
       kPeerTrustDebtTriggerScoreEnv, kDefaultPeerTrustDebtTriggerScore, 0,
       100);
+  config.sybil_graph_enabled = EnvFlagEnabled(kSybilGraphEnableEnv);
+  config.sybil_graph_iterations = IntFromEnvInRange(
+      kSybilGraphIterationsEnv, kDefaultSybilGraphIterations, 0, 1000);
+  config.sybil_graph_max_discount = IntFromEnvInRange(
+      kSybilGraphMaxDiscountEnv, kDefaultSybilGraphMaxDiscount, 0, 100);
+  config.sybil_graph_debt_increment = IntFromEnvInRange(
+      kSybilGraphDebtIncrementEnv, kDefaultSybilGraphDebtIncrement, 0, 100);
+  config.sybil_graph_debt_recovery = IntFromEnvInRange(
+      kSybilGraphDebtRecoveryEnv, kDefaultSybilGraphDebtRecovery, 0, 100);
+  config.sybil_graph_debt_max = IntFromEnvInRange(
+      kSybilGraphDebtMaxEnv, kDefaultSybilGraphDebtMax, 0, 100);
+  config.sybil_graph_debt_trigger_score = IntFromEnvInRange(
+      kSybilGraphDebtTriggerScoreEnv,
+      kDefaultSybilGraphDebtTriggerScore, 0, 100);
+  config.sybil_graph_seed_min_reputation = IntFromEnvInRange(
+      kSybilGraphSeedMinReputationEnv,
+      kDefaultSybilGraphSeedMinReputation, 0, 100);
+  config.sybil_graph_min_edges = static_cast<uint64_t>(IntFromEnvInRange(
+      kSybilGraphMinEdgesEnv, kDefaultSybilGraphMinEdges, 0, 1000000));
   config.strong_fault_enabled = strong_fault_enabled;
   config.double_proposal_detection_enabled =
       strong_fault_enabled &&
@@ -279,6 +324,17 @@ reputation::ReputationConfig ToNeutralConfig(
   neutral.peertrust_debt_recovery = config.peertrust_debt_recovery;
   neutral.peertrust_debt_max = config.peertrust_debt_max;
   neutral.peertrust_debt_trigger_score = config.peertrust_debt_trigger_score;
+  neutral.sybil_graph_enabled = config.sybil_graph_enabled;
+  neutral.sybil_graph_iterations = config.sybil_graph_iterations;
+  neutral.sybil_graph_max_discount = config.sybil_graph_max_discount;
+  neutral.sybil_graph_debt_increment = config.sybil_graph_debt_increment;
+  neutral.sybil_graph_debt_recovery = config.sybil_graph_debt_recovery;
+  neutral.sybil_graph_debt_max = config.sybil_graph_debt_max;
+  neutral.sybil_graph_debt_trigger_score =
+      config.sybil_graph_debt_trigger_score;
+  neutral.sybil_graph_seed_min_reputation =
+      config.sybil_graph_seed_min_reputation;
+  neutral.sybil_graph_min_edges = config.sybil_graph_min_edges;
   neutral.strong_fault_enabled = config.strong_fault_enabled;
   neutral.double_proposal_detection_enabled =
       config.double_proposal_detection_enabled;
@@ -431,6 +487,13 @@ ValidatorVoteScore ToTdValidator(
   td.peertrust_leader_debt = validator.peertrust_leader_debt;
   td.peertrust_debt_delta = validator.peertrust_debt_delta;
   td.feedback_count = validator.feedback_count;
+  td.sybil_rank_score = validator.sybil_rank_score;
+  td.sybil_cut_score = validator.sybil_cut_score;
+  td.sybil_graph_score = validator.sybil_graph_score;
+  td.sybil_graph_debt = validator.sybil_graph_debt;
+  td.sybil_graph_debt_delta = validator.sybil_graph_debt_delta;
+  td.graph_degree = validator.graph_degree;
+  td.seed_trust_score = validator.seed_trust_score;
   td.reputation_score = validator.reputation_score;
   td.decay_applied = validator.decay_applied;
   td.recovery_credit = validator.recovery_credit;
@@ -463,6 +526,13 @@ reputation::ValidatorReputation ToNeutralValidator(
   neutral.peertrust_leader_debt = validator.peertrust_leader_debt;
   neutral.peertrust_debt_delta = validator.peertrust_debt_delta;
   neutral.feedback_count = validator.feedback_count;
+  neutral.sybil_rank_score = validator.sybil_rank_score;
+  neutral.sybil_cut_score = validator.sybil_cut_score;
+  neutral.sybil_graph_score = validator.sybil_graph_score;
+  neutral.sybil_graph_debt = validator.sybil_graph_debt;
+  neutral.sybil_graph_debt_delta = validator.sybil_graph_debt_delta;
+  neutral.graph_degree = validator.graph_degree;
+  neutral.seed_trust_score = validator.seed_trust_score;
   neutral.reputation_score = validator.reputation_score;
   neutral.decay_applied = validator.decay_applied;
   neutral.recovery_credit = validator.recovery_credit;
@@ -686,7 +756,8 @@ VoteScoreCandidate ComputeBayesianReputationCandidateWithConfig(
     const ReputationRecoveryConfig& recovery_config,
     const std::string& old_weight_root_hex, uint64_t old_weight_version,
     int activation_view,
-    const std::vector<int>& prior_peertrust_leader_debt) {
+    const std::vector<int>& prior_peertrust_leader_debt,
+    const std::vector<int>& prior_sybil_graph_debt) {
   std::vector<reputation::MetricEvidence> evidence;
   std::vector<reputation::SignedProposalEvidence> signed_proposal_evidence;
   std::vector<reputation::SignedVoteEvidence> signed_vote_evidence;
@@ -732,7 +803,7 @@ VoteScoreCandidate ComputeBayesianReputationCandidateWithConfig(
       signed_vote_evidence, invalid_qc_proposal_evidence,
       signed_weight_update_vote_evidence, signed_timeout_vote_evidence,
       invalid_tc_proposal_evidence, verified_qc_artifact_evidence,
-      prior_peertrust_leader_debt));
+      prior_peertrust_leader_debt, prior_sybil_graph_debt));
 }
 
 void RecomputeVoteScoreCandidateRoots(VoteScoreCandidate* candidate) {
@@ -849,6 +920,14 @@ std::string VoteScoreCandidateToJson(const VoteScoreCandidate& candidate) {
         << ",\"peertrust_debt_delta\":"
         << validator.peertrust_debt_delta
         << ",\"feedback_count\":" << validator.feedback_count
+        << ",\"sybil_rank_score\":" << validator.sybil_rank_score
+        << ",\"sybil_cut_score\":" << validator.sybil_cut_score
+        << ",\"sybil_graph_score\":" << validator.sybil_graph_score
+        << ",\"sybil_graph_debt\":" << validator.sybil_graph_debt
+        << ",\"sybil_graph_debt_delta\":"
+        << validator.sybil_graph_debt_delta
+        << ",\"graph_degree\":" << validator.graph_degree
+        << ",\"seed_trust_score\":" << validator.seed_trust_score
         << ",\"reputation_score\":" << validator.reputation_score
         << ",\"decay_applied\":" << validator.decay_applied
         << ",\"recovery_credit\":" << validator.recovery_credit
@@ -883,7 +962,8 @@ AsyncVoteScoreReputationPlugin::AsyncVoteScoreReputationPlugin(
                                           : queue_capacity),
       recovery_config_(RecoveryConfigFromEnv(max_delta)),
       cumulative_strong_fault_counts_(std::max(total_replicas, 0), 0),
-      peertrust_leader_debt_(std::max(total_replicas, 0), 0) {}
+      peertrust_leader_debt_(std::max(total_replicas, 0), 0),
+      sybil_graph_debt_(std::max(total_replicas, 0), 0) {}
 
 AsyncVoteScoreReputationPlugin::~AsyncVoteScoreReputationPlugin() { Stop(); }
 
@@ -948,6 +1028,10 @@ void AsyncVoteScoreReputationPlugin::UpdateCurrentWeights(
   if (peertrust_leader_debt_.size() !=
       static_cast<size_t>(std::max(total_replicas_, 0))) {
     peertrust_leader_debt_.assign(std::max(total_replicas_, 0), 0);
+  }
+  if (sybil_graph_debt_.size() !=
+      static_cast<size_t>(std::max(total_replicas_, 0))) {
+    sybil_graph_debt_.assign(std::max(total_replicas_, 0), 0);
   }
 }
 
@@ -1263,6 +1347,7 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
   std::string old_weight_root_hex;
   uint64_t old_weight_version = 0;
   std::vector<int> peertrust_leader_debt;
+  std::vector<int> sybil_graph_debt;
   uint64_t window_index = 0;
   {
     std::unique_lock<std::mutex> lock(mutex_);
@@ -1286,6 +1371,7 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
         old_weight_root_hex = old_weight_root_hex_;
         old_weight_version = old_weight_version_;
         peertrust_leader_debt = peertrust_leader_debt_;
+        sybil_graph_debt = sybil_graph_debt_;
       }
     }
     current_window_.push_back(event);
@@ -1301,6 +1387,7 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
       old_weight_root_hex = old_weight_root_hex_;
       old_weight_version = old_weight_version_;
       peertrust_leader_debt = peertrust_leader_debt_;
+      sybil_graph_debt = sybil_graph_debt_;
     }
     if (window.empty() && recovery_config_.strong_fault_enabled &&
         HasSparseStrongFaultEvidence(current_window_)) {
@@ -1312,18 +1399,20 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
       old_weight_root_hex = old_weight_root_hex_;
       old_weight_version = old_weight_version_;
       peertrust_leader_debt = peertrust_leader_debt_;
+      sybil_graph_debt = sybil_graph_debt_;
     }
   }
   FlushWindow(output, std::move(window), window_index, std::move(current_weights),
               std::move(old_weight_root_hex), old_weight_version,
-              std::move(peertrust_leader_debt));
+              std::move(peertrust_leader_debt), std::move(sybil_graph_debt));
 }
 
 void AsyncVoteScoreReputationPlugin::FlushWindow(
     std::ofstream& output, std::vector<ReputationQcEvent> window,
     uint64_t window_index, std::vector<int64_t> current_weights,
     std::string old_weight_root_hex, uint64_t old_weight_version,
-    std::vector<int> peertrust_leader_debt) {
+    std::vector<int> peertrust_leader_debt,
+    std::vector<int> sybil_graph_debt) {
   if (window.empty()) {
     return;
   }
@@ -1361,7 +1450,7 @@ void AsyncVoteScoreReputationPlugin::FlushWindow(
   VoteScoreCandidate candidate = ComputeBayesianReputationCandidateWithConfig(
       node_id_, total_replicas_, window_index, window, current_weights,
       recovery_config_, old_weight_root_hex, old_weight_version,
-      activation_view, peertrust_leader_debt);
+      activation_view, peertrust_leader_debt, sybil_graph_debt);
 
   bool applied_cumulative_strong_fault = false;
   if (recovery_config_.strong_fault_enabled) {
@@ -1434,6 +1523,19 @@ void AsyncVoteScoreReputationPlugin::FlushWindow(
     std::unique_lock<std::mutex> lock(mutex_);
     peertrust_leader_debt_ = std::move(next_peertrust_debt);
   }
+  if (recovery_config_.sybil_graph_enabled) {
+    std::vector<int> next_sybil_graph_debt(
+        static_cast<size_t>(std::max(total_replicas_, 0)), 0);
+    for (const ValidatorVoteScore& validator : candidate.validators) {
+      if (validator.validator_id >= 1 &&
+          validator.validator_id <= total_replicas_) {
+        next_sybil_graph_debt[validator.validator_id - 1] =
+            validator.sybil_graph_debt;
+      }
+    }
+    std::unique_lock<std::mutex> lock(mutex_);
+    sybil_graph_debt_ = std::move(next_sybil_graph_debt);
+  }
 
   output << VoteScoreCandidateToJson(candidate) << '\n';
   if (++output_records_since_flush_ >= kFlushEveryCandidates) {
@@ -1483,6 +1585,7 @@ void AsyncVoteScoreReputationPlugin::WorkerLoop() {
   std::string old_weight_root_hex;
   uint64_t old_weight_version = 0;
   std::vector<int> peertrust_leader_debt;
+  std::vector<int> sybil_graph_debt;
   uint64_t window_index = 0;
   {
     std::unique_lock<std::mutex> lock(mutex_);
@@ -1495,11 +1598,12 @@ void AsyncVoteScoreReputationPlugin::WorkerLoop() {
       old_weight_root_hex = old_weight_root_hex_;
       old_weight_version = old_weight_version_;
       peertrust_leader_debt = peertrust_leader_debt_;
+      sybil_graph_debt = sybil_graph_debt_;
     }
   }
   FlushWindow(output, std::move(window), window_index, std::move(current_weights),
               std::move(old_weight_root_hex), old_weight_version,
-              std::move(peertrust_leader_debt));
+              std::move(peertrust_leader_debt), std::move(sybil_graph_debt));
   output.flush();
 }
 
