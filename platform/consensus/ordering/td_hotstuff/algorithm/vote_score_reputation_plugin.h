@@ -35,7 +35,13 @@ struct ReputationRecoveryConfig {
   bool invalid_tc_proposal_detection_enabled = false;
   bool conflicting_qc_detection_enabled = false;
   int64_t strong_fault_target_weight = 1;
+  bool peertrust_enabled = false;
+  int peertrust_debt_increment = 20;
+  int peertrust_debt_recovery = 5;
+  int peertrust_debt_max = 95;
+  int peertrust_debt_trigger_score = 67;
 };
+
 
 struct ReputationQcEvent {
   int qc_view = 0;
@@ -81,6 +87,16 @@ struct ValidatorVoteScore {
   uint64_t leader_opportunity_count = 0;
   int leader_score = 100;
   int leader_diversity_score = 100;
+  int peertrust_score = 100;
+  int reviewer_credibility_score = 100;
+  int transaction_context_score = 100;
+  int community_context_score = 100;
+  int reviewer_entropy_score = 100;
+  int cross_leader_independence_score = 100;
+  int reviewer_overuse_score = 100;
+  int peertrust_leader_debt = 0;
+  int peertrust_debt_delta = 0;
+  uint64_t feedback_count = 0;
   int reputation_score = 100;
   int decay_applied = 0;
   int recovery_credit = 0;
@@ -136,7 +152,8 @@ VoteScoreCandidate ComputeBayesianReputationCandidateWithConfig(
     const std::vector<int64_t>& current_weights,
     const ReputationRecoveryConfig& recovery_config,
     const std::string& old_weight_root_hex = "",
-    uint64_t old_weight_version = 0, int activation_view = 0);
+    uint64_t old_weight_version = 0, int activation_view = 0,
+    const std::vector<int>& prior_peertrust_leader_debt = {});
 
 void RecomputeVoteScoreCandidateRoots(VoteScoreCandidate* candidate);
 
@@ -218,7 +235,8 @@ class AsyncVoteScoreReputationPlugin {
                    uint64_t window_index,
                    std::vector<int64_t> current_weights,
                    std::string old_weight_root_hex,
-                   uint64_t old_weight_version);
+                   uint64_t old_weight_version,
+                   std::vector<int> peertrust_leader_debt);
   void DropRecord(int qc_view);
 
   int node_id_;
@@ -249,6 +267,7 @@ class AsyncVoteScoreReputationPlugin {
   size_t current_window_qc_count_ = 0;
   std::vector<ReputationQcEvent> current_window_;
   std::vector<uint64_t> cumulative_strong_fault_counts_;
+  std::vector<int> peertrust_leader_debt_;
   std::deque<VoteScoreCandidate> completed_candidates_;
 };
 

@@ -75,6 +75,8 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         shared_env_block = body.split("td_env_names=(", 1)[1].split(")", 1)[0]
         self.assertNotIn("TD_HS_SILENT_LEADER_IDS", shared_env_block)
         self.assertNotIn("TD_HS_UNFAIR_LEADER_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_PEERTRUST_CLIQUE_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", shared_env_block)
         self.assertNotIn("TD_HS_DOUBLE_PROPOSAL_IDS", shared_env_block)
         self.assertNotIn("TD_HS_DOUBLE_VOTE_IDS", shared_env_block)
         self.assertNotIn("TD_HS_INVALID_QC_IDS", shared_env_block)
@@ -83,6 +85,8 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertNotIn("TD_HS_INVALID_TC_PROPOSAL_IDS", shared_env_block)
         self.assertIn("-u TD_HS_SILENT_LEADER_IDS", body)
         self.assertIn("-u TD_HS_UNFAIR_LEADER_IDS", body)
+        self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_IDS", body)
+        self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", body)
         self.assertIn("-u TD_HS_DOUBLE_PROPOSAL_IDS", body)
         self.assertIn("-u TD_HS_DOUBLE_VOTE_IDS", body)
         self.assertIn("-u TD_HS_INVALID_QC_IDS", body)
@@ -93,6 +97,8 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("-u TD_HS_BAD_NODE_COUNT", body)
         self.assertIn("TD_HS_SILENT_LEADER=1", body)
         self.assertIn("TD_HS_UNFAIR_LEADER=1", body)
+        self.assertIn("TD_HS_PEERTRUST_CLIQUE=1", body)
+        self.assertIn("TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS=", body)
         self.assertIn("TD_HS_DOUBLE_PROPOSAL=1", body)
         self.assertIn("TD_HS_DOUBLE_VOTE=1", body)
         self.assertIn("TD_HS_INVALID_QC=1", body)
@@ -100,8 +106,10 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("TD_HS_TIMEOUT_VOTE_EQUIVOCATION=1", body)
         self.assertIn("TD_HS_INVALID_TC_PROPOSAL=1", body)
         self.assertIn("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE", shared_env_block)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE", shared_env_block)
         self.assertIn("is_silent_leader_node", body)
         self.assertIn("is_unfair_leader_node", body)
+        self.assertIn("is_peertrust_clique_node", body)
         self.assertIn("is_double_proposal_node", body)
         self.assertIn("is_double_vote_node", body)
         self.assertIn("is_invalid_qc_node", body)
@@ -130,6 +138,19 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
                 self.assertIn("-u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", script_body)
                 self.assertIn("-u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", script_body)
                 self.assertIn("-u TD_HS_INVALID_TC_PROPOSAL_IDS", script_body)
+
+    def test_peertrust_clique_runner_isolates_attack_ids(self):
+        runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_peertrust_clique_n20.sh")
+        with open(runner) as fp:
+            body = fp.read()
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE", body)
+        self.assertIn("TD_HS_PEERTRUST_CLIQUE_IDS", body)
+        self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_IDS", body)
+        self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", body)
+        self.assertIn("TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", body)
+        self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", body)
+        self.assertIn("derive_clique_reviewer_ids", body)
+        self.assertIn('ids="${ids},${i}"', body)
 
     def test_double_proposal_runner_builds_comma_separated_bad_ids(self):
         runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_double_proposal_n20.sh")

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "common/crypto/signature_verifier.h"
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
@@ -20,6 +21,7 @@ struct ExperimentFaultConfig {
   bool timeout_vote_equivocation = false;
   bool invalid_tc_proposal = false;
   int unfair_leader_signer_group_size = 0;
+  std::vector<int> peertrust_clique_reviewer_ids;
 };
 
 ExperimentFaultConfig ExperimentFaultConfigFromEnv(int total_replicas);

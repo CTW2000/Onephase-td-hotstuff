@@ -42,7 +42,13 @@ struct ReputationConfig {
   bool invalid_tc_proposal_detection_enabled = false;
   bool conflicting_qc_detection_enabled = false;
   int64_t strong_fault_target_weight = 1;
+  bool peertrust_enabled = false;
+  int peertrust_debt_increment = 20;
+  int peertrust_debt_recovery = 5;
+  int peertrust_debt_max = 95;
+  int peertrust_debt_trigger_score = 67;
 };
+
 
 struct MetricEvidence {
   ArtifactFamily artifact_family = ArtifactFamily::kUnknown;
@@ -69,6 +75,16 @@ struct ValidatorReputation {
   uint64_t leader_opportunity_count = 0;
   int leader_score = 100;
   int leader_diversity_score = 100;
+  int peertrust_score = 100;
+  int reviewer_credibility_score = 100;
+  int transaction_context_score = 100;
+  int community_context_score = 100;
+  int reviewer_entropy_score = 100;
+  int cross_leader_independence_score = 100;
+  int reviewer_overuse_score = 100;
+  int peertrust_leader_debt = 0;
+  int peertrust_debt_delta = 0;
+  uint64_t feedback_count = 0;
   int reputation_score = 100;
   int decay_applied = 0;
   int recovery_credit = 0;
@@ -223,7 +239,8 @@ ReputationCandidate ComputeReputationCandidate(
     const std::vector<InvalidTcProposalEvidence>& invalid_tc_proposal_evidence =
         {},
     const std::vector<VerifiedQcArtifactEvidence>& verified_qc_artifact_evidence =
-        {});
+        {},
+    const std::vector<int>& prior_peertrust_leader_debt = {});
 
 std::vector<StrongFaultRecord> DetectDoubleProposalFaults(
     const std::vector<SignedProposalEvidence>& signed_proposal_evidence);

@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <deque>
 #include <map>
-#include <mutex>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <string>
 #include <thread>
@@ -104,8 +104,8 @@ class HotStuff : public common::ProtocolBase {
   bool IsTimeoutVoteEquivocationForExperiment() const;
   bool IsInvalidTcProposalForExperiment() const;
   std::vector<int> SelectUnfairQcSigners(
-      const std::vector<QcSignerInfo>& signer_infos,
-      int64_t quorum_weight) const;
+      const std::vector<QcSignerInfo>& signer_infos, int64_t quorum_weight,
+      int view) const;
   std::vector<std::unique_ptr<Transaction>> TakeTransactionsForView(
       int view, int max_count);
   void MarkTransactionCommitted(const Transaction& txn);

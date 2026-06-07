@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <glog/logging.h>
 
@@ -35,6 +37,31 @@ int PositiveIntFromEnv(const char* name, int default_value) {
   } catch (...) {
     return default_value;
   }
+}
+
+
+std::vector<int> PositiveIntListFromEnv(const char* name, int total_replicas) {
+  std::vector<int> ids;
+  const char* raw = std::getenv(name);
+  if (raw == nullptr || std::string(raw).empty()) {
+    return ids;
+  }
+  std::stringstream stream(raw);
+  std::string token;
+  while (std::getline(stream, token, ',')) {
+    if (token.empty()) {
+      continue;
+    }
+    try {
+      const int id = std::stoi(token);
+      if (id >= 1 && id <= total_replicas &&
+          std::find(ids.begin(), ids.end(), id) == ids.end()) {
+        ids.push_back(id);
+      }
+    } catch (...) {
+    }
+  }
+  return ids;
 }
 
 std::string ProposalHashForExperiment(const Proposal& proposal) {
@@ -72,7 +99,8 @@ bool ResignProposalForExperiment(Proposal* proposal,
 ExperimentFaultConfig ExperimentFaultConfigFromEnv(int total_replicas) {
   ExperimentFaultConfig config;
   config.silent_leader = EnvFlagEnabled("TD_HS_SILENT_LEADER");
-  config.unfair_leader = EnvFlagEnabled("TD_HS_UNFAIR_LEADER");
+  config.unfair_leader = EnvFlagEnabled("TD_HS_UNFAIR_LEADER") ||
+                         EnvFlagEnabled("TD_HS_PEERTRUST_CLIQUE");
   config.double_proposal = EnvFlagEnabled("TD_HS_DOUBLE_PROPOSAL");
   config.double_vote = EnvFlagEnabled("TD_HS_DOUBLE_VOTE");
   config.invalid_qc = EnvFlagEnabled("TD_HS_INVALID_QC");
@@ -84,6 +112,12 @@ ExperimentFaultConfig ExperimentFaultConfigFromEnv(int total_replicas) {
   config.unfair_leader_signer_group_size =
       PositiveIntFromEnv("TD_HS_UNFAIR_LEADER_SIGNER_GROUP_SIZE",
                          total_replicas);
+  config.peertrust_clique_reviewer_ids = PositiveIntListFromEnv(
+      "TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", total_replicas);
+  if (config.peertrust_clique_reviewer_ids.empty()) {
+    config.peertrust_clique_reviewer_ids = PositiveIntListFromEnv(
+        "TD_HS_PEERTRUST_CLIQUE_SIGNER_IDS", total_replicas);
+  }
   return config;
 }
 

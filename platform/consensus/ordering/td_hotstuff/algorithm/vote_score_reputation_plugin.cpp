@@ -37,6 +37,16 @@ constexpr const char* kMinLeaderOpportunitiesEnv =
     "TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES";
 constexpr const char* kLeaderRecoveryEnableEnv =
     "TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE";
+constexpr const char* kPeerTrustEnableEnv =
+    "TD_HS_REPUTATION_PEERTRUST_ENABLE";
+constexpr const char* kPeerTrustDebtIncrementEnv =
+    "TD_HS_REPUTATION_PEERTRUST_DEBT_INCREMENT";
+constexpr const char* kPeerTrustDebtRecoveryEnv =
+    "TD_HS_REPUTATION_PEERTRUST_DEBT_RECOVERY";
+constexpr const char* kPeerTrustDebtMaxEnv =
+    "TD_HS_REPUTATION_PEERTRUST_DEBT_MAX";
+constexpr const char* kPeerTrustDebtTriggerScoreEnv =
+    "TD_HS_REPUTATION_PEERTRUST_DEBT_TRIGGER_SCORE";
 constexpr const char* kStrongFaultEnableEnv = "TD_HS_STRONG_FAULT_ENABLE";
 constexpr const char* kDoubleProposalDetectEnableEnv =
     "TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE";
@@ -68,6 +78,10 @@ constexpr int kDefaultMaxRecoveryPerEpoch = 3;
 constexpr int kDefaultBonusPerEpoch = 1;
 constexpr int kDefaultMinDecayOpportunities = 8;
 constexpr int kDefaultMinLeaderOpportunities = 8;
+constexpr int kDefaultPeerTrustDebtIncrement = 20;
+constexpr int kDefaultPeerTrustDebtRecovery = 5;
+constexpr int kDefaultPeerTrustDebtMax = 95;
+constexpr int kDefaultPeerTrustDebtTriggerScore = 67;
 constexpr int64_t kMinWeight = 1;
 constexpr int64_t kMaxWeight = 100;
 
@@ -204,6 +218,16 @@ ReputationRecoveryConfig RecoveryConfigFromEnv(int legacy_default_decay) {
       decay, recovery, bonus, min_weight, max_weight,
       min_decay_opportunities, min_leader_opportunities);
   config.leader_recovery_enabled = EnvFlagEnabled(kLeaderRecoveryEnableEnv);
+  config.peertrust_enabled = EnvFlagEnabled(kPeerTrustEnableEnv);
+  config.peertrust_debt_increment = IntFromEnvInRange(
+      kPeerTrustDebtIncrementEnv, kDefaultPeerTrustDebtIncrement, 0, 100);
+  config.peertrust_debt_recovery = IntFromEnvInRange(
+      kPeerTrustDebtRecoveryEnv, kDefaultPeerTrustDebtRecovery, 0, 100);
+  config.peertrust_debt_max = IntFromEnvInRange(
+      kPeerTrustDebtMaxEnv, kDefaultPeerTrustDebtMax, 0, 100);
+  config.peertrust_debt_trigger_score = IntFromEnvInRange(
+      kPeerTrustDebtTriggerScoreEnv, kDefaultPeerTrustDebtTriggerScore, 0,
+      100);
   config.strong_fault_enabled = strong_fault_enabled;
   config.double_proposal_detection_enabled =
       strong_fault_enabled &&
@@ -250,6 +274,11 @@ reputation::ReputationConfig ToNeutralConfig(
   neutral.min_leader_opportunities = config.min_leader_opportunities;
   neutral.leader_eligible_min_weight = config.leader_eligible_min_weight;
   neutral.leader_recovery_enabled = config.leader_recovery_enabled;
+  neutral.peertrust_enabled = config.peertrust_enabled;
+  neutral.peertrust_debt_increment = config.peertrust_debt_increment;
+  neutral.peertrust_debt_recovery = config.peertrust_debt_recovery;
+  neutral.peertrust_debt_max = config.peertrust_debt_max;
+  neutral.peertrust_debt_trigger_score = config.peertrust_debt_trigger_score;
   neutral.strong_fault_enabled = config.strong_fault_enabled;
   neutral.double_proposal_detection_enabled =
       config.double_proposal_detection_enabled;
@@ -392,6 +421,16 @@ ValidatorVoteScore ToTdValidator(
   td.leader_opportunity_count = validator.leader_opportunity_count;
   td.leader_score = validator.leader_score;
   td.leader_diversity_score = validator.leader_diversity_score;
+  td.peertrust_score = validator.peertrust_score;
+  td.reviewer_credibility_score = validator.reviewer_credibility_score;
+  td.transaction_context_score = validator.transaction_context_score;
+  td.community_context_score = validator.community_context_score;
+  td.reviewer_entropy_score = validator.reviewer_entropy_score;
+  td.cross_leader_independence_score = validator.cross_leader_independence_score;
+  td.reviewer_overuse_score = validator.reviewer_overuse_score;
+  td.peertrust_leader_debt = validator.peertrust_leader_debt;
+  td.peertrust_debt_delta = validator.peertrust_debt_delta;
+  td.feedback_count = validator.feedback_count;
   td.reputation_score = validator.reputation_score;
   td.decay_applied = validator.decay_applied;
   td.recovery_credit = validator.recovery_credit;
@@ -414,6 +453,16 @@ reputation::ValidatorReputation ToNeutralValidator(
   neutral.leader_opportunity_count = validator.leader_opportunity_count;
   neutral.leader_score = validator.leader_score;
   neutral.leader_diversity_score = validator.leader_diversity_score;
+  neutral.peertrust_score = validator.peertrust_score;
+  neutral.reviewer_credibility_score = validator.reviewer_credibility_score;
+  neutral.transaction_context_score = validator.transaction_context_score;
+  neutral.community_context_score = validator.community_context_score;
+  neutral.reviewer_entropy_score = validator.reviewer_entropy_score;
+  neutral.cross_leader_independence_score = validator.cross_leader_independence_score;
+  neutral.reviewer_overuse_score = validator.reviewer_overuse_score;
+  neutral.peertrust_leader_debt = validator.peertrust_leader_debt;
+  neutral.peertrust_debt_delta = validator.peertrust_debt_delta;
+  neutral.feedback_count = validator.feedback_count;
   neutral.reputation_score = validator.reputation_score;
   neutral.decay_applied = validator.decay_applied;
   neutral.recovery_credit = validator.recovery_credit;
@@ -636,7 +685,8 @@ VoteScoreCandidate ComputeBayesianReputationCandidateWithConfig(
     const std::vector<int64_t>& current_weights,
     const ReputationRecoveryConfig& recovery_config,
     const std::string& old_weight_root_hex, uint64_t old_weight_version,
-    int activation_view) {
+    int activation_view,
+    const std::vector<int>& prior_peertrust_leader_debt) {
   std::vector<reputation::MetricEvidence> evidence;
   std::vector<reputation::SignedProposalEvidence> signed_proposal_evidence;
   std::vector<reputation::SignedVoteEvidence> signed_vote_evidence;
@@ -681,7 +731,8 @@ VoteScoreCandidate ComputeBayesianReputationCandidateWithConfig(
       old_weight_version, activation_view, signed_proposal_evidence,
       signed_vote_evidence, invalid_qc_proposal_evidence,
       signed_weight_update_vote_evidence, signed_timeout_vote_evidence,
-      invalid_tc_proposal_evidence, verified_qc_artifact_evidence));
+      invalid_tc_proposal_evidence, verified_qc_artifact_evidence,
+      prior_peertrust_leader_debt));
 }
 
 void RecomputeVoteScoreCandidateRoots(VoteScoreCandidate* candidate) {
@@ -780,6 +831,24 @@ std::string VoteScoreCandidateToJson(const VoteScoreCandidate& candidate) {
         << ",\"leader_score\":" << validator.leader_score
         << ",\"leader_diversity_score\":"
         << validator.leader_diversity_score
+        << ",\"peertrust_score\":" << validator.peertrust_score
+        << ",\"reviewer_credibility_score\":"
+        << validator.reviewer_credibility_score
+        << ",\"transaction_context_score\":"
+        << validator.transaction_context_score
+        << ",\"community_context_score\":"
+        << validator.community_context_score
+        << ",\"reviewer_entropy_score\":"
+        << validator.reviewer_entropy_score
+        << ",\"cross_leader_independence_score\":"
+        << validator.cross_leader_independence_score
+        << ",\"reviewer_overuse_score\":"
+        << validator.reviewer_overuse_score
+        << ",\"peertrust_leader_debt\":"
+        << validator.peertrust_leader_debt
+        << ",\"peertrust_debt_delta\":"
+        << validator.peertrust_debt_delta
+        << ",\"feedback_count\":" << validator.feedback_count
         << ",\"reputation_score\":" << validator.reputation_score
         << ",\"decay_applied\":" << validator.decay_applied
         << ",\"recovery_credit\":" << validator.recovery_credit
@@ -813,7 +882,8 @@ AsyncVoteScoreReputationPlugin::AsyncVoteScoreReputationPlugin(
       queue_capacity_(queue_capacity == 0 ? kDefaultQueueCapacity
                                           : queue_capacity),
       recovery_config_(RecoveryConfigFromEnv(max_delta)),
-      cumulative_strong_fault_counts_(std::max(total_replicas, 0), 0) {}
+      cumulative_strong_fault_counts_(std::max(total_replicas, 0), 0),
+      peertrust_leader_debt_(std::max(total_replicas, 0), 0) {}
 
 AsyncVoteScoreReputationPlugin::~AsyncVoteScoreReputationPlugin() { Stop(); }
 
@@ -875,6 +945,10 @@ void AsyncVoteScoreReputationPlugin::UpdateCurrentWeights(
   current_window_.clear();
   current_window_qc_count_ = 0;
   completed_candidates_.clear();
+  if (peertrust_leader_debt_.size() !=
+      static_cast<size_t>(std::max(total_replicas_, 0))) {
+    peertrust_leader_debt_.assign(std::max(total_replicas_, 0), 0);
+  }
 }
 
 bool AsyncVoteScoreReputationPlugin::RecordQc(
@@ -1188,6 +1262,7 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
   std::vector<int64_t> current_weights;
   std::string old_weight_root_hex;
   uint64_t old_weight_version = 0;
+  std::vector<int> peertrust_leader_debt;
   uint64_t window_index = 0;
   {
     std::unique_lock<std::mutex> lock(mutex_);
@@ -1210,6 +1285,7 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
         current_weights = current_weights_;
         old_weight_root_hex = old_weight_root_hex_;
         old_weight_version = old_weight_version_;
+        peertrust_leader_debt = peertrust_leader_debt_;
       }
     }
     current_window_.push_back(event);
@@ -1224,6 +1300,7 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
       current_weights = current_weights_;
       old_weight_root_hex = old_weight_root_hex_;
       old_weight_version = old_weight_version_;
+      peertrust_leader_debt = peertrust_leader_debt_;
     }
     if (window.empty() && recovery_config_.strong_fault_enabled &&
         HasSparseStrongFaultEvidence(current_window_)) {
@@ -1234,16 +1311,19 @@ void AsyncVoteScoreReputationPlugin::ProcessEvent(
       current_weights = current_weights_;
       old_weight_root_hex = old_weight_root_hex_;
       old_weight_version = old_weight_version_;
+      peertrust_leader_debt = peertrust_leader_debt_;
     }
   }
   FlushWindow(output, std::move(window), window_index, std::move(current_weights),
-              std::move(old_weight_root_hex), old_weight_version);
+              std::move(old_weight_root_hex), old_weight_version,
+              std::move(peertrust_leader_debt));
 }
 
 void AsyncVoteScoreReputationPlugin::FlushWindow(
     std::ofstream& output, std::vector<ReputationQcEvent> window,
     uint64_t window_index, std::vector<int64_t> current_weights,
-    std::string old_weight_root_hex, uint64_t old_weight_version) {
+    std::string old_weight_root_hex, uint64_t old_weight_version,
+    std::vector<int> peertrust_leader_debt) {
   if (window.empty()) {
     return;
   }
@@ -1281,7 +1361,7 @@ void AsyncVoteScoreReputationPlugin::FlushWindow(
   VoteScoreCandidate candidate = ComputeBayesianReputationCandidateWithConfig(
       node_id_, total_replicas_, window_index, window, current_weights,
       recovery_config_, old_weight_root_hex, old_weight_version,
-      activation_view);
+      activation_view, peertrust_leader_debt);
 
   bool applied_cumulative_strong_fault = false;
   if (recovery_config_.strong_fault_enabled) {
@@ -1341,6 +1421,20 @@ void AsyncVoteScoreReputationPlugin::FlushWindow(
   } else if (applied_cumulative_strong_fault) {
     RecomputeVoteScoreCandidateRoots(&candidate);
   }
+  if (recovery_config_.peertrust_enabled) {
+    std::vector<int> next_peertrust_debt(
+        static_cast<size_t>(std::max(total_replicas_, 0)), 0);
+    for (const ValidatorVoteScore& validator : candidate.validators) {
+      if (validator.validator_id >= 1 &&
+          validator.validator_id <= total_replicas_) {
+        next_peertrust_debt[validator.validator_id - 1] =
+            validator.peertrust_leader_debt;
+      }
+    }
+    std::unique_lock<std::mutex> lock(mutex_);
+    peertrust_leader_debt_ = std::move(next_peertrust_debt);
+  }
+
   output << VoteScoreCandidateToJson(candidate) << '\n';
   if (++output_records_since_flush_ >= kFlushEveryCandidates) {
     output.flush();
@@ -1388,6 +1482,7 @@ void AsyncVoteScoreReputationPlugin::WorkerLoop() {
   std::vector<int64_t> current_weights;
   std::string old_weight_root_hex;
   uint64_t old_weight_version = 0;
+  std::vector<int> peertrust_leader_debt;
   uint64_t window_index = 0;
   {
     std::unique_lock<std::mutex> lock(mutex_);
@@ -1399,10 +1494,12 @@ void AsyncVoteScoreReputationPlugin::WorkerLoop() {
       current_weights = current_weights_;
       old_weight_root_hex = old_weight_root_hex_;
       old_weight_version = old_weight_version_;
+      peertrust_leader_debt = peertrust_leader_debt_;
     }
   }
   FlushWindow(output, std::move(window), window_index, std::move(current_weights),
-              std::move(old_weight_root_hex), old_weight_version);
+              std::move(old_weight_root_hex), old_weight_version,
+              std::move(peertrust_leader_debt));
   output.flush();
 }
 

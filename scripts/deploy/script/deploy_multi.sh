@@ -24,7 +24,7 @@ server_path=${server_path:1}
 server_name=`echo "$server" | awk -F':' '{print $NF}'`
 server_bin=${server_name}
 
-local_server_env=(env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_UNFAIR_LEADER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS -u TD_HS_INVALID_TC_PROPOSAL_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT)
+local_server_env=(env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_UNFAIR_LEADER_IDS -u TD_HS_PEERTRUST_CLIQUE_IDS -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS -u TD_HS_INVALID_TC_PROPOSAL_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT)
 remote_server_env=""
 td_env_names=(
   TD_HS_WEIGHTS
@@ -40,6 +40,7 @@ td_env_names=(
   TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH
   TD_HS_REPUTATION_BONUS_PER_EPOCH
   TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE
+  TD_HS_REPUTATION_PEERTRUST_ENABLE
   TD_HS_REPUTATION_MIN_WEIGHT
   TD_HS_REPUTATION_MAX_WEIGHT
   TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES
@@ -96,6 +97,12 @@ is_unfair_leader_node() {
   [[ "$raw_ids" == *",${node_id},"* ]]
 }
 
+is_peertrust_clique_node() {
+  local node_id="$1"
+  local raw_ids=",${TD_HS_PEERTRUST_CLIQUE_IDS:-},"
+  [[ "$raw_ids" == *",${node_id},"* ]]
+}
+
 is_double_proposal_node() {
   local node_id="$1"
   local raw_ids=",${TD_HS_DOUBLE_PROPOSAL_IDS:-},"
@@ -147,6 +154,17 @@ remote_env_for_node() {
       env_prefix="${env_prefix}TD_HS_UNFAIR_LEADER=1 "
     else
       env_prefix="env TD_HS_UNFAIR_LEADER=1 "
+    fi
+  fi
+  if is_peertrust_clique_node "$node_id"; then
+    if [ -n "${env_prefix}" ]; then
+      env_prefix="${env_prefix}TD_HS_PEERTRUST_CLIQUE=1 "
+    else
+      env_prefix="env TD_HS_PEERTRUST_CLIQUE=1 "
+    fi
+    if [ -n "${TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS:-}" ]; then
+      signer_ids_escaped=$(printf "%q" "${TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS}")
+      env_prefix="${env_prefix}TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS=${signer_ids_escaped} "
     fi
   fi
   if is_double_proposal_node "$node_id"; then
@@ -298,6 +316,15 @@ echo "Phase 3: Start nodes..."
             node_local_env=(env)
           fi
           node_local_env+=("TD_HS_UNFAIR_LEADER=1")
+        fi
+        if is_peertrust_clique_node "$n"; then
+          if [ ${#node_local_env[@]} -eq 0 ]; then
+            node_local_env=(env)
+          fi
+          node_local_env+=("TD_HS_PEERTRUST_CLIQUE=1")
+          if [ -n "${TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS:-}" ]; then
+            node_local_env+=("TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS=${TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS}")
+          fi
         fi
         if is_double_proposal_node "$n"; then
           if [ ${#node_local_env[@]} -eq 0 ]; then

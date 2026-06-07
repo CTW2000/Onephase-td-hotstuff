@@ -291,6 +291,275 @@ TEST(ReputationAlgorithmTest, NarrowSignerTargetOnlyReducesLeaderRecovery) {
   EXPECT_EQ(candidate.validators[3].next_weight, 30);
 }
 
+TEST(ReputationAlgorithmTest, PeerTrustDisabledKeepsAuditNeutral) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = false;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[0].peertrust_score, 100);
+  EXPECT_EQ(candidate.validators[0].reviewer_credibility_score, 100);
+  EXPECT_EQ(candidate.validators[0].transaction_context_score, 100);
+  EXPECT_EQ(candidate.validators[0].community_context_score, 100);
+  EXPECT_EQ(candidate.validators[0].feedback_count, 0);
+}
+
+TEST(ReputationAlgorithmTest, PeerTrustAllGoodRotatingFeedbackStaysHigh) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[0].feedback_count, 8);
+  EXPECT_EQ(candidate.validators[0].reviewer_credibility_score, 100);
+  EXPECT_EQ(candidate.validators[0].transaction_context_score, 100);
+  EXPECT_EQ(candidate.validators[0].community_context_score, 100);
+  EXPECT_EQ(candidate.validators[0].peertrust_score, 100);
+  EXPECT_EQ(candidate.validators[0].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest, PeerTrustCliqueFeedbackLowersOnlyLeaderRecovery) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+  for (int view = 9; view <= 16; ++view) {
+    evidence.push_back(CertifiedQc(view, 2, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[0].feedback_count, 8);
+  EXPECT_LT(candidate.validators[0].community_context_score,
+            candidate.validators[1].community_context_score);
+  EXPECT_LT(candidate.validators[0].peertrust_score,
+            candidate.validators[1].peertrust_score);
+  EXPECT_LT(candidate.validators[0].next_weight,
+            candidate.validators[1].next_weight);
+  EXPECT_EQ(candidate.validators[3].strong_fault_count, 0);
+  EXPECT_EQ(candidate.validators[3].penalty_points, 0);
+  EXPECT_EQ(candidate.validators[3].next_weight, 30);
+}
+
+
+TEST(ReputationAlgorithmTest,
+     PeerTrustSharedReviewerCliqueDropsBelowLegacyDiversityGate) {
+  ReputationConfig legacy_config = TestConfig();
+  legacy_config.peertrust_enabled = false;
+  ReputationConfig peertrust_config = TestConfig();
+  peertrust_config.peertrust_enabled = true;
+  const std::string all_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+  const std::string clique_reviewers =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 20);
+  std::vector<MetricEvidence> evidence = {
+      CertifiedQc(1, 1, clique_reviewers, all_available),
+      CertifiedQc(2, 2, clique_reviewers, all_available),
+      CertifiedQc(3, 15, all_available, all_available),
+      CertifiedQc(4, 16, all_available, all_available),
+  };
+
+  const ReputationCandidate legacy_candidate = ComputeReputationCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 30), legacy_config,
+      "old-root", 0, 64);
+  const ReputationCandidate peertrust_candidate = ComputeReputationCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 30), peertrust_config,
+      "old-root", 0, 64);
+
+  EXPECT_EQ(legacy_candidate.validators[0].next_weight, 30);
+  EXPECT_EQ(legacy_candidate.validators[1].next_weight, 30);
+  EXPECT_LT(peertrust_candidate.validators[0].community_context_score,
+            peertrust_candidate.validators[14].community_context_score);
+  EXPECT_LT(peertrust_candidate.validators[1].community_context_score,
+            peertrust_candidate.validators[15].community_context_score);
+  EXPECT_LT(peertrust_candidate.validators[0].next_weight,
+            legacy_candidate.validators[0].next_weight);
+  EXPECT_LT(peertrust_candidate.validators[1].next_weight,
+            legacy_candidate.validators[1].next_weight);
+  EXPECT_EQ(peertrust_candidate.validators[0].strong_fault_count, 0);
+  EXPECT_EQ(peertrust_candidate.validators[0].penalty_points, 0);
+  EXPECT_EQ(peertrust_candidate.validators[14].next_weight, 30);
+  EXPECT_EQ(peertrust_candidate.validators[15].next_weight, 30);
+}
+
+
+TEST(ReputationAlgorithmTest,
+     AvailableSignerBitmapLimitsVoterRecoveryOpportunities) {
+  ReputationConfig config = TestConfig();
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3}, 5),
+                                   Bitmap({1, 2, 3}, 5)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 5, 1, evidence, {30, 30, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_GT(candidate.validators[0].opportunities, 0);
+  EXPECT_EQ(candidate.validators[3].opportunities, 0);
+  EXPECT_EQ(candidate.validators[4].opportunities, 0);
+  EXPECT_EQ(candidate.validators[3].decay_applied, 0);
+  EXPECT_EQ(candidate.validators[4].decay_applied, 0);
+  EXPECT_EQ(candidate.validators[3].next_weight, 30);
+  EXPECT_EQ(candidate.validators[4].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest,
+     BroadAvailableSignerBitmapStillDetectsRepeatedSlowVoter) {
+  ReputationConfig config = TestConfig();
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 5),
+                                   Bitmap({1, 2, 3, 4, 5}, 5)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 5, 1, evidence, {30, 30, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_GT(candidate.validators[4].opportunities, 0);
+  EXPECT_EQ(candidate.validators[4].inclusions, 0);
+  EXPECT_LT(candidate.validators[4].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest,
+     PeerTrustCleanCliqueSeparatesLeadersFromReviewers) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  const std::string clean_reviewers =
+      Bitmap({6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, 20);
+  const std::string all_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 5; ++view) {
+    evidence.push_back(
+        CertifiedQc(view, view, clean_reviewers, clean_reviewers));
+  }
+  evidence.push_back(CertifiedQc(6, 20, all_available, all_available));
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 30), config,
+      "old-root", 0, 64);
+
+  for (int leader = 1; leader <= 5; ++leader) {
+    EXPECT_LT(candidate.validators[leader - 1].community_context_score,
+              candidate.validators[19].community_context_score);
+    EXPECT_LT(candidate.validators[leader - 1].next_weight,
+              candidate.validators[19].next_weight);
+  }
+  EXPECT_EQ(candidate.validators[19].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest, PeerTrustLowReviewerCredibilityReducesFeedback) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  const std::string low_weight_reviewers = Bitmap({1, 2, 3, 4}, 4);
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, low_weight_reviewers,
+                                   low_weight_reviewers));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {5, 5, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_LT(candidate.validators[0].reviewer_credibility_score, 100);
+  EXPECT_LT(candidate.validators[0].peertrust_score, 100);
+}
+
+
+
+TEST(ReputationAlgorithmTest,
+     PeerTrustBroadAvailableOverlapDoesNotCreateDebt) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  const std::string all_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+  const std::string overlapping_quorum =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 20);
+  std::vector<MetricEvidence> evidence;
+  for (int leader = 6; leader <= 10; ++leader) {
+    for (int round = 0; round < 3; ++round) {
+      evidence.push_back(CertifiedQc(leader * 10 + round, leader,
+                                     overlapping_quorum, all_available));
+    }
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 30), config,
+      "old-root", 0, 64);
+
+  for (int leader = 6; leader <= 10; ++leader) {
+    const ValidatorReputation& validator = candidate.validators[leader - 1];
+    EXPECT_EQ(validator.community_context_score, 100);
+    EXPECT_EQ(validator.peertrust_leader_debt, 0);
+    EXPECT_EQ(validator.next_weight, 30);
+  }
+}
+
+TEST(ReputationAlgorithmTest, PeerTrustDebtPersistsWithoutLeaderFeedback) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  config.bonus_per_epoch = 1;
+  const std::vector<MetricEvidence> evidence = {
+      CertifiedQc(1, 2, Bitmap({1, 2, 3, 4}, 4), Bitmap({1, 2, 3, 4}, 4)),
+  };
+
+  const ReputationCandidate no_debt = ComputeReputationCandidate(
+      1, 4, 1, evidence, {20, 30, 30, 30}, config, "old-root", 0, 64);
+  const ReputationCandidate with_debt = ComputeReputationCandidate(
+      1, 4, 1, evidence, {20, 30, 30, 30}, config, "old-root", 0, 64,
+      {}, {}, {}, {}, {}, {}, {}, {40, 0, 0, 0});
+
+  EXPECT_EQ(with_debt.validators[0].feedback_count, 0);
+  EXPECT_EQ(with_debt.validators[0].peertrust_leader_debt, 40);
+  EXPECT_LT(with_debt.validators[0].next_weight,
+            no_debt.validators[0].next_weight);
+}
+
+TEST(ReputationAlgorithmTest, PeerTrustBroadGoodLeadershipRepaysDebt) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  std::vector<MetricEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64,
+      {}, {}, {}, {}, {}, {}, {}, {40, 0, 0, 0});
+
+  EXPECT_EQ(candidate.validators[0].feedback_count, 8);
+  EXPECT_EQ(candidate.validators[0].peertrust_score, 100);
+  EXPECT_EQ(candidate.validators[0].peertrust_debt_delta,
+            -config.peertrust_debt_recovery);
+  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt,
+            40 - config.peertrust_debt_recovery);
+}
+
 TEST(ReputationAlgorithmTest, CandidateDigestIsDeterministic) {
   std::vector<MetricEvidence> evidence = {
       CertifiedQc(1, 1, Bitmap({1, 2, 3}, 4), Bitmap({1, 2, 3, 4}, 4)),
