@@ -1,7 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -17,11 +16,8 @@
 #include "platform/consensus/ordering/common/algorithm/protocol_base.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/async_consensus_verifier.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
-#include "platform/consensus/ordering/td_hotstuff/algorithm/qc_evidence_recorder.h"
-#include "platform/consensus/ordering/td_hotstuff/algorithm/qc_signer_selector.h"
-#include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_fault_injector.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/timeout_manager.h"
-#include "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_manager.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
 #include "platform/statistic/stats.h"
 
@@ -36,17 +32,11 @@ class HotStuff : public common::ProtocolBase {
            int64_t quorum_weight = 0);
   ~HotStuff();
 
-  //  recv txn -> send block with links -> rec block ack -> send block with
-  //  certs
   bool ReceiveTransaction(std::unique_ptr<Transaction> txn);
   bool ReceiveTransactionForView(std::unique_ptr<Transaction> txn,
                                  int target_view);
   bool ReceiveProposal(std::unique_ptr<Proposal> proposal);
   bool ReceiveCertificate(std::unique_ptr<Certificate> cert);
-  bool ReceiveWeightUpdateCandidate(
-      std::unique_ptr<CandidateWeightUpdate> candidate);
-  bool ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote);
-  bool ReceiveWeightUpdateCert(std::unique_ptr<WeightUpdateCert> cert);
   bool ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote);
   bool ReceiveTimeoutCert(std::unique_ptr<TimeoutCert> cert);
   int CurrentView();
@@ -73,39 +63,14 @@ class HotStuff : public common::ProtocolBase {
   int64_t CertificateWeight(
       const std::map<int, std::unique_ptr<Certificate>>& certs, int view) const;
   std::vector<int> CertificateSigners(
-      const std::map<int, std::unique_ptr<Certificate>>& certs) const;
-  std::vector<QcSignerInfo> CertificateSignerInfos(
-      const std::map<int, std::unique_ptr<Certificate>>& certs, int view) const;
-  bool MaybeFormQcLocked(int view, const std::string& hash, bool force);
-  bool FlushPendingQcFormationLocked();
-  void ClearPendingQcFormationLocked();
-  WeightSnapshot CurrentWeightSnapshot(int current_view) const;
-  WeightPluginOutboundMessages DrainWeightPlugin(int current_view,
-                                                 bool force = false);
-  bool InstallWeightUpdate(const InstallableWeightUpdate& update,
-                           int current_view);
-  void BroadcastWeightPluginMessages(
-      const WeightPluginOutboundMessages& messages);
-  void AsyncBroadcastWeightPluginMessages();
-  void BroadcastWeightPluginMessagesNow(
-      const WeightPluginOutboundMessages& messages);
-  void SyncReputationWeightsToActiveSchedule();
-  void RecordLeaderOpportunityLocked(int view);
+      const std::map<int, std::unique_ptr<Certificate>>& certs,
+      int view) const;
+  bool MaybeFormQcLocked(int view, const std::string& hash);
   void MarkTimeoutProgressLocked();
   void BroadcastTimeoutVote(const TimeoutVote& vote);
   void BroadcastTimeoutCert(const TimeoutCert& cert);
   bool ApplyTimeoutCertLocked(const TimeoutCert& cert);
   bool IsSilentLeaderForExperiment() const;
-  bool IsUnfairLeaderForExperiment() const;
-  bool IsDoubleProposalForExperiment() const;
-  bool IsDoubleVoteForExperiment() const;
-  bool IsInvalidQcForExperiment() const;
-  bool IsWeightUpdateVoteEquivocationForExperiment() const;
-  bool IsTimeoutVoteEquivocationForExperiment() const;
-  bool IsInvalidTcProposalForExperiment() const;
-  std::vector<int> SelectUnfairQcSigners(
-      const std::vector<QcSignerInfo>& signer_infos, int64_t quorum_weight,
-      int view) const;
   std::vector<std::unique_ptr<Transaction>> TakeTransactionsForView(
       int view, int max_count);
   void MarkTransactionCommitted(const Transaction& txn);
@@ -119,69 +84,45 @@ class HotStuff : public common::ProtocolBase {
   std::set<std::string> committed_txn_keys_;
 
   std::mutex mutex_, n_mutex_, pmutex_[1024];
-  // std::mutex mutex_, n_mutex_;
   std::condition_variable vote_cv_;
   std::unique_ptr<ProposalManager> proposal_manager_;
-  bool has_sent_;
-  SignatureVerifier* verifier_;
+  bool has_sent_ = false;
+  SignatureVerifier* verifier_ = nullptr;
 
   std::thread send_thread_, commit_thread_;
 
-  int batch_size_;
-  //[view][hash][signer][cert]
-  // std::map<std::string, std::map<int, std::unique_ptr<Certificate>> >
-  // receive_[1024];
+  int batch_size_ = 1;
   std::map<int,
            std::map<std::string, std::map<int, std::unique_ptr<Certificate>>>>
       receive_;
   Stats* global_stats_ = nullptr;
 
-  int non_responsive_num_;
-  int fork_tail_num_;
+  int non_responsive_num_ = 0;
+  int fork_tail_num_ = 0;
 
-  bool qc_formed_, proposal_received_;
+  bool qc_formed_ = false;
+  bool proposal_received_ = false;
   std::unique_ptr<QC> formed_qc_;
 
   int crash_num_ = 0;
 
-  uint64_t timer_length_;
+  uint64_t timer_length_ = 0;
   TimeoutConfig timeout_config_;
   std::vector<int64_t> replica_weights_;
-  int64_t quorum_weight_;
+  int64_t quorum_weight_ = 0;
   std::shared_ptr<WeightSchedule> weight_schedule_;
-  std::shared_ptr<LeaderSelectionSchedule> leader_selection_schedule_;
-  std::unique_ptr<WeightUpdateManager> weight_update_manager_;
-  std::unique_ptr<AsyncQcEvidenceRecorder> qc_evidence_recorder_;
   std::unique_ptr<AsyncConsensusVerifier> async_verifier_;
   std::unique_ptr<TimeoutManager> timeout_manager_;
   std::set<int> timeout_echoed_views_;
-  QcSignerCooldownTracker qc_signer_cooldown_;
-  std::map<int, QcSignerCooldownTracker> qc_signer_cooldown_by_leader_;
-  std::mutex weight_plugin_broadcast_mutex_;
-  std::condition_variable weight_plugin_broadcast_cv_;
-  std::deque<WeightPluginOutboundMessages> weight_plugin_broadcast_queue_;
-  std::thread weight_plugin_broadcast_thread_;
   std::thread timeout_thread_;
   std::thread verified_event_thread_;
-  bool stop_weight_plugin_broadcast_ = false;
-  int last_recorded_leader_opportunity_view_ = 0;
   std::atomic<bool> stop_timeout_{false};
   int timeout_empty_proposal_until_view_ = 0;
   int timeout_empty_proposal_budget_views_ = 0;
-  int weight_plugin_drain_interval_views_ = 64;
-  int next_weight_plugin_drain_view_ = 0;
-  int qc_diversity_grace_us_ = 0;
-  bool pending_qc_formation_ = false;
-  int pending_qc_view_ = 0;
-  std::string pending_qc_hash_;
-  std::chrono::steady_clock::time_point pending_qc_ready_at_;
-  std::atomic<bool> pending_qc_formation_active_{false};
   uint64_t timeout_progress_epoch_ = 0;
   std::atomic<uint64_t> timeout_progress_epoch_atomic_{0};
   std::atomic<bool> stop_verified_events_{false};
   int last_valid_proposal_view_ = 0;
-  ExperimentFaultConfig experiment_faults_;
-  bool weight_update_vote_equivocation_injected_for_experiment_ = false;
 };
 
 }  // namespace td_hotstuff

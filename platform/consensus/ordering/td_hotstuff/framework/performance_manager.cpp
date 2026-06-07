@@ -28,7 +28,6 @@
 #include <algorithm>
 #include <deque>
 #include <cstdlib>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -39,33 +38,6 @@
 namespace resdb {
 namespace td_hotstuff {
 namespace {
-
-std::vector<int64_t> ParseLeaderWeightsFromEnv(int total_replicas) {
-  std::vector<int64_t> weights(total_replicas, 1);
-  const char* raw_weights = std::getenv("TD_HS_WEIGHTS");
-  if (raw_weights == nullptr || std::string(raw_weights).empty()) {
-    return weights;
-  }
-  std::stringstream input(raw_weights);
-  std::string item;
-  std::vector<int64_t> parsed_weights;
-  while (std::getline(input, item, ',')) {
-    if (item.empty()) {
-      LOG(FATAL) << "TD_HS_WEIGHTS has an empty weight entry";
-    }
-    const int64_t weight = std::stoll(item);
-    if (weight <= 0) {
-      LOG(FATAL) << "TD_HS_WEIGHTS must contain positive weights: "
-                 << raw_weights;
-    }
-    parsed_weights.push_back(weight);
-  }
-  if (parsed_weights.size() != static_cast<size_t>(total_replicas)) {
-    LOG(FATAL) << "TD_HS_WEIGHTS size:" << parsed_weights.size()
-               << " does not match replica num:" << total_replicas;
-  }
-  return parsed_weights;
-}
 
 bool EnvFlagEnabled(const char* raw_value) {
   if (raw_value == nullptr) {
@@ -107,12 +79,12 @@ uint64_t BenchmarkRetryTimeoutUsForEnv(const char* raw_request_timeout_ms) {
   return static_cast<uint64_t>(timeout_ms) * 1000;
 }
 
-bool BenchmarkDynamicRoutingEnabled(const LeaderSelectionConfig& config,
+bool BenchmarkDynamicRoutingEnabled(bool leader_selection_enabled,
                                     const char* env_override) {
   if (env_override != nullptr) {
     return EnvFlagEnabled(env_override);
   }
-  return config.enabled;
+  return leader_selection_enabled;
 }
 
 int BenchmarkRouteForView(int view, int replica_num, int predicted_primary,
@@ -164,11 +136,9 @@ HotStuffPerformanceManager::HotStuffPerformanceManager(
     : PerformanceManager(config, replica_communicator, verifier){
   client_num_ = 1;
   primary_ = id_ % replica_num_;
-  const LeaderSelectionConfig leader_config = LeaderSelectionConfigFromEnv();
-  leader_selection_schedule_ = std::make_unique<LeaderSelectionSchedule>(
-      replica_num_, ParseLeaderWeightsFromEnv(replica_num_), leader_config);
   dynamic_benchmark_routing_enabled_ = BenchmarkDynamicRoutingEnabled(
-      leader_config, std::getenv("TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE"));
+      /*leader_selection_enabled=*/false,
+      std::getenv("TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE"));
 }
 
 int HotStuffPerformanceManager::GetPrimary(){
@@ -177,9 +147,7 @@ int HotStuffPerformanceManager::GetPrimary(){
     view = primary_;
     primary_ += client_num_;
     last_primary_view_ = view;
-    value = leader_selection_schedule_ != nullptr
-                ? leader_selection_schedule_->LeaderForView(view)
-                : DefaultLeaderForView(view, replica_num_);
+    value = DefaultLeaderForView(view, replica_num_);
     const int predicted_leader = value;
     if (dynamic_benchmark_routing_enabled_) {
       const int observed_route = ObservedRoutingPrimary(view, predicted_leader);

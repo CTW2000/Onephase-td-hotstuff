@@ -55,16 +55,13 @@ TEST(HotStuffPerformanceManagerTest, BenchmarkRetryTimeoutDoesNotUseConsensusTim
 }
 
 TEST(HotStuffPerformanceManagerTest,
-     DynamicRoutingDefaultsOnWhenLeaderSelectionIsEnabled) {
-  LeaderSelectionConfig config;
-  config.enabled = true;
-  EXPECT_TRUE(BenchmarkDynamicRoutingEnabled(config, /*env_override=*/nullptr));
-
-  config.enabled = false;
-  EXPECT_FALSE(BenchmarkDynamicRoutingEnabled(config, /*env_override=*/nullptr));
-
-  EXPECT_FALSE(BenchmarkDynamicRoutingEnabled(config, /*env_override=*/"0"));
-  EXPECT_TRUE(BenchmarkDynamicRoutingEnabled(config, /*env_override=*/"1"));
+     DynamicRoutingDefaultsOffForClassicCore) {
+  EXPECT_FALSE(BenchmarkDynamicRoutingEnabled(
+      /*leader_selection_enabled=*/false, /*env_override=*/nullptr));
+  EXPECT_FALSE(BenchmarkDynamicRoutingEnabled(
+      /*leader_selection_enabled=*/false, /*env_override=*/"0"));
+  EXPECT_TRUE(BenchmarkDynamicRoutingEnabled(
+      /*leader_selection_enabled=*/false, /*env_override=*/"1"));
 }
 
 }  // namespace

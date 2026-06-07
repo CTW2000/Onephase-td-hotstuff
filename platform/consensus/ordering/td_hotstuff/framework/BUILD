@@ -24,7 +24,7 @@ cc_library(
     hdrs = ["performance_manager.h"],
     deps = [
         "//platform/consensus/ordering/common/framework:performance_manager",
-        "//platform/consensus/ordering/td_hotstuff/algorithm:leader_selection_schedule",
+        "//platform/consensus/ordering/td_hotstuff/algorithm:proposal_manager",
     ],
 )
 

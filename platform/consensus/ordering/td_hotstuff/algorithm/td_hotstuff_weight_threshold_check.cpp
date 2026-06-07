@@ -8,8 +8,6 @@
 
 #include "common/crypto/mock_signature_verifier.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/certificate_verifier.h"
-#include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
-#include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_fault_injector.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -31,11 +29,8 @@ class TestProposalManager : public ProposalManager {
                       const std::vector<int64_t>& replica_weights = {})
       : ProposalManager(1, 3, verifier, 4, 0, 0, replica_weights) {}
 
-  TestProposalManager(int node_id, SignatureVerifier* verifier,
-                      std::shared_ptr<LeaderSelectionSchedule> leader_schedule)
-      : ProposalManager(node_id, 3, verifier, 4, 0, 0,
-                        /*replica_weights=*/{}, /*quorum_weight=*/0,
-                        /*weight_schedule=*/nullptr, leader_schedule) {}
+  TestProposalManager(int node_id, SignatureVerifier* verifier)
+      : ProposalManager(node_id, 3, verifier, 4, 0, 0) {}
 
   using ProposalManager::GetHash;
   using ProposalManager::VerifyQC;
@@ -136,7 +131,7 @@ TEST(TdHotstuffTimeoutTest,
   EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
   EXPECT_CALL(verifier, SignMessage(_)).WillRepeatedly(Return(SignatureFrom(3)));
 
-  TestProposalManager manager(/*node_id=*/3, &verifier, nullptr);
+  TestProposalManager manager(/*node_id=*/3, &verifier);
   TimeoutCert cert = MakeTimeoutCert(/*view=*/1, {1, 2, 3}, QC());
 
   EXPECT_TRUE(manager.AdvanceToViewByTimeout(cert));
@@ -155,7 +150,7 @@ TEST(TdHotstuffTimeoutTest, RejectsProposalWithInvalidTimeoutCert) {
   EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
   EXPECT_CALL(verifier, SignMessage(_)).WillRepeatedly(Return(SignatureFrom(3)));
 
-  TestProposalManager manager(/*node_id=*/3, &verifier, nullptr);
+  TestProposalManager manager(/*node_id=*/3, &verifier);
   TimeoutCert cert = MakeTimeoutCert(/*view=*/1, {1, 2, 3}, QC());
   ASSERT_TRUE(manager.AdvanceToViewByTimeout(cert));
 
@@ -168,39 +163,6 @@ TEST(TdHotstuffTimeoutTest, RejectsProposalWithInvalidTimeoutCert) {
   EXPECT_FALSE(manager.Verify(*proposal));
 }
 
-TEST(TdHotstuffLeaderSelectionTest,
-     RejectsWrongLeaderSenderAndContextHashWhenEnabled) {
-  LeaderSelectionConfig config;
-  config.enabled = true;
-  auto leader_schedule = std::make_shared<LeaderSelectionSchedule>(
-      /*total_replicas=*/4, std::vector<int64_t>{1, 1, 100, 1}, config);
-  const int expected_leader = leader_schedule->LeaderForView(1);
-
-  MockSignatureVerifier verifier;
-  EXPECT_CALL(verifier, SignMessage(_))
-      .WillRepeatedly(Return(SignatureFrom(expected_leader)));
-  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
-  TestProposalManager manager(expected_leader, &verifier, leader_schedule);
-  std::vector<std::unique_ptr<Transaction>> txns;
-  std::unique_ptr<Proposal> proposal = manager.GenerateProposal(txns);
-
-  ASSERT_EQ(proposal->header().view(), 1);
-  ASSERT_EQ(proposal->sender(), expected_leader);
-  ASSERT_EQ(proposal->header().leader_context_hash(),
-            leader_schedule->ContextHashForView(1));
-  EXPECT_TRUE(manager.Verify(*proposal));
-
-  Proposal wrong_sender = *proposal;
-  wrong_sender.set_sender(expected_leader == 1 ? 2 : 1);
-  EXPECT_FALSE(manager.Verify(wrong_sender));
-
-  Proposal wrong_context = *proposal;
-  wrong_context.mutable_header()->set_leader_context_hash("wrong-context");
-  wrong_context.set_hash(manager.GetHash(wrong_context));
-  EXPECT_FALSE(manager.Verify(wrong_context));
-}
-
-
 TEST(TdHotstuffProposalSafetyTest, ReusesSignedProposalForSameView) {
   const int leader = DefaultLeaderForView(/*view=*/1, /*total_num=*/4);
   MockSignatureVerifier verifier;
@@ -209,7 +171,7 @@ TEST(TdHotstuffProposalSafetyTest, ReusesSignedProposalForSameView) {
       .WillOnce(Return(SignatureFrom(leader)));
   EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
 
-  TestProposalManager manager(leader, &verifier, nullptr);
+  TestProposalManager manager(leader, &verifier);
   std::vector<std::unique_ptr<Transaction>> txns;
   std::unique_ptr<Proposal> first = manager.GenerateProposal(txns);
   std::unique_ptr<Proposal> second = manager.GenerateProposal(txns);
@@ -222,33 +184,6 @@ TEST(TdHotstuffProposalSafetyTest, ReusesSignedProposalForSameView) {
   EXPECT_EQ(first->signature().signature(), second->signature().signature());
   EXPECT_TRUE(manager.Verify(*first));
   EXPECT_TRUE(manager.Verify(*second));
-}
-
-TEST(TdHotstuffDoubleProposalExperimentTest,
-     ConflictingProposalKeepsViewAndSlotButHasDifferentValidHash) {
-  MockSignatureVerifier verifier;
-  EXPECT_CALL(verifier, SignMessage(_))
-      .WillRepeatedly(Return(SignatureFrom(2)));
-  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
-
-  TestProposalManager manager(/*node_id=*/2, &verifier, nullptr);
-  std::vector<std::unique_ptr<Transaction>> txns;
-  std::unique_ptr<Proposal> normal = manager.GenerateProposal(txns);
-  ASSERT_NE(normal, nullptr);
-
-  std::unique_ptr<Proposal> conflict =
-      BuildConflictingProposalForExperiment(*normal, &verifier);
-  ASSERT_NE(conflict, nullptr);
-
-  EXPECT_EQ(conflict->sender(), normal->sender());
-  EXPECT_EQ(conflict->header().view(), normal->header().view());
-  EXPECT_EQ(conflict->header().slot(), normal->header().slot());
-  EXPECT_EQ(conflict->header().prehash(), normal->header().prehash());
-  EXPECT_EQ(conflict->transactions_size(), normal->transactions_size());
-  EXPECT_NE(conflict->header().proposal_id(), normal->header().proposal_id());
-  EXPECT_NE(conflict->hash(), normal->hash());
-  EXPECT_TRUE(manager.Verify(*normal));
-  EXPECT_TRUE(manager.Verify(*conflict));
 }
 
 }  // namespace

@@ -32,13 +32,13 @@
 #include <unordered_map>
 #include <vector>
 
-#include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
 #include "platform/consensus/ordering/common/framework/performance_manager.h"
 
 namespace resdb {
 namespace td_hotstuff {
 
-bool BenchmarkDynamicRoutingEnabled(const LeaderSelectionConfig& config,
+bool BenchmarkDynamicRoutingEnabled(bool leader_selection_enabled,
                                     const char* env_override);
 uint64_t BenchmarkRetryTimeoutUsForEnv(const char* raw_request_timeout_ms);
 int BenchmarkRouteForView(int view, int replica_num, int predicted_primary,
@@ -70,7 +70,6 @@ protected:
   int count_ = 0;
   int last_primary_view_ = 0;
   bool dynamic_benchmark_routing_enabled_ = false;
-  std::unique_ptr<LeaderSelectionSchedule> leader_selection_schedule_;
   std::mutex pending_send_times_mutex_;
   std::unordered_map<uint64_t, uint64_t> pending_send_times_;
   mutable std::mutex observed_primary_mutex_;
