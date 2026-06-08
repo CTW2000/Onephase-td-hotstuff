@@ -49,27 +49,91 @@ ReputationConfig TestConfig() {
   return config;
 }
 
-MetricEvidence CertifiedQc(int view, int leader, std::string signer_bitmap,
-                           std::string available_signer_bitmap = "") {
-  MetricEvidence event;
-  event.artifact_family = ArtifactFamily::kQc;
-  event.view_or_round = view;
-  event.leader_id = leader;
-  event.collector_id = leader;
-  event.artifact_digest = "qc-" + std::to_string(view);
-  event.signer_bitmap = std::move(signer_bitmap);
-  event.available_signer_bitmap = std::move(available_signer_bitmap);
-  event.outcome_class = OutcomeClass::kCertified;
+struct TestEvidence {
+  CertifiedSignerEvidence certified;
+  LeaderOutcomeEvidence leader_outcome;
+  bool is_leader_outcome = false;
+};
+
+TestEvidence CertifiedQc(int view, int leader, std::string signer_bitmap,
+                         std::string available_signer_bitmap = "") {
+  TestEvidence event;
+  event.certified.view_or_round = view;
+  event.certified.leader_id = leader;
+  event.certified.artifact_digest = "qc-" + std::to_string(view);
+  event.certified.signer_bitmap = std::move(signer_bitmap);
+  event.certified.available_signer_bitmap = std::move(available_signer_bitmap);
   return event;
 }
 
-MetricEvidence TimeoutEvidence(int view, int leader) {
-  MetricEvidence event;
-  event.artifact_family = ArtifactFamily::kTimeout;
-  event.view_or_round = view;
-  event.leader_id = leader;
-  event.outcome_class = OutcomeClass::kTimeoutOrViewChange;
+TestEvidence TimeoutEvidence(int view, int leader) {
+  TestEvidence event;
+  event.is_leader_outcome = true;
+  event.leader_outcome.view_or_round = view;
+  event.leader_outcome.leader_id = leader;
+  event.leader_outcome.outcome_class = OutcomeClass::kTimeoutOrViewChange;
+  event.leader_outcome.artifact_digest = "timeout-" + std::to_string(view);
   return event;
+}
+
+ReputationWindowInput BuildWindowInput(
+    int node_id, int total_replicas, uint64_t window_index,
+    const std::vector<TestEvidence>& evidence,
+    const std::vector<int64_t>& current_weights,
+    const std::string& old_weight_root_hex = "",
+    uint64_t old_weight_version = 0, int activation_view = 0) {
+  ReputationWindowInput input;
+  input.local_node_id = node_id;
+  input.total_replicas = total_replicas;
+  input.window_index = window_index;
+  input.current_weights = current_weights;
+  input.old_weight_root_hex = old_weight_root_hex;
+  input.old_weight_version = old_weight_version;
+  input.activation_view = activation_view;
+  for (const TestEvidence& event : evidence) {
+    if (event.is_leader_outcome) {
+      input.leader_outcome_evidence.push_back(event.leader_outcome);
+    } else {
+      input.certified_signer_evidence.push_back(event.certified);
+    }
+  }
+  return input;
+}
+
+ReputationCandidate ComputeCandidate(
+    int node_id, int total_replicas, uint64_t window_index,
+    const std::vector<TestEvidence>& evidence,
+    const std::vector<int64_t>& current_weights,
+    const ReputationConfig& config,
+    const std::string& old_weight_root_hex = "",
+    uint64_t old_weight_version = 0, int activation_view = 0,
+    const std::vector<SignedProposalEvidence>& signed_proposal_evidence = {},
+    const std::vector<SignedVoteEvidence>& signed_vote_evidence = {},
+    const std::vector<InvalidQcProposalEvidence>& invalid_qc_proposal_evidence =
+        {},
+    const std::vector<SignedWeightUpdateVoteEvidence>&
+        signed_weight_update_vote_evidence = {},
+    const std::vector<SignedTimeoutVoteEvidence>& signed_timeout_vote_evidence =
+        {},
+    const std::vector<InvalidTcProposalEvidence>& invalid_tc_proposal_evidence =
+        {},
+    const std::vector<VerifiedQcArtifactEvidence>& verified_qc_artifact_evidence =
+        {},
+    const std::vector<int>& prior_peertrust_leader_debt = {},
+    const std::vector<int>& prior_sybil_graph_debt = {}) {
+  ReputationWindowInput input = BuildWindowInput(
+      node_id, total_replicas, window_index, evidence, current_weights,
+      old_weight_root_hex, old_weight_version, activation_view);
+  input.signed_proposal_evidence = signed_proposal_evidence;
+  input.signed_vote_evidence = signed_vote_evidence;
+  input.invalid_qc_proposal_evidence = invalid_qc_proposal_evidence;
+  input.signed_weight_update_vote_evidence = signed_weight_update_vote_evidence;
+  input.signed_timeout_vote_evidence = signed_timeout_vote_evidence;
+  input.invalid_tc_proposal_evidence = invalid_tc_proposal_evidence;
+  input.verified_qc_artifact_evidence = verified_qc_artifact_evidence;
+  input.prior_peertrust_leader_debt = prior_peertrust_leader_debt;
+  input.prior_sybil_graph_debt = prior_sybil_graph_debt;
+  return ComputeReputationCandidate(input, config);
 }
 
 SignedProposalEvidence ProposalArtifact(int leader, int view, int slot,
@@ -182,20 +246,51 @@ VerifiedQcArtifactEvidence QcArtifact(int view, int slot, std::string qc_hash,
   return artifact;
 }
 
+
+TEST(ReputationAlgorithmTest, WindowInputComputesFromCertifiedSignerEvidence) {
+  ReputationConfig config = TestConfig();
+  ReputationWindowInput input;
+  input.local_node_id = 1;
+  input.total_replicas = 4;
+  input.window_index = 9;
+  input.current_weights = {25, 25, 25, 25};
+  input.old_weight_root_hex = "old-root";
+  input.old_weight_version = 7;
+  input.activation_view = 64;
+
+  for (int view = 1; view <= 4; ++view) {
+    CertifiedSignerEvidence certified;
+    certified.view_or_round = view;
+    certified.leader_id = ((view - 1) % 4) + 1;
+    certified.artifact_digest = "qc-" + std::to_string(view);
+    certified.signer_bitmap = Bitmap({1, 2, 3, 4}, 4);
+    certified.available_signer_bitmap = Bitmap({1, 2, 3, 4}, 4);
+    input.certified_signer_evidence.push_back(std::move(certified));
+  }
+
+  const ReputationCandidate candidate = ComputeReputationCandidate(input, config);
+
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({25, 25, 25, 25}));
+  EXPECT_EQ(candidate.metric_root_hex.empty(), false);
+  EXPECT_EQ(candidate.reputation_root_hex.empty(), false);
+  EXPECT_EQ(candidate.next_weight_root_hex.empty(), false);
+  EXPECT_EQ(candidate.candidate_digest_hex.empty(), false);
+}
+
 TEST(ReputationAlgorithmTest, DecodesSignerBitmap) {
   EXPECT_EQ(DecodeSignerBitmap(std::string(1, static_cast<char>(0x09)), 5),
             std::vector<int>({1, 4}));
 }
 
 TEST(ReputationAlgorithmTest, AllGoodWindowKeepsWeightsStable) {
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
                                    Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64);
 
   EXPECT_EQ(candidate.algorithm, "bayes_v4");
@@ -209,14 +304,14 @@ TEST(ReputationAlgorithmTest, AllGoodWindowKeepsWeightsStable) {
 TEST(ReputationAlgorithmTest, BonusDoesNotDriftBalancedAllGoodWeights) {
   ReputationConfig config = TestConfig();
   config.bonus_per_epoch = 1;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 16; ++view) {
     evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
                                    Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({30, 30, 30, 30}));
@@ -228,14 +323,14 @@ TEST(ReputationAlgorithmTest, BonusDoesNotDriftBalancedAllGoodWeights) {
 TEST(ReputationAlgorithmTest, BonusCanHelpBelowMeanHonestValidatorCatchUp) {
   ReputationConfig config = TestConfig();
   config.bonus_per_epoch = 1;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 16; ++view) {
     evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
                                    Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {20, 30, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_EQ(candidate.validators[0].bonus_credit, 1);
@@ -245,14 +340,14 @@ TEST(ReputationAlgorithmTest, BonusCanHelpBelowMeanHonestValidatorCatchUp) {
 }
 
 TEST(ReputationAlgorithmTest, SlowVoterLosesRecoveryWithoutDirectSlash) {
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
                                    Bitmap({1, 2, 3}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64);
 
   EXPECT_EQ(candidate.validators[3].inclusions, 0);
@@ -262,7 +357,7 @@ TEST(ReputationAlgorithmTest, SlowVoterLosesRecoveryWithoutDirectSlash) {
 }
 
 TEST(ReputationAlgorithmTest, SilentLeaderLosesLeaderRecovery) {
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 4; ++view) {
     evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
@@ -271,7 +366,7 @@ TEST(ReputationAlgorithmTest, SilentLeaderLosesLeaderRecovery) {
     evidence.push_back(TimeoutEvidence(view, 2));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64);
 
   EXPECT_EQ(candidate.validators[0].leader_certified_count, 4);
@@ -282,7 +377,7 @@ TEST(ReputationAlgorithmTest, SilentLeaderLosesLeaderRecovery) {
 }
 
 TEST(ReputationAlgorithmTest, NarrowSignerTargetOnlyReducesLeaderRecovery) {
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3}, 4),
                                    Bitmap({1, 2, 3}, 4)));
@@ -294,7 +389,7 @@ TEST(ReputationAlgorithmTest, NarrowSignerTargetOnlyReducesLeaderRecovery) {
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64);
 
   EXPECT_LT(candidate.validators[0].leader_diversity_score,
@@ -307,13 +402,13 @@ TEST(ReputationAlgorithmTest, NarrowSignerTargetOnlyReducesLeaderRecovery) {
 TEST(ReputationAlgorithmTest, PeerTrustDisabledKeepsAuditNeutral) {
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = false;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_EQ(candidate.validators[0].peertrust_score, 100);
@@ -326,13 +421,13 @@ TEST(ReputationAlgorithmTest, PeerTrustDisabledKeepsAuditNeutral) {
 TEST(ReputationAlgorithmTest, PeerTrustAllGoodRotatingFeedbackStaysHigh) {
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = true;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_EQ(candidate.validators[0].feedback_count, 8);
@@ -346,7 +441,7 @@ TEST(ReputationAlgorithmTest, PeerTrustAllGoodRotatingFeedbackStaysHigh) {
 TEST(ReputationAlgorithmTest, PeerTrustCliqueFeedbackLowersOnlyLeaderRecovery) {
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = true;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
@@ -356,7 +451,7 @@ TEST(ReputationAlgorithmTest, PeerTrustCliqueFeedbackLowersOnlyLeaderRecovery) {
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_EQ(candidate.validators[0].feedback_count, 8);
@@ -384,17 +479,17 @@ TEST(ReputationAlgorithmTest,
              20);
   const std::string clique_reviewers =
       Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 20);
-  std::vector<MetricEvidence> evidence = {
+  std::vector<TestEvidence> evidence = {
       CertifiedQc(1, 1, clique_reviewers, all_available),
       CertifiedQc(2, 2, clique_reviewers, all_available),
       CertifiedQc(3, 15, all_available, all_available),
       CertifiedQc(4, 16, all_available, all_available),
   };
 
-  const ReputationCandidate legacy_candidate = ComputeReputationCandidate(
+  const ReputationCandidate legacy_candidate = ComputeCandidate(
       1, 20, 1, evidence, std::vector<int64_t>(20, 30), legacy_config,
       "old-root", 0, 64);
-  const ReputationCandidate peertrust_candidate = ComputeReputationCandidate(
+  const ReputationCandidate peertrust_candidate = ComputeCandidate(
       1, 20, 1, evidence, std::vector<int64_t>(20, 30), peertrust_config,
       "old-root", 0, 64);
 
@@ -418,13 +513,13 @@ TEST(ReputationAlgorithmTest,
 TEST(ReputationAlgorithmTest,
      AvailableSignerBitmapLimitsVoterRecoveryOpportunities) {
   ReputationConfig config = TestConfig();
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3}, 5),
                                    Bitmap({1, 2, 3}, 5)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 5, 1, evidence, {30, 30, 30, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_GT(candidate.validators[0].opportunities, 0);
@@ -439,13 +534,13 @@ TEST(ReputationAlgorithmTest,
 TEST(ReputationAlgorithmTest,
      BroadAvailableSignerBitmapStillDetectsRepeatedSlowVoter) {
   ReputationConfig config = TestConfig();
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 5),
                                    Bitmap({1, 2, 3, 4, 5}, 5)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 5, 1, evidence, {30, 30, 30, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_GT(candidate.validators[4].opportunities, 0);
@@ -463,14 +558,14 @@ TEST(ReputationAlgorithmTest,
       Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
               11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
              20);
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 5; ++view) {
     evidence.push_back(
         CertifiedQc(view, view, clean_reviewers, clean_reviewers));
   }
   evidence.push_back(CertifiedQc(6, 20, all_available, all_available));
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 20, 1, evidence, std::vector<int64_t>(20, 30), config,
       "old-root", 0, 64);
 
@@ -487,13 +582,13 @@ TEST(ReputationAlgorithmTest, PeerTrustLowReviewerCredibilityReducesFeedback) {
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = true;
   const std::string low_weight_reviewers = Bitmap({1, 2, 3, 4}, 4);
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 4; ++view) {
     evidence.push_back(CertifiedQc(view, 1, low_weight_reviewers,
                                    low_weight_reviewers));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {5, 5, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_LT(candidate.validators[0].reviewer_credibility_score, 100);
@@ -512,7 +607,7 @@ TEST(ReputationAlgorithmTest,
              20);
   const std::string overlapping_quorum =
       Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 20);
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int leader = 6; leader <= 10; ++leader) {
     for (int round = 0; round < 3; ++round) {
       evidence.push_back(CertifiedQc(leader * 10 + round, leader,
@@ -520,7 +615,7 @@ TEST(ReputationAlgorithmTest,
     }
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 20, 1, evidence, std::vector<int64_t>(20, 30), config,
       "old-root", 0, 64);
 
@@ -536,13 +631,13 @@ TEST(ReputationAlgorithmTest, PeerTrustDebtPersistsWithoutLeaderFeedback) {
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = true;
   config.bonus_per_epoch = 1;
-  const std::vector<MetricEvidence> evidence = {
+  const std::vector<TestEvidence> evidence = {
       CertifiedQc(1, 2, Bitmap({1, 2, 3, 4}, 4), Bitmap({1, 2, 3, 4}, 4)),
   };
 
-  const ReputationCandidate no_debt = ComputeReputationCandidate(
+  const ReputationCandidate no_debt = ComputeCandidate(
       1, 4, 1, evidence, {20, 30, 30, 30}, config, "old-root", 0, 64);
-  const ReputationCandidate with_debt = ComputeReputationCandidate(
+  const ReputationCandidate with_debt = ComputeCandidate(
       1, 4, 1, evidence, {20, 30, 30, 30}, config, "old-root", 0, 64,
       {}, {}, {}, {}, {}, {}, {}, {40, 0, 0, 0});
 
@@ -555,13 +650,13 @@ TEST(ReputationAlgorithmTest, PeerTrustDebtPersistsWithoutLeaderFeedback) {
 TEST(ReputationAlgorithmTest, PeerTrustBroadGoodLeadershipRepaysDebt) {
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = true;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64,
       {}, {}, {}, {}, {}, {}, {}, {40, 0, 0, 0});
 
@@ -574,15 +669,15 @@ TEST(ReputationAlgorithmTest, PeerTrustBroadGoodLeadershipRepaysDebt) {
 }
 
 TEST(ReputationAlgorithmTest, CandidateDigestIsDeterministic) {
-  std::vector<MetricEvidence> evidence = {
+  std::vector<TestEvidence> evidence = {
       CertifiedQc(1, 1, Bitmap({1, 2, 3}, 4), Bitmap({1, 2, 3, 4}, 4)),
       TimeoutEvidence(2, 2),
       CertifiedQc(3, 3, Bitmap({1, 3, 4}, 4), Bitmap({1, 2, 3, 4}, 4)),
   };
 
-  const ReputationCandidate first = ComputeReputationCandidate(
+  const ReputationCandidate first = ComputeCandidate(
       1, 4, 9, evidence, {20, 30, 30, 30}, TestConfig(), "old-root", 7, 128);
-  const ReputationCandidate second = ComputeReputationCandidate(
+  const ReputationCandidate second = ComputeCandidate(
       4, 4, 9, evidence, {20, 30, 30, 30}, TestConfig(), "old-root", 7, 128);
 
   EXPECT_EQ(first.metric_root_hex, second.metric_root_hex);
@@ -611,13 +706,13 @@ TEST(ReputationAlgorithmTest, CandidateDigestIgnoresAuditRoots) {
 TEST(ReputationAlgorithmTest, SybilGraphDisabledKeepsAuditNeutral) {
   ReputationConfig config = TestConfig();
   config.sybil_graph_enabled = false;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 4; ++view) {
     evidence.push_back(CertifiedQc(view, view, Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config);
 
   for (const ValidatorReputation& validator : candidate.validators) {
@@ -639,7 +734,7 @@ TEST(ReputationAlgorithmTest, SybilGraphAllGoodRotatingEvidenceStaysHigh) {
   for (int id = 1; id <= total_replicas; ++id) {
     all_signers.push_back(id);
   }
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 20; ++view) {
     evidence.push_back(CertifiedQc(
         view, ((view - 1) % total_replicas) + 1,
@@ -647,7 +742,7 @@ TEST(ReputationAlgorithmTest, SybilGraphAllGoodRotatingEvidenceStaysHigh) {
         BitmapFromVector(all_signers, total_replicas)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, total_replicas, 1, evidence, weights, config);
 
   for (const ValidatorReputation& validator : candidate.validators) {
@@ -674,7 +769,7 @@ TEST(ReputationAlgorithmTest,
   for (int id = 1; id <= total_replicas; ++id) {
     all_signers.push_back(id);
   }
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 16; ++view) {
     const int leader = ((view - 1) % 8) + 1;
     evidence.push_back(CertifiedQc(
@@ -688,7 +783,7 @@ TEST(ReputationAlgorithmTest,
         BitmapFromVector(all_signers, total_replicas)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, total_replicas, 1, evidence, weights, config);
 
   int sybil_score_sum = 0;
@@ -723,7 +818,7 @@ TEST(ReputationAlgorithmTest,
   for (int id = 1; id <= total_replicas; ++id) {
     all_signers.push_back(id);
   }
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 16; ++view) {
     const int leader = ((view - 1) % 8) + 1;
     evidence.push_back(CertifiedQc(
@@ -731,7 +826,7 @@ TEST(ReputationAlgorithmTest,
         BitmapFromVector(all_signers, total_replicas)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, total_replicas, 1, evidence, weights, config);
 
   for (int id = 1; id <= 8; ++id) {
@@ -744,7 +839,7 @@ TEST(ReputationAlgorithmTest,
 TEST(ReputationAlgorithmTest, SybilGraphDebtPersistsAcrossQuietWindow) {
   ReputationConfig config = TestConfig();
   config.sybil_graph_enabled = true;
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, /*evidence=*/{}, {30, 30, 30, 30}, config, "", 0, 0,
       {}, {}, {}, {}, {}, {}, {}, /*prior_peertrust_leader_debt=*/{},
       /*prior_sybil_graph_debt=*/{30, 0, 0, 0});
@@ -757,7 +852,7 @@ TEST(ReputationAlgorithmTest, SybilGraphDebtPersistsAcrossQuietWindow) {
 TEST(ReputationAlgorithmTest, SybilGraphDebtGatesLaterRecovery) {
   ReputationConfig config = TestConfig();
   config.sybil_graph_enabled = true;
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, {CertifiedQc(1, 1, Bitmap({1, 2, 3, 4}, 4),
                             Bitmap({1, 2, 3, 4}, 4))},
       {30, 30, 30, 30}, config, "", 0, 0, {}, {}, {}, {}, {}, {}, {},
@@ -771,7 +866,7 @@ TEST(ReputationAlgorithmTest, SybilGraphDebtGatesLaterRecovery) {
 TEST(ReputationAlgorithmTest, SybilGraphDebtDoesNotRecoverFromVoterOnlyEvidence) {
   ReputationConfig config = TestConfig();
   config.sybil_graph_enabled = true;
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, {CertifiedQc(1, 2, Bitmap({1, 2, 3, 4}, 4),
                             Bitmap({1, 2, 3, 4}, 4))},
       {30, 30, 30, 30}, config, "", 0, 0, {}, {}, {}, {}, {}, {}, {},
@@ -820,14 +915,14 @@ TEST(ReputationAlgorithmTest, DoubleProposalPenaltyOverridesSoftReputation) {
   config.strong_fault_enabled = true;
   config.double_proposal_detection_enabled = true;
   config.strong_fault_target_weight = 1;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
                                    Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 7, 64,
       {ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-a"),
        ProposalArtifact(/*leader=*/2, /*view=*/9, /*slot=*/0, "hash-b")});
@@ -908,14 +1003,14 @@ TEST(ReputationAlgorithmTest, DoubleVotePenaltyOverridesSoftReputation) {
   config.strong_fault_enabled = true;
   config.double_vote_detection_enabled = true;
   config.strong_fault_target_weight = 1;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
                                    Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 7, 64,
       /*signed_proposal_evidence=*/{},
       {VoteArtifact(/*signer=*/3, /*view=*/9, /*slot=*/0, "hash-a"),
@@ -932,14 +1027,14 @@ TEST(ReputationAlgorithmTest, InvalidQcPenaltyOverridesSoftReputation) {
   config.strong_fault_enabled = true;
   config.invalid_qc_proposal_detection_enabled = true;
   config.strong_fault_target_weight = 1;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
                                    Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 7, 64,
       /*signed_proposal_evidence=*/{}, /*signed_vote_evidence=*/{},
       {InvalidQcArtifact(/*leader=*/4, /*view=*/9, /*slot=*/0, "hash-a")});
@@ -1084,14 +1179,14 @@ TEST(ReputationAlgorithmTest, V2StrongFaultCandidatePenaltiesAreDeterministic) {
   config.invalid_tc_proposal_detection_enabled = true;
   config.conflicting_qc_detection_enabled = true;
   config.strong_fault_target_weight = 1;
-  std::vector<MetricEvidence> evidence;
+  std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
     evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
                                    Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
 
-  const ReputationCandidate candidate = ComputeReputationCandidate(
+  const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 7, 64,
       /*signed_proposal_evidence=*/{}, /*signed_vote_evidence=*/{},
       /*invalid_qc_proposal_evidence=*/{},

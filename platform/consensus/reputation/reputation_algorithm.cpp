@@ -4,10 +4,14 @@
 #include <map>
 #include <numeric>
 #include <set>
-#include <sstream>
 #include <tuple>
+#include <utility>
 
-#include "common/crypto/hash.h"
+#include "platform/consensus/reputation/reputation_roots.h"
+#include "platform/consensus/reputation/reputation_utils.h"
+#include "platform/consensus/reputation/soft_reputation.h"
+#include "platform/consensus/reputation/strong_fault_detector.h"
+#include "platform/consensus/reputation/sybil_graph.h"
 
 namespace resdb {
 namespace consensus {
@@ -15,589 +19,15 @@ namespace reputation {
 namespace {
 
 constexpr const char* kAlgorithmBayesV4 = "bayes_v4";
-constexpr int64_t kMinWeight = 1;
-constexpr int64_t kMaxWeight = 100;
 
-std::string HexEncodeBytes(const std::string& data) {
-  static constexpr char kHex[] = "0123456789abcdef";
-  std::string hex;
-  hex.reserve(data.size() * 2);
-  for (unsigned char ch : data) {
-    hex.push_back(kHex[ch >> 4]);
-    hex.push_back(kHex[ch & 0x0f]);
-  }
-  return hex;
-}
-
-std::string HashHex(const std::string& data) {
-  return HexEncodeBytes(utils::CalculateSHA256Hash(data));
-}
-
-int64_t ClampWeight(int64_t weight, const ReputationConfig& config) {
-  return std::max<int64_t>(config.min_weight,
-                           std::min<int64_t>(config.max_weight, weight));
-}
-
-int64_t ClampWeight(int64_t weight) {
-  return std::max<int64_t>(kMinWeight, std::min<int64_t>(kMaxWeight, weight));
-}
-
-std::vector<int64_t> NormalizeWeights(const std::vector<int64_t>& weights,
-                                      int total_replicas) {
-  std::vector<int64_t> normalized(std::max(total_replicas, 0), kMinWeight);
-  for (int i = 0; i < total_replicas && i < static_cast<int>(weights.size());
-       ++i) {
-    normalized[i] = ClampWeight(weights[i]);
-  }
-  return normalized;
-}
-
-int RoundedDivide(uint64_t numerator, uint64_t denominator) {
-  if (denominator == 0) {
-    return 0;
-  }
-  return static_cast<int>((numerator + denominator / 2) / denominator);
-}
-
-int VoteScore(uint64_t inclusions, uint64_t opportunities) {
-  const uint64_t numerator = 100 * (1 + inclusions);
-  const uint64_t denominator = 2 + opportunities;
-  return std::max(0, std::min(100, RoundedDivide(numerator, denominator)));
-}
-
-int LeaderCertifiedScore(uint64_t certified_count,
-                         uint64_t leader_opportunities) {
-  if (leader_opportunities == 0) {
-    return 100;
-  }
-  return VoteScore(certified_count, leader_opportunities);
-}
-
-uint64_t FairExpectedSignerOpportunities(uint64_t selected_signer_slots,
-                                         int total_replicas,
-                                         uint64_t event_count) {
-  if (selected_signer_slots == 0 || total_replicas <= 0 || event_count == 0) {
-    return 0;
-  }
-  const uint64_t expected = static_cast<uint64_t>(
-      RoundedDivide(selected_signer_slots, static_cast<uint64_t>(total_replicas)));
-  return std::max<uint64_t>(1, std::min<uint64_t>(event_count, expected));
-}
-
-int RecoveryCreditForScore(int score, int max_recovery_per_epoch) {
-  if (max_recovery_per_epoch <= 0) {
-    return 0;
-  }
-  constexpr int kNoRecoveryBelow = 30;
-  constexpr int kFullRecoveryAt = 67;
-  const int bounded_score = std::max(0, std::min(100, score));
-  if (bounded_score >= kFullRecoveryAt) {
-    return max_recovery_per_epoch;
-  }
-  if (bounded_score < kNoRecoveryBelow) {
-    return 0;
-  }
-  return RoundedDivide(static_cast<uint64_t>(bounded_score - kNoRecoveryBelow) *
-                           static_cast<uint64_t>(max_recovery_per_epoch),
-                       kFullRecoveryAt - kNoRecoveryBelow);
-}
-
-bool HasNearFairInclusion(uint64_t inclusions, uint64_t opportunities) {
-  if (opportunities == 0 || inclusions == 0) {
-    return false;
-  }
-  return RoundedDivide(inclusions * 100, opportunities) >= 75;
-}
-
-std::vector<bool> SignerMask(const std::vector<int>& signers,
-                             int total_replicas) {
-  std::vector<bool> mask(std::max(total_replicas, 0), false);
-  for (int signer : signers) {
-    if (signer >= 1 && signer <= total_replicas) {
-      mask[signer - 1] = true;
-    }
-  }
-  return mask;
-}
-
-int WeightedEffectiveDiversityScore(const std::vector<int>& signers,
-                                    const std::vector<int64_t>& weights,
-                                    int total_replicas) {
-  if (signers.empty() || total_replicas <= 0) {
-    return 0;
-  }
-  int64_t sum_weight = 0;
-  int64_t square_sum = 0;
-  for (int signer : signers) {
-    if (signer < 1 || signer > total_replicas ||
-        signer > static_cast<int>(weights.size())) {
-      continue;
-    }
-    const int64_t weight = std::max<int64_t>(1, weights[signer - 1]);
-    sum_weight += weight;
-    square_sum += weight * weight;
-  }
-  if (sum_weight <= 0 || square_sum <= 0) {
-    return 0;
-  }
-  const int target_effective_signers =
-      std::max(1, std::min(total_replicas, (total_replicas * 2) / 3 + 1));
-  const uint64_t numerator = static_cast<uint64_t>(sum_weight * sum_weight) * 100;
-  const uint64_t denominator = static_cast<uint64_t>(square_sum) *
-                               static_cast<uint64_t>(target_effective_signers);
-  return std::max(0, std::min(100, RoundedDivide(numerator, denominator)));
-}
-
-int SignerFrequencyBalanceScore(const std::vector<uint64_t>& counts,
-                                const std::set<int>& eligible_signers) {
-  if (counts.empty() || eligible_signers.empty()) {
-    return 100;
-  }
-  uint64_t total_selected = 0;
-  uint64_t min_selected = UINT64_MAX;
-  for (int signer : eligible_signers) {
-    if (signer < 1 || signer > static_cast<int>(counts.size())) {
-      continue;
-    }
-    const uint64_t selected = counts[signer - 1];
-    total_selected += selected;
-    min_selected = std::min(min_selected, selected);
-  }
-  if (total_selected == 0 || min_selected == UINT64_MAX) {
-    return 100;
-  }
-  const int average_selected =
-      RoundedDivide(total_selected, static_cast<uint64_t>(eligible_signers.size()));
-  if (average_selected <= 0) {
-    return 100;
-  }
-  return std::max(
-      0, std::min(100,
-                  RoundedDivide(min_selected * 100,
-                                static_cast<uint64_t>(average_selected))));
-}
-
-int WeightedSignerVariationScore(const std::vector<int>& previous_signers,
-                                 const std::vector<int>& current_signers,
-                                 const std::vector<int64_t>& weights,
-                                 int total_replicas) {
-  if (previous_signers.empty() || current_signers.empty() ||
-      total_replicas <= 0) {
-    return 100;
-  }
-  const std::vector<bool> previous = SignerMask(previous_signers, total_replicas);
-  const std::vector<bool> current = SignerMask(current_signers, total_replicas);
-  int64_t intersection_weight = 0;
-  int64_t union_weight = 0;
-  for (int i = 0; i < total_replicas; ++i) {
-    const bool in_previous = previous[i];
-    const bool in_current = current[i];
-    if (!in_previous && !in_current) {
-      continue;
-    }
-    const int64_t weight = i < static_cast<int>(weights.size())
-                               ? std::max<int64_t>(1, weights[i])
-                               : 1;
-    union_weight += weight;
-    if (in_previous && in_current) {
-      intersection_weight += weight;
-    }
-  }
-  if (union_weight <= 0) {
-    return 100;
-  }
-  const int repeated_score = RoundedDivide(
-      static_cast<uint64_t>(intersection_weight) * 100,
-      static_cast<uint64_t>(union_weight));
-  return std::max(0, std::min(100, 100 - repeated_score));
-}
-
-int ReviewerCredibilityScore(const std::vector<int>& signers,
-                             const std::vector<int64_t>& weights,
-                             int total_replicas) {
-  if (signers.empty() || weights.empty() || total_replicas <= 0) {
-    return 100;
-  }
-  int64_t max_weight = 0;
-  for (int i = 0; i < total_replicas && i < static_cast<int>(weights.size());
-       ++i) {
-    max_weight = std::max<int64_t>(max_weight, weights[i]);
-  }
-  if (max_weight <= 0) {
-    return 100;
-  }
-  uint64_t credibility_sum = 0;
-  uint64_t credibility_count = 0;
-  for (int signer : signers) {
-    if (signer < 1 || signer > total_replicas ||
-        signer > static_cast<int>(weights.size())) {
-      continue;
-    }
-    credibility_sum += RoundedDivide(
-        static_cast<uint64_t>(std::max<int64_t>(1, weights[signer - 1])) *
-            100,
-        static_cast<uint64_t>(max_weight));
-    ++credibility_count;
-  }
-  if (credibility_count == 0) {
-    return 100;
-  }
-  return std::max(0, std::min(100,
-                              RoundedDivide(credibility_sum,
-                                            credibility_count)));
-}
-
-
-int WeightedJaccardPercent(const std::set<int>& lhs, const std::set<int>& rhs,
-                           const std::vector<int64_t>& weights,
-                           int total_replicas) {
-  if (lhs.empty() || rhs.empty() || total_replicas <= 0) {
-    return 0;
-  }
-  int64_t intersection_weight = 0;
-  int64_t union_weight = 0;
-  for (int validator_id = 1; validator_id <= total_replicas; ++validator_id) {
-    const bool in_lhs = lhs.find(validator_id) != lhs.end();
-    const bool in_rhs = rhs.find(validator_id) != rhs.end();
-    if (!in_lhs && !in_rhs) {
-      continue;
-    }
-    const int64_t weight =
-        validator_id <= static_cast<int>(weights.size())
-            ? std::max<int64_t>(1, weights[validator_id - 1])
-            : 1;
-    union_weight += weight;
-    if (in_lhs && in_rhs) {
-      intersection_weight += weight;
-    }
-  }
-  if (union_weight <= 0) {
-    return 0;
-  }
-  return std::max(0, std::min(100,
-                              RoundedDivide(
-                                  static_cast<uint64_t>(intersection_weight) *
-                                      100,
-                                  static_cast<uint64_t>(union_weight))));
-}
-
-std::vector<int> SetToOrderedVector(const std::set<int>& values) {
-  return std::vector<int>(values.begin(), values.end());
-}
-
-int ClampScore(int score) { return std::max(0, std::min(100, score)); }
-
-int AutoSybilGraphIterations(int total_replicas,
-                             const ReputationConfig& config) {
-  if (config.sybil_graph_iterations > 0) {
-    return config.sybil_graph_iterations;
-  }
-  int iterations = 1;
-  int size = std::max(1, total_replicas);
-  while (size > 1) {
-    size = (size + 1) / 2;
-    ++iterations;
-  }
-  return std::max(1, iterations);
-}
-
-void AddBoundedUndirectedGraphEdge(
-    std::vector<std::map<int, uint64_t>>* graph, int lhs, int rhs) {
-  if (graph == nullptr || lhs == rhs || lhs < 0 || rhs < 0 ||
-      lhs >= static_cast<int>(graph->size()) ||
-      rhs >= static_cast<int>(graph->size())) {
-    return;
-  }
-  constexpr uint64_t kMaxEvidenceWeightPerPair = 16;
-  uint64_t& lhs_weight = (*graph)[lhs][rhs];
-  uint64_t& rhs_weight = (*graph)[rhs][lhs];
-  lhs_weight = std::min<uint64_t>(kMaxEvidenceWeightPerPair, lhs_weight + 1);
-  rhs_weight = std::min<uint64_t>(kMaxEvidenceWeightPerPair, rhs_weight + 1);
-}
-
-uint64_t GraphDegree(const std::map<int, uint64_t>& edges) {
-  uint64_t degree = 0;
-  for (const auto& edge : edges) {
-    degree += edge.second;
-  }
-  return degree;
-}
-
-struct SybilGraphAudit {
-  std::vector<int> rank_score;
-  std::vector<int> cut_score;
-  std::vector<int> graph_score;
-  std::vector<uint64_t> graph_degree;
-  std::vector<int> seed_trust_score;
-  uint64_t edge_evidence_count = 0;
+struct CoreEvidenceEvent {
+  int view_or_round = 0;
+  int leader_id = 0;
+  std::string artifact_digest;
+  std::string signer_bitmap;
+  std::string available_signer_bitmap;
+  OutcomeClass outcome_class = OutcomeClass::kNone;
 };
-
-SybilGraphAudit ComputeSybilGraphAudit(
-    int total_replicas, const std::vector<MetricEvidence>& ordered_events,
-    const std::vector<int64_t>& weights,
-    const std::vector<std::set<int>>& unique_signers_by_leader,
-    const std::vector<uint64_t>& diversity_count,
-    const std::vector<std::set<int>>& unique_available_signers_by_leader,
-    const std::vector<uint64_t>& available_signer_evidence_count,
-    const ReputationConfig& config) {
-  SybilGraphAudit audit;
-  const int n = std::max(total_replicas, 0);
-  audit.rank_score.assign(n, 100);
-  audit.cut_score.assign(n, 100);
-  audit.graph_score.assign(n, 100);
-  audit.graph_degree.assign(n, 0);
-  audit.seed_trust_score.assign(n, 100);
-  if (!config.sybil_graph_enabled || n == 0) {
-    return audit;
-  }
-
-  std::vector<std::map<int, uint64_t>> graph(n);
-  for (const MetricEvidence& event : ordered_events) {
-    if (event.outcome_class != OutcomeClass::kCertified ||
-        event.signer_bitmap.empty() || event.leader_id < 1 ||
-        event.leader_id > n) {
-      continue;
-    }
-    const int leader_idx = event.leader_id - 1;
-    const std::vector<int> signers =
-        DecodeSignerBitmap(event.signer_bitmap, total_replicas);
-    for (int signer : signers) {
-      if (signer < 1 || signer > n || signer == event.leader_id) {
-        continue;
-      }
-      AddBoundedUndirectedGraphEdge(&graph, leader_idx, signer - 1);
-      ++audit.edge_evidence_count;
-    }
-  }
-  if (audit.edge_evidence_count < config.sybil_graph_min_edges) {
-    return audit;
-  }
-
-  int64_t max_weight = 1;
-  for (int64_t weight : weights) {
-    max_weight = std::max<int64_t>(max_weight, weight);
-  }
-  uint64_t total_degree = 0;
-  for (int i = 0; i < n; ++i) {
-    audit.graph_degree[i] = GraphDegree(graph[i]);
-    total_degree += audit.graph_degree[i];
-    const int64_t weight = i < static_cast<int>(weights.size())
-                               ? std::max<int64_t>(1, weights[i])
-                               : 1;
-    audit.seed_trust_score[i] = ClampScore(
-        RoundedDivide(static_cast<uint64_t>(weight) * 100,
-                      static_cast<uint64_t>(max_weight)));
-  }
-  if (total_degree == 0) {
-    return audit;
-  }
-
-  constexpr uint64_t kTrustScale = 1000000;
-  std::vector<uint64_t> trust(n, kTrustScale);
-  for (int i = 0; i < n; ++i) {
-    trust[i] = std::max<uint64_t>(
-        1, static_cast<uint64_t>(audit.seed_trust_score[i]) * kTrustScale);
-  }
-  const int iterations = AutoSybilGraphIterations(total_replicas, config);
-  for (int iter = 0; iter < iterations; ++iter) {
-    std::vector<uint64_t> next(n, 0);
-    for (int i = 0; i < n; ++i) {
-      const uint64_t degree = audit.graph_degree[i];
-      if (degree == 0) {
-        next[i] += trust[i];
-        continue;
-      }
-      for (const auto& edge : graph[i]) {
-        next[edge.first] += (trust[i] * edge.second) / degree;
-      }
-    }
-    trust.swap(next);
-  }
-
-  std::vector<uint64_t> rank_values;
-  rank_values.reserve(n);
-  for (int i = 0; i < n; ++i) {
-    const uint64_t degree = std::max<uint64_t>(1, audit.graph_degree[i]);
-    rank_values.push_back(trust[i] / degree);
-  }
-  std::vector<uint64_t> sorted_rank_values = rank_values;
-  std::sort(sorted_rank_values.begin(), sorted_rank_values.end());
-  const uint64_t median_rank =
-      std::max<uint64_t>(1, sorted_rank_values[sorted_rank_values.size() / 2]);
-
-  for (int i = 0; i < n; ++i) {
-    audit.rank_score[i] = ClampScore(RoundedDivide(rank_values[i] * 100,
-                                                   median_rank));
-    int leader_reviewer_coverage_score = 100;
-    int max_leader_reviewer_overlap = 0;
-    const bool has_available_signer_evidence =
-        i < static_cast<int>(available_signer_evidence_count.size()) &&
-        available_signer_evidence_count[i] > 0;
-    const int available_reviewer_coverage_score =
-        has_available_signer_evidence &&
-                i < static_cast<int>(unique_available_signers_by_leader.size()) &&
-                n > 0
-            ? ClampScore(RoundedDivide(
-                  unique_available_signers_by_leader[i].size() * 100,
-                  static_cast<uint64_t>(n)))
-            : 100;
-    if (i < static_cast<int>(unique_signers_by_leader.size()) &&
-        i < static_cast<int>(diversity_count.size()) &&
-        diversity_count[i] > 0 && !unique_signers_by_leader[i].empty()) {
-      leader_reviewer_coverage_score =
-          ClampScore(RoundedDivide(unique_signers_by_leader[i].size() * 100,
-                                   static_cast<uint64_t>(std::max(1, n))));
-      for (int other = 0;
-           other < static_cast<int>(unique_signers_by_leader.size()); ++other) {
-        if (other == i || other >= static_cast<int>(diversity_count.size()) ||
-            diversity_count[other] == 0) {
-          continue;
-        }
-        max_leader_reviewer_overlap = std::max(
-            max_leader_reviewer_overlap,
-            WeightedJaccardPercent(unique_signers_by_leader[i],
-                                   unique_signers_by_leader[other], weights,
-                                   total_replicas));
-      }
-    }
-    int cut_score = 100;
-    const bool narrow_public_reviewer_target =
-        has_available_signer_evidence &&
-        available_reviewer_coverage_score < 95;
-    const bool narrow_unknown_target =
-        !has_available_signer_evidence && leader_reviewer_coverage_score < 95;
-    if (audit.graph_degree[i] > 0 &&
-        (narrow_public_reviewer_target || narrow_unknown_target) &&
-        max_leader_reviewer_overlap >= 67) {
-      const int cluster_score = std::min(
-          std::min(leader_reviewer_coverage_score,
-                   available_reviewer_coverage_score),
-          std::max(0, 100 - max_leader_reviewer_overlap));
-      cut_score = std::max(
-          0, std::min(100, 100 - std::min(config.sybil_graph_max_discount,
-                                          100 - cluster_score)));
-    }
-    audit.cut_score[i] = cut_score;
-    // SybilRank is useful audit context, but in V1 it is too assumption-heavy
-    // to reduce weights alone. Only a concrete evidence-derived cut/cluster
-    // signal can make the advisory graph score non-neutral.
-    audit.graph_score[i] = audit.cut_score[i] < 100
-                               ? ClampScore(std::min(audit.rank_score[i],
-                                                     audit.cut_score[i]))
-                               : 100;
-  }
-  return audit;
-}
-
-std::string WeightRootHex(const std::vector<int64_t>& weights) {
-  std::ostringstream out;
-  out << "protocol_neutral_weight_root_v1";
-  for (size_t i = 0; i < weights.size(); ++i) {
-    out << '|' << (i + 1) << ':' << weights[i];
-  }
-  return HashHex(out.str());
-}
-
-std::string MetricCanonical(const ReputationCandidate& candidate) {
-  std::ostringstream out;
-  out << "protocol_neutral_reputation_metric_v4|" << candidate.algorithm << '|'
-      << candidate.total_replicas << '|' << candidate.window_index << '|'
-      << candidate.start_view << '|' << candidate.end_view << '|'
-      << candidate.event_count;
-  for (const auto& validator : candidate.validators) {
-    out << '|' << validator.validator_id << ':' << validator.opportunities << ':'
-        << validator.inclusions << ':' << validator.vote_score << ':'
-        << validator.leader_certified_count << ':'
-        << validator.leader_opportunity_count << ':'
-        << validator.leader_score << ':' << validator.leader_diversity_score
-        << ':' << validator.peertrust_score << ':'
-        << validator.reviewer_credibility_score << ':'
-        << validator.transaction_context_score << ':'
-        << validator.community_context_score << ':'
-        << validator.reviewer_entropy_score << ':'
-        << validator.cross_leader_independence_score << ':'
-        << validator.reviewer_overuse_score << ':'
-        << validator.peertrust_leader_debt << ':'
-        << validator.peertrust_debt_delta << ':' << validator.feedback_count;
-    out << ':' << validator.sybil_rank_score << ':' << validator.sybil_cut_score
-        << ':' << validator.sybil_graph_score << ':'
-        << validator.sybil_graph_debt << ':'
-        << validator.sybil_graph_debt_delta << ':' << validator.graph_degree
-        << ':' << validator.seed_trust_score;
-  }
-  return out.str();
-}
-
-std::string ReputationCanonical(const ReputationCandidate& candidate) {
-  std::ostringstream out;
-  out << "protocol_neutral_reputation_state_v4|" << candidate.algorithm << '|'
-      << candidate.total_replicas << '|' << candidate.window_index;
-  for (const auto& validator : candidate.validators) {
-    out << '|' << validator.validator_id << ':' << validator.reputation_score
-        << ':' << validator.decay_applied << ':' << validator.recovery_credit
-        << ':' << validator.bonus_credit << ':' << validator.current_weight
-        << ':' << validator.next_weight << ':' << validator.strong_fault_count
-        << ':' << validator.penalty_points << ':' << validator.peertrust_score
-        << ':' << validator.reviewer_credibility_score << ':'
-        << validator.transaction_context_score << ':'
-        << validator.community_context_score << ':'
-        << validator.reviewer_entropy_score << ':'
-        << validator.cross_leader_independence_score << ':'
-        << validator.reviewer_overuse_score << ':' << validator.feedback_count;
-    out << ':' << validator.sybil_rank_score << ':' << validator.sybil_cut_score
-        << ':' << validator.sybil_graph_score << ':'
-        << validator.sybil_graph_debt << ':'
-        << validator.sybil_graph_debt_delta << ':' << validator.graph_degree
-        << ':' << validator.seed_trust_score;
-  }
-  return out.str();
-}
-
-std::string StrongFaultCanonical(const ReputationCandidate& candidate) {
-  std::ostringstream out;
-  out << "protocol_neutral_strong_fault_v1|" << candidate.algorithm << '|'
-      << candidate.total_replicas << '|' << candidate.window_index;
-  for (const StrongFaultRecord& fault : candidate.strong_faults) {
-    out << '|' << static_cast<int>(fault.type) << ':' << fault.validator_id
-        << ':' << fault.view_or_round << ':' << fault.slot_or_height << ':'
-        << fault.first_artifact_digest << ':' << fault.second_artifact_digest;
-  }
-  return out.str();
-}
-
-std::string PenaltyCanonical(const ReputationCandidate& candidate) {
-  std::ostringstream out;
-  out << "protocol_neutral_penalty_v1|" << candidate.algorithm << '|'
-      << candidate.total_replicas << '|' << candidate.window_index;
-  for (const ValidatorReputation& validator : candidate.validators) {
-    out << '|' << validator.validator_id << ':' << validator.strong_fault_count
-        << ':' << validator.penalty_points << ':' << validator.next_weight;
-  }
-  return out.str();
-}
-
-std::string CandidateCanonicalFromParts(
-    int total_replicas, int start_view, int end_view,
-    const std::string& old_weight_root_hex, uint64_t old_weight_version,
-    int activation_view, const std::string& metric_root_hex,
-    const std::string& reputation_root_hex,
-    const std::string& next_weight_root_hex,
-    const std::vector<int64_t>& next_weights,
-    const std::string& strong_fault_root_hex,
-    const std::string& penalty_root_hex) {
-  (void)metric_root_hex;
-  (void)reputation_root_hex;
-  std::ostringstream out;
-  out << "protocol_neutral_reputation_decision_v4|" << total_replicas << '|'
-      << start_view << '|' << end_view << '|' << old_weight_root_hex << '|'
-      << old_weight_version << '|' << activation_view << '|'
-      << next_weight_root_hex << '|' << strong_fault_root_hex << '|'
-      << penalty_root_hex;
-  for (size_t i = 0; i < next_weights.size(); ++i) {
-    out << '|' << (i + 1) << ':' << next_weights[i];
-  }
-  return out.str();
-}
 
 std::string StrongFaultTypeName(StrongFaultType type) {
   switch (type) {
@@ -653,417 +83,57 @@ std::vector<StrongFaultRecord> SummarizeFaultedValidators(
 
 }  // namespace
 
-std::vector<int> DecodeSignerBitmap(const std::string& signer_bitmap,
-                                    int total_replicas) {
-  std::vector<int> signers;
-  for (int validator_id = 1; validator_id <= total_replicas; ++validator_id) {
-    const int bit = validator_id - 1;
-    const size_t byte_index = static_cast<size_t>(bit / 8);
-    if (byte_index >= signer_bitmap.size()) {
-      continue;
-    }
-    const unsigned char byte =
-        static_cast<unsigned char>(signer_bitmap[byte_index]);
-    if ((byte & (1 << (bit % 8))) != 0) {
-      signers.push_back(validator_id);
-    }
-  }
-  return signers;
-}
-
-std::vector<StrongFaultRecord> DetectDoubleProposalFaults(
-    const std::vector<SignedProposalEvidence>& signed_proposal_evidence) {
-  std::vector<SignedProposalEvidence> ordered = signed_proposal_evidence;
-  std::sort(ordered.begin(), ordered.end(),
-            [](const SignedProposalEvidence& lhs,
-               const SignedProposalEvidence& rhs) {
-              return std::tie(lhs.protocol_id, lhs.weight_version,
-                              lhs.leader_id, lhs.view_or_round,
-                              lhs.slot_or_height, lhs.proposal_hash) <
-                     std::tie(rhs.protocol_id, rhs.weight_version,
-                              rhs.leader_id, rhs.view_or_round,
-                              rhs.slot_or_height, rhs.proposal_hash);
-            });
-
-  using ArtifactKey = std::tuple<std::string, uint64_t, int, int, int>;
-  std::map<ArtifactKey, SignedProposalEvidence> first_artifact_by_key;
-  std::set<ArtifactKey> emitted_keys;
-  std::vector<StrongFaultRecord> faults;
-  for (const SignedProposalEvidence& artifact : ordered) {
-    if (!artifact.signature_verified || artifact.protocol_id.empty() ||
-        artifact.leader_id <= 0 || artifact.view_or_round <= 0 ||
-        artifact.proposal_hash.empty()) {
-      continue;
-    }
-    const ArtifactKey key{artifact.protocol_id, artifact.weight_version,
-                          artifact.leader_id, artifact.view_or_round,
-                          artifact.slot_or_height};
-    auto inserted = first_artifact_by_key.emplace(key, artifact);
-    const SignedProposalEvidence& first = inserted.first->second;
-    if (inserted.second || first.proposal_hash == artifact.proposal_hash) {
-      continue;
-    }
-    if (!emitted_keys.insert(key).second) {
-      continue;
-    }
-    StrongFaultRecord fault;
-    fault.type = StrongFaultType::kDoubleProposal;
-    fault.validator_id = artifact.leader_id;
-    fault.view_or_round = artifact.view_or_round;
-    fault.slot_or_height = artifact.slot_or_height;
-    fault.first_artifact_digest =
-        std::min(first.proposal_hash, artifact.proposal_hash);
-    fault.second_artifact_digest =
-        std::max(first.proposal_hash, artifact.proposal_hash);
-    faults.push_back(std::move(fault));
-  }
-  return faults;
-}
-
-std::vector<StrongFaultRecord> DetectDoubleVoteFaults(
-    const std::vector<SignedVoteEvidence>& signed_vote_evidence) {
-  std::vector<SignedVoteEvidence> ordered = signed_vote_evidence;
-  std::sort(ordered.begin(), ordered.end(),
-            [](const SignedVoteEvidence& lhs,
-               const SignedVoteEvidence& rhs) {
-              return std::tie(lhs.protocol_id, lhs.weight_version,
-                              lhs.signer_id, lhs.view_or_round,
-                              lhs.slot_or_height, lhs.proposal_hash) <
-                     std::tie(rhs.protocol_id, rhs.weight_version,
-                              rhs.signer_id, rhs.view_or_round,
-                              rhs.slot_or_height, rhs.proposal_hash);
-            });
-
-  using ArtifactKey = std::tuple<std::string, uint64_t, int, int, int>;
-  std::map<ArtifactKey, SignedVoteEvidence> first_artifact_by_key;
-  std::set<ArtifactKey> emitted_keys;
-  std::vector<StrongFaultRecord> faults;
-  for (const SignedVoteEvidence& artifact : ordered) {
-    if (!artifact.signature_verified || artifact.protocol_id.empty() ||
-        artifact.signer_id <= 0 || artifact.view_or_round <= 0 ||
-        artifact.proposal_hash.empty()) {
-      continue;
-    }
-    const ArtifactKey key{artifact.protocol_id, artifact.weight_version,
-                          artifact.signer_id, artifact.view_or_round,
-                          artifact.slot_or_height};
-    auto inserted = first_artifact_by_key.emplace(key, artifact);
-    const SignedVoteEvidence& first = inserted.first->second;
-    if (inserted.second || first.proposal_hash == artifact.proposal_hash) {
-      continue;
-    }
-    if (!emitted_keys.insert(key).second) {
-      continue;
-    }
-    StrongFaultRecord fault;
-    fault.type = StrongFaultType::kDoubleVote;
-    fault.validator_id = artifact.signer_id;
-    fault.view_or_round = artifact.view_or_round;
-    fault.slot_or_height = artifact.slot_or_height;
-    fault.first_artifact_digest =
-        std::min(first.proposal_hash, artifact.proposal_hash);
-    fault.second_artifact_digest =
-        std::max(first.proposal_hash, artifact.proposal_hash);
-    faults.push_back(std::move(fault));
-  }
-  return faults;
-}
-
-std::vector<StrongFaultRecord> DetectInvalidQcProposalFaults(
-    const std::vector<InvalidQcProposalEvidence>& invalid_qc_proposal_evidence) {
-  std::vector<InvalidQcProposalEvidence> ordered =
-      invalid_qc_proposal_evidence;
-  std::sort(ordered.begin(), ordered.end(),
-            [](const InvalidQcProposalEvidence& lhs,
-               const InvalidQcProposalEvidence& rhs) {
-              return std::tie(lhs.protocol_id, lhs.weight_version,
-                              lhs.leader_id, lhs.view_or_round,
-                              lhs.slot_or_height, lhs.proposal_hash,
-                              lhs.invalid_reason) <
-                     std::tie(rhs.protocol_id, rhs.weight_version,
-                              rhs.leader_id, rhs.view_or_round,
-                              rhs.slot_or_height, rhs.proposal_hash,
-                              rhs.invalid_reason);
-            });
-
-  using ArtifactKey =
-      std::tuple<std::string, uint64_t, int, int, int, std::string>;
-  std::set<ArtifactKey> emitted_keys;
-  std::vector<StrongFaultRecord> faults;
-  for (const InvalidQcProposalEvidence& artifact : ordered) {
-    if (!artifact.proposal_signature_verified || artifact.qc_verified ||
-        artifact.protocol_id.empty() || artifact.leader_id <= 0 ||
-        artifact.view_or_round <= 0 || artifact.proposal_hash.empty()) {
-      continue;
-    }
-    const ArtifactKey key{artifact.protocol_id, artifact.weight_version,
-                          artifact.leader_id, artifact.view_or_round,
-                          artifact.slot_or_height, artifact.proposal_hash};
-    if (!emitted_keys.insert(key).second) {
-      continue;
-    }
-    StrongFaultRecord fault;
-    fault.type = StrongFaultType::kInvalidQcProposal;
-    fault.validator_id = artifact.leader_id;
-    fault.view_or_round = artifact.view_or_round;
-    fault.slot_or_height = artifact.slot_or_height;
-    fault.first_artifact_digest = artifact.proposal_hash;
-    fault.second_artifact_digest =
-        artifact.invalid_reason.empty() ? "invalid_qc" : artifact.invalid_reason;
-    faults.push_back(std::move(fault));
-  }
-  return faults;
-}
-
-std::vector<StrongFaultRecord> DetectWeightUpdateVoteEquivocationFaults(
-    const std::vector<SignedWeightUpdateVoteEvidence>&
-        signed_weight_update_vote_evidence) {
-  std::vector<SignedWeightUpdateVoteEvidence> ordered =
-      signed_weight_update_vote_evidence;
-  std::sort(ordered.begin(), ordered.end(),
-            [](const SignedWeightUpdateVoteEvidence& lhs,
-               const SignedWeightUpdateVoteEvidence& rhs) {
-              return std::tie(lhs.protocol_id, lhs.old_weight_root,
-                              lhs.old_weight_version, lhs.activation_view,
-                              lhs.validator_id, lhs.candidate_digest) <
-                     std::tie(rhs.protocol_id, rhs.old_weight_root,
-                              rhs.old_weight_version, rhs.activation_view,
-                              rhs.validator_id, rhs.candidate_digest);
-            });
-
-  using ArtifactKey = std::tuple<std::string, std::string, uint64_t, int, int>;
-  std::map<ArtifactKey, SignedWeightUpdateVoteEvidence> first_artifact_by_key;
-  std::set<ArtifactKey> emitted_keys;
-  std::vector<StrongFaultRecord> faults;
-  for (const SignedWeightUpdateVoteEvidence& artifact : ordered) {
-    if (!artifact.signature_verified || artifact.protocol_id.empty() ||
-        artifact.validator_id <= 0 || artifact.old_weight_root.empty() ||
-        artifact.activation_view <= 0 || artifact.candidate_digest.empty()) {
-      continue;
-    }
-    const ArtifactKey key{artifact.protocol_id, artifact.old_weight_root,
-                          artifact.old_weight_version, artifact.activation_view,
-                          artifact.validator_id};
-    auto inserted = first_artifact_by_key.emplace(key, artifact);
-    const SignedWeightUpdateVoteEvidence& first = inserted.first->second;
-    if (inserted.second ||
-        first.candidate_digest == artifact.candidate_digest) {
-      continue;
-    }
-    if (!emitted_keys.insert(key).second) {
-      continue;
-    }
-    StrongFaultRecord fault;
-    fault.type = StrongFaultType::kWeightUpdateVoteEquivocation;
-    fault.validator_id = artifact.validator_id;
-    fault.view_or_round = artifact.activation_view;
-    fault.slot_or_height = 0;
-    fault.first_artifact_digest =
-        std::min(first.candidate_digest, artifact.candidate_digest);
-    fault.second_artifact_digest =
-        std::max(first.candidate_digest, artifact.candidate_digest);
-    faults.push_back(std::move(fault));
-  }
-  return faults;
-}
-
-std::vector<StrongFaultRecord> DetectTimeoutVoteEquivocationFaults(
-    const std::vector<SignedTimeoutVoteEvidence>& signed_timeout_vote_evidence) {
-  std::vector<SignedTimeoutVoteEvidence> ordered = signed_timeout_vote_evidence;
-  std::sort(ordered.begin(), ordered.end(),
-            [](const SignedTimeoutVoteEvidence& lhs,
-               const SignedTimeoutVoteEvidence& rhs) {
-              return std::tie(lhs.protocol_id, lhs.weight_version,
-                              lhs.signer_id, lhs.view_or_round,
-                              lhs.high_qc_digest) <
-                     std::tie(rhs.protocol_id, rhs.weight_version,
-                              rhs.signer_id, rhs.view_or_round,
-                              rhs.high_qc_digest);
-            });
-
-  using ArtifactKey = std::tuple<std::string, uint64_t, int, int>;
-  std::map<ArtifactKey, SignedTimeoutVoteEvidence> first_artifact_by_key;
-  std::set<ArtifactKey> emitted_keys;
-  std::vector<StrongFaultRecord> faults;
-  for (const SignedTimeoutVoteEvidence& artifact : ordered) {
-    if (!artifact.signature_verified || artifact.protocol_id.empty() ||
-        artifact.signer_id <= 0 || artifact.view_or_round <= 0 ||
-        artifact.high_qc_digest.empty()) {
-      continue;
-    }
-    const ArtifactKey key{artifact.protocol_id, artifact.weight_version,
-                          artifact.signer_id, artifact.view_or_round};
-    auto inserted = first_artifact_by_key.emplace(key, artifact);
-    const SignedTimeoutVoteEvidence& first = inserted.first->second;
-    if (inserted.second || first.high_qc_digest == artifact.high_qc_digest) {
-      continue;
-    }
-    if (!emitted_keys.insert(key).second) {
-      continue;
-    }
-    StrongFaultRecord fault;
-    fault.type = StrongFaultType::kTimeoutVoteEquivocation;
-    fault.validator_id = artifact.signer_id;
-    fault.view_or_round = artifact.view_or_round;
-    fault.slot_or_height = 0;
-    fault.first_artifact_digest =
-        std::min(first.high_qc_digest, artifact.high_qc_digest);
-    fault.second_artifact_digest =
-        std::max(first.high_qc_digest, artifact.high_qc_digest);
-    faults.push_back(std::move(fault));
-  }
-  return faults;
-}
-
-std::vector<StrongFaultRecord> DetectInvalidTcProposalFaults(
-    const std::vector<InvalidTcProposalEvidence>& invalid_tc_proposal_evidence) {
-  std::vector<InvalidTcProposalEvidence> ordered = invalid_tc_proposal_evidence;
-  std::sort(ordered.begin(), ordered.end(),
-            [](const InvalidTcProposalEvidence& lhs,
-               const InvalidTcProposalEvidence& rhs) {
-              return std::tie(lhs.protocol_id, lhs.weight_version,
-                              lhs.leader_id, lhs.view_or_round,
-                              lhs.slot_or_height, lhs.proposal_hash,
-                              lhs.invalid_reason) <
-                     std::tie(rhs.protocol_id, rhs.weight_version,
-                              rhs.leader_id, rhs.view_or_round,
-                              rhs.slot_or_height, rhs.proposal_hash,
-                              rhs.invalid_reason);
-            });
-
-  using ArtifactKey =
-      std::tuple<std::string, uint64_t, int, int, int, std::string>;
-  std::set<ArtifactKey> emitted_keys;
-  std::vector<StrongFaultRecord> faults;
-  for (const InvalidTcProposalEvidence& artifact : ordered) {
-    if (!artifact.proposal_signature_verified ||
-        artifact.timeout_cert_verified || artifact.protocol_id.empty() ||
-        artifact.leader_id <= 0 || artifact.view_or_round <= 0 ||
-        artifact.proposal_hash.empty()) {
-      continue;
-    }
-    const ArtifactKey key{artifact.protocol_id, artifact.weight_version,
-                          artifact.leader_id, artifact.view_or_round,
-                          artifact.slot_or_height, artifact.proposal_hash};
-    if (!emitted_keys.insert(key).second) {
-      continue;
-    }
-    StrongFaultRecord fault;
-    fault.type = StrongFaultType::kInvalidTcProposal;
-    fault.validator_id = artifact.leader_id;
-    fault.view_or_round = artifact.view_or_round;
-    fault.slot_or_height = artifact.slot_or_height;
-    fault.first_artifact_digest = artifact.proposal_hash;
-    fault.second_artifact_digest =
-        artifact.invalid_reason.empty() ? "invalid_tc" : artifact.invalid_reason;
-    faults.push_back(std::move(fault));
-  }
-  return faults;
-}
-
-std::vector<StrongFaultRecord> DetectConflictingQcFaults(
-    const std::vector<VerifiedQcArtifactEvidence>& verified_qc_artifact_evidence,
-    int total_replicas) {
-  std::vector<VerifiedQcArtifactEvidence> ordered =
-      verified_qc_artifact_evidence;
-  std::sort(ordered.begin(), ordered.end(),
-            [](const VerifiedQcArtifactEvidence& lhs,
-               const VerifiedQcArtifactEvidence& rhs) {
-              return std::tie(lhs.protocol_id, lhs.weight_version,
-                              lhs.view_or_round, lhs.slot_or_height,
-                              lhs.qc_hash) <
-                     std::tie(rhs.protocol_id, rhs.weight_version,
-                              rhs.view_or_round, rhs.slot_or_height,
-                              rhs.qc_hash);
-            });
-
-  using ArtifactKey = std::tuple<std::string, uint64_t, int, int>;
-  std::map<ArtifactKey, VerifiedQcArtifactEvidence> first_artifact_by_key;
-  std::set<std::tuple<ArtifactKey, int>> emitted_validators;
-  std::vector<StrongFaultRecord> faults;
-  for (const VerifiedQcArtifactEvidence& artifact : ordered) {
-    if (!artifact.qc_verified || artifact.protocol_id.empty() ||
-        artifact.view_or_round <= 0 || artifact.qc_hash.empty() ||
-        artifact.signer_bitmap.empty()) {
-      continue;
-    }
-    const ArtifactKey key{artifact.protocol_id, artifact.weight_version,
-                          artifact.view_or_round, artifact.slot_or_height};
-    auto inserted = first_artifact_by_key.emplace(key, artifact);
-    const VerifiedQcArtifactEvidence& first = inserted.first->second;
-    if (inserted.second || first.qc_hash == artifact.qc_hash) {
-      continue;
-    }
-
-    const std::vector<int> first_signers =
-        DecodeSignerBitmap(first.signer_bitmap, total_replicas);
-    const std::vector<int> second_signers =
-        DecodeSignerBitmap(artifact.signer_bitmap, total_replicas);
-    std::set<int> first_signer_set(first_signers.begin(), first_signers.end());
-    for (int signer : second_signers) {
-      if (first_signer_set.find(signer) == first_signer_set.end()) {
-        continue;
-      }
-      if (!emitted_validators.insert(std::make_tuple(key, signer)).second) {
-        continue;
-      }
-      StrongFaultRecord fault;
-      fault.type = StrongFaultType::kConflictingQc;
-      fault.validator_id = signer;
-      fault.view_or_round = artifact.view_or_round;
-      fault.slot_or_height = artifact.slot_or_height;
-      fault.first_artifact_digest = std::min(first.qc_hash, artifact.qc_hash);
-      fault.second_artifact_digest = std::max(first.qc_hash, artifact.qc_hash);
-      faults.push_back(std::move(fault));
-    }
-  }
-  std::sort(faults.begin(), faults.end(),
-            [](const StrongFaultRecord& lhs, const StrongFaultRecord& rhs) {
-              return std::tie(lhs.validator_id, lhs.view_or_round,
-                              lhs.slot_or_height, lhs.first_artifact_digest,
-                              lhs.second_artifact_digest) <
-                     std::tie(rhs.validator_id, rhs.view_or_round,
-                              rhs.slot_or_height, rhs.first_artifact_digest,
-                              rhs.second_artifact_digest);
-            });
-  return faults;
-}
-
 ReputationCandidate ComputeReputationCandidate(
-    int node_id, int total_replicas, uint64_t window_index,
-    const std::vector<MetricEvidence>& evidence,
-    const std::vector<int64_t>& current_weights,
-    const ReputationConfig& config,
-    const std::string& old_weight_root_hex, uint64_t old_weight_version,
-    int activation_view,
-    const std::vector<SignedProposalEvidence>& signed_proposal_evidence,
-    const std::vector<SignedVoteEvidence>& signed_vote_evidence,
-    const std::vector<InvalidQcProposalEvidence>& invalid_qc_proposal_evidence,
-    const std::vector<SignedWeightUpdateVoteEvidence>&
-        signed_weight_update_vote_evidence,
-    const std::vector<SignedTimeoutVoteEvidence>& signed_timeout_vote_evidence,
-    const std::vector<InvalidTcProposalEvidence>& invalid_tc_proposal_evidence,
-    const std::vector<VerifiedQcArtifactEvidence>&
-        verified_qc_artifact_evidence,
-    const std::vector<int>& prior_peertrust_leader_debt,
-    const std::vector<int>& prior_sybil_graph_debt) {
+    const ReputationWindowInput& input, const ReputationConfig& config) {
+
+  const int total_replicas = input.total_replicas;
+
   ReputationCandidate candidate;
   candidate.algorithm = kAlgorithmBayesV4;
-  candidate.local_node_id = node_id;
+  candidate.local_node_id = input.local_node_id;
   candidate.total_replicas = total_replicas;
-  candidate.window_index = window_index;
-  candidate.event_count = evidence.size();
-  if (!evidence.empty()) {
-    candidate.start_view = evidence.front().view_or_round;
-    candidate.end_view = evidence.back().view_or_round;
+  candidate.window_index = input.window_index;
+
+  std::vector<CoreEvidenceEvent> ordered_events;
+  ordered_events.reserve(input.certified_signer_evidence.size() +
+                         input.leader_outcome_evidence.size());
+  for (const CertifiedSignerEvidence& event : input.certified_signer_evidence) {
+    CoreEvidenceEvent core;
+    core.view_or_round = event.view_or_round;
+    core.leader_id = event.leader_id;
+    core.artifact_digest = event.artifact_digest;
+    core.signer_bitmap = event.signer_bitmap;
+    core.available_signer_bitmap = event.available_signer_bitmap;
+    core.outcome_class = OutcomeClass::kCertified;
+    ordered_events.push_back(std::move(core));
+  }
+  for (const LeaderOutcomeEvidence& event : input.leader_outcome_evidence) {
+    CoreEvidenceEvent core;
+    core.view_or_round = event.view_or_round;
+    core.leader_id = event.leader_id;
+    core.artifact_digest = event.artifact_digest;
+    core.outcome_class = event.outcome_class;
+    ordered_events.push_back(std::move(core));
+  }
+  std::sort(ordered_events.begin(), ordered_events.end(),
+            [](const CoreEvidenceEvent& lhs, const CoreEvidenceEvent& rhs) {
+              if (lhs.view_or_round != rhs.view_or_round) {
+                return lhs.view_or_round < rhs.view_or_round;
+              }
+              return lhs.artifact_digest < rhs.artifact_digest;
+            });
+  candidate.event_count = ordered_events.size();
+  if (!ordered_events.empty()) {
+    candidate.start_view = ordered_events.front().view_or_round;
+    candidate.end_view = ordered_events.back().view_or_round;
   }
 
   const std::vector<int64_t> weights =
-      NormalizeWeights(current_weights, total_replicas);
+      NormalizeWeights(input.current_weights, total_replicas);
   candidate.old_weight_root_hex =
-      old_weight_root_hex.empty() ? WeightRootHex(weights) : old_weight_root_hex;
-  candidate.old_weight_version = old_weight_version;
-  candidate.activation_view = activation_view;
+      input.old_weight_root_hex.empty() ? WeightRootHex(weights) : input.old_weight_root_hex;
+  candidate.old_weight_version = input.old_weight_version;
+  candidate.activation_view = input.activation_view;
   candidate.validators.resize(std::max(total_replicas, 0));
   for (int i = 0; i < total_replicas; ++i) {
     ValidatorReputation& validator = candidate.validators[i];
@@ -1071,15 +141,15 @@ ReputationCandidate ComputeReputationCandidate(
     validator.current_weight = weights[i];
     validator.next_weight = weights[i];
     if (config.peertrust_enabled &&
-        i < static_cast<int>(prior_peertrust_leader_debt.size())) {
+        i < static_cast<int>(input.prior_peertrust_leader_debt.size())) {
       validator.peertrust_leader_debt = std::max(
           0, std::min(config.peertrust_debt_max,
-                      prior_peertrust_leader_debt[i]));
+                      input.prior_peertrust_leader_debt[i]));
     }
     if (config.sybil_graph_enabled &&
-        i < static_cast<int>(prior_sybil_graph_debt.size())) {
+        i < static_cast<int>(input.prior_sybil_graph_debt.size())) {
       validator.sybil_graph_debt = std::max(
-          0, std::min(config.sybil_graph_debt_max, prior_sybil_graph_debt[i]));
+          0, std::min(config.sybil_graph_debt_max, input.prior_sybil_graph_debt[i]));
     }
   }
 
@@ -1115,15 +185,6 @@ ReputationCandidate ComputeReputationCandidate(
   std::vector<int> peertrust_community_context_scores(
       std::max(total_replicas, 0), 100);
 
-  std::vector<MetricEvidence> ordered_events = evidence;
-  std::sort(ordered_events.begin(), ordered_events.end(),
-            [](const MetricEvidence& lhs, const MetricEvidence& rhs) {
-              if (lhs.view_or_round != rhs.view_or_round) {
-                return lhs.view_or_round < rhs.view_or_round;
-              }
-              return lhs.artifact_digest < rhs.artifact_digest;
-            });
-
   uint64_t legacy_selected_signer_slots = 0;
   uint64_t legacy_certificate_event_count = 0;
   uint64_t certificate_event_count = 0;
@@ -1131,10 +192,9 @@ ReputationCandidate ComputeReputationCandidate(
       std::max(total_replicas, 0), 0);
   std::set<std::pair<int, std::string>> seen_certificates;
   std::set<std::pair<int, int>> seen_leader_opportunities;
-  for (const MetricEvidence& event : ordered_events) {
+  for (const CoreEvidenceEvent& event : ordered_events) {
     const int leader = event.leader_id;
-    const int diversity_leader =
-        event.collector_id > 0 ? event.collector_id : leader;
+    const int diversity_leader = leader;
 
     if (event.outcome_class == OutcomeClass::kTimeoutOrViewChange &&
         leader >= 1 && leader <= total_replicas) {
@@ -1485,7 +545,7 @@ ReputationCandidate ComputeReputationCandidate(
   constexpr int kPeerTrustCommunityOutlierDeadband = 10;
 
   const SybilGraphAudit sybil_graph_audit = ComputeSybilGraphAudit(
-      total_replicas, ordered_events, weights, unique_signers_by_leader,
+      total_replicas, input.certified_signer_evidence, weights, unique_signers_by_leader,
       diversity_count, unique_available_signers_by_leader,
       available_signer_evidence_count, config);
 
@@ -1730,20 +790,20 @@ ReputationCandidate ComputeReputationCandidate(
   if (config.strong_fault_enabled) {
     if (config.double_proposal_detection_enabled) {
       std::vector<StrongFaultRecord> proposal_faults =
-          DetectDoubleProposalFaults(signed_proposal_evidence);
+          DetectDoubleProposalFaults(input.signed_proposal_evidence);
       candidate.strong_faults.insert(candidate.strong_faults.end(),
                                      proposal_faults.begin(),
                                      proposal_faults.end());
     }
     if (config.double_vote_detection_enabled) {
       std::vector<StrongFaultRecord> vote_faults =
-          DetectDoubleVoteFaults(signed_vote_evidence);
+          DetectDoubleVoteFaults(input.signed_vote_evidence);
       candidate.strong_faults.insert(candidate.strong_faults.end(),
                                      vote_faults.begin(), vote_faults.end());
     }
     if (config.invalid_qc_proposal_detection_enabled) {
       std::vector<StrongFaultRecord> invalid_qc_faults =
-          DetectInvalidQcProposalFaults(invalid_qc_proposal_evidence);
+          DetectInvalidQcProposalFaults(input.invalid_qc_proposal_evidence);
       candidate.strong_faults.insert(candidate.strong_faults.end(),
                                      invalid_qc_faults.begin(),
                                      invalid_qc_faults.end());
@@ -1751,28 +811,28 @@ ReputationCandidate ComputeReputationCandidate(
     if (config.weight_update_vote_equivocation_detection_enabled) {
       std::vector<StrongFaultRecord> weight_vote_faults =
           DetectWeightUpdateVoteEquivocationFaults(
-              signed_weight_update_vote_evidence);
+              input.signed_weight_update_vote_evidence);
       candidate.strong_faults.insert(candidate.strong_faults.end(),
                                      weight_vote_faults.begin(),
                                      weight_vote_faults.end());
     }
     if (config.timeout_vote_equivocation_detection_enabled) {
       std::vector<StrongFaultRecord> timeout_vote_faults =
-          DetectTimeoutVoteEquivocationFaults(signed_timeout_vote_evidence);
+          DetectTimeoutVoteEquivocationFaults(input.signed_timeout_vote_evidence);
       candidate.strong_faults.insert(candidate.strong_faults.end(),
                                      timeout_vote_faults.begin(),
                                      timeout_vote_faults.end());
     }
     if (config.invalid_tc_proposal_detection_enabled) {
       std::vector<StrongFaultRecord> invalid_tc_faults =
-          DetectInvalidTcProposalFaults(invalid_tc_proposal_evidence);
+          DetectInvalidTcProposalFaults(input.invalid_tc_proposal_evidence);
       candidate.strong_faults.insert(candidate.strong_faults.end(),
                                      invalid_tc_faults.begin(),
                                      invalid_tc_faults.end());
     }
     if (config.conflicting_qc_detection_enabled) {
       std::vector<StrongFaultRecord> conflicting_qc_faults =
-          DetectConflictingQcFaults(verified_qc_artifact_evidence,
+          DetectConflictingQcFaults(input.verified_qc_artifact_evidence,
                                     total_replicas);
       candidate.strong_faults.insert(candidate.strong_faults.end(),
                                      conflicting_qc_faults.begin(),
@@ -1818,48 +878,6 @@ ReputationCandidate ComputeReputationCandidate(
   return candidate;
 }
 
-void RecomputeReputationCandidateRoots(ReputationCandidate* candidate) {
-  if (candidate == nullptr) {
-    return;
-  }
-  candidate->next_weights.clear();
-  candidate->next_weights.reserve(candidate->validators.size());
-  for (const ValidatorReputation& validator : candidate->validators) {
-    candidate->next_weights.push_back(validator.next_weight);
-  }
-  candidate->metric_root_hex = HashHex(MetricCanonical(*candidate));
-  candidate->reputation_root_hex = HashHex(ReputationCanonical(*candidate));
-  candidate->strong_fault_root_hex = HashHex(StrongFaultCanonical(*candidate));
-  candidate->penalty_root_hex = HashHex(PenaltyCanonical(*candidate));
-  candidate->next_weight_root_hex = WeightRootHex(candidate->next_weights);
-  candidate->candidate_digest_hex = ReputationCandidateDigest(
-      candidate->total_replicas, candidate->window_index, candidate->start_view,
-      candidate->end_view, candidate->event_count,
-      candidate->old_weight_root_hex, candidate->old_weight_version,
-      candidate->activation_view, candidate->metric_root_hex,
-      candidate->reputation_root_hex, candidate->next_weight_root_hex,
-      candidate->next_weights, candidate->strong_fault_root_hex,
-      candidate->penalty_root_hex);
-}
-
-std::string ReputationCandidateDigest(
-    int total_replicas, uint64_t window_index, int start_view, int end_view,
-    uint64_t event_count, const std::string& old_weight_root_hex,
-    uint64_t old_weight_version, int activation_view,
-    const std::string& metric_root_hex,
-    const std::string& reputation_root_hex,
-    const std::string& next_weight_root_hex,
-    const std::vector<int64_t>& next_weights,
-    const std::string& strong_fault_root_hex,
-    const std::string& penalty_root_hex) {
-  (void)window_index;
-  (void)event_count;
-  return HashHex(CandidateCanonicalFromParts(
-      total_replicas, start_view, end_view, old_weight_root_hex,
-      old_weight_version, activation_view, metric_root_hex,
-      reputation_root_hex, next_weight_root_hex, next_weights,
-      strong_fault_root_hex, penalty_root_hex));
-}
 
 }  // namespace reputation
 }  // namespace consensus
