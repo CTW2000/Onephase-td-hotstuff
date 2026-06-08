@@ -60,10 +60,7 @@ bool SignerBitmapMatchesSignatures(const QC& qc, int total_num) {
 }
 
 int DefaultLeaderForView(int view, int total_replicas) {
-  if (view <= 0 || total_replicas <= 0) {
-    return 0;
-  }
-  return (view % total_replicas) + 1;
+  return RoundRobinLeaderForView(view, total_replicas);
 }
 
 ProposalManager::ProposalManager(int32_t id, int limit_count,
@@ -71,7 +68,8 @@ ProposalManager::ProposalManager(int32_t id, int limit_count,
                                  int non_responsive_num, int fork_tail_num,
                                  const std::vector<int64_t>& replica_weights,
                                  int64_t quorum_weight,
-                                 std::shared_ptr<WeightSchedule> weight_schedule)
+                                 std::shared_ptr<WeightSchedule> weight_schedule,
+                                 std::shared_ptr<LeaderSelectionSchedule> leader_schedule)
     : id_(id),
       limit_count_(limit_count),
       total_num_(total_num),
@@ -84,6 +82,10 @@ ProposalManager::ProposalManager(int32_t id, int limit_count,
                            ? weight_schedule
                            : std::make_shared<WeightSchedule>(total_num,
                                                               replica_weights_)),
+      leader_schedule_(leader_schedule != nullptr
+                           ? leader_schedule
+                           : std::make_shared<LeaderSelectionSchedule>(
+                                 total_num, replica_weights_, /*enabled=*/false)),
       verifier_(verifier),
       certificate_verifier_(total_num, verifier, weight_schedule_) {
     round_ = 1;
@@ -128,6 +130,19 @@ bool ProposalManager::VerifyLeader(const Proposal& proposal) {
     LOG(ERROR) << "proposal leader mismatch, view:" << view
                << " sender:" << proposal.sender()
                << " expected:" << expected_leader;
+    return false;
+  }
+  return true;
+}
+
+bool ProposalManager::VerifyLeaderContext(const Proposal& proposal) {
+  const std::string expected =
+      leader_schedule_ == nullptr
+          ? std::string()
+          : leader_schedule_->ContextHashForView(proposal.header().view());
+  if (proposal.header().leader_context_hash() != expected) {
+    LOG(ERROR) << "proposal leader context mismatch, view:"
+               << proposal.header().view();
     return false;
   }
   return true;
@@ -195,6 +210,10 @@ bool ProposalManager::Verify(const Proposal& proposal) {
     return false;
   }
 
+  if (!VerifyLeaderContext(proposal)) {
+    return false;
+  }
+
   if (proposal.header().has_timeout_cert() &&
       !VerifyTimeoutCert(proposal.header().timeout_cert())) {
     return false;
@@ -212,7 +231,7 @@ bool ProposalManager::Verify(const Proposal& proposal) {
 
 bool ProposalManager::VerifyEnvelopeForEvidence(const Proposal& proposal) {
   return VerifyHash(proposal) && VerifyProposalSignature(proposal) &&
-         VerifyLeader(proposal);
+         VerifyLeader(proposal) && VerifyLeaderContext(proposal);
 }
 
 std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
@@ -241,6 +260,10 @@ std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
     }
 
     proposal->mutable_header()->set_view(round_);
+    const std::string leader_context =
+        leader_schedule_ == nullptr ? std::string()
+                                    : leader_schedule_->ContextHashForView(round_);
+    proposal->mutable_header()->set_leader_context_hash(leader_context);
     proposal_view = round_;
     proposal->set_sender(id_);
   }
@@ -400,7 +423,8 @@ std::unique_ptr<Proposal> ProposalManager::FetchProposal(const std::string& hash
 }
 
 int ProposalManager::GetLeader(int view) {
-  return DefaultLeaderForView(view, total_num_);
+  return leader_schedule_ != nullptr ? leader_schedule_->LeaderForView(view)
+                                     : DefaultLeaderForView(view, total_num_);
 }
 
 }  // namespace td_hotstuff

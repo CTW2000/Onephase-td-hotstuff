@@ -32,6 +32,12 @@ class TestProposalManager : public ProposalManager {
   TestProposalManager(int node_id, SignatureVerifier* verifier)
       : ProposalManager(node_id, 3, verifier, 4, 0, 0) {}
 
+  TestProposalManager(
+      int node_id, SignatureVerifier* verifier,
+      std::shared_ptr<LeaderSelectionSchedule> leader_schedule)
+      : ProposalManager(node_id, 3, verifier, 4, 0, 0, {}, 0, nullptr,
+                        std::move(leader_schedule)) {}
+
   using ProposalManager::GetHash;
   using ProposalManager::VerifyQC;
 };
@@ -160,6 +166,28 @@ TEST(TdHotstuffTimeoutTest, RejectsProposalWithInvalidTimeoutCert) {
       BuildSignerBitmap({1, 3, 4}, 4));
   proposal->set_hash(manager.GetHash(*proposal));
 
+  EXPECT_FALSE(manager.Verify(*proposal));
+}
+
+
+TEST(TdHotstuffProposalSafetyTest, DynamicLeaderContextIsBoundToProposal) {
+  auto leader_schedule = std::make_shared<LeaderSelectionSchedule>(
+      4, std::vector<int64_t>{100, 1, 1, 1}, /*enabled=*/true,
+      /*eligible_min_weight=*/10);
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(_)).WillRepeatedly(Return(SignatureFrom(1)));
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+
+  TestProposalManager manager(/*node_id=*/1, &verifier, leader_schedule);
+  std::vector<std::unique_ptr<Transaction>> txns;
+  std::unique_ptr<Proposal> proposal = manager.GenerateProposal(txns);
+
+  ASSERT_NE(proposal, nullptr);
+  ASSERT_FALSE(proposal->header().leader_context_hash().empty());
+  EXPECT_TRUE(manager.Verify(*proposal));
+
+  proposal->mutable_header()->set_leader_context_hash("wrong-context");
+  proposal->set_hash(manager.GetHash(*proposal));
   EXPECT_FALSE(manager.Verify(*proposal));
 }
 

@@ -15,6 +15,7 @@
 #include "platform/common/queue/lock_free_queue.h"
 #include "platform/consensus/ordering/common/algorithm/protocol_base.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/async_consensus_verifier.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/timeout_manager.h"
@@ -126,6 +127,7 @@ class HotStuff : public common::ProtocolBase {
   std::vector<int64_t> replica_weights_;
   int64_t quorum_weight_ = 0;
   std::shared_ptr<WeightSchedule> weight_schedule_;
+  std::shared_ptr<LeaderSelectionSchedule> leader_schedule_;
   std::unique_ptr<AsyncConsensusVerifier> async_verifier_;
   std::unique_ptr<TdHotstuffReputationAdapter> reputation_adapter_;
   std::unique_ptr<WeightUpdateController> weight_update_controller_;

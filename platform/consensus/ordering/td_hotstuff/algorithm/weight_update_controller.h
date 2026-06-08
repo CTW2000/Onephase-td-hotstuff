@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "common/crypto/signature_verifier.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
 #include "platform/consensus/reputation/reputation_types.h"
@@ -22,9 +23,11 @@ std::string WeightUpdateVotePayload(const WeightUpdateVote& vote);
 
 class WeightUpdateController {
  public:
-  WeightUpdateController(int node_id, int total_replicas,
-                         std::shared_ptr<WeightSchedule> weight_schedule,
-                         SignatureVerifier* verifier);
+  WeightUpdateController(
+      int node_id, int total_replicas,
+      std::shared_ptr<WeightSchedule> weight_schedule,
+      SignatureVerifier* verifier,
+      std::shared_ptr<LeaderSelectionSchedule> leader_schedule = nullptr);
 
   bool AddLocalCandidate(
       const resdb::consensus::reputation::ReputationCandidate& candidate);
@@ -63,12 +66,15 @@ class WeightUpdateController {
                               const CandidateWeightUpdate& candidate) const;
   std::vector<int64_t> CandidateWeights(
       const CandidateWeightUpdate& candidate) const;
+  std::vector<int64_t> CandidateLeaderWeights(
+      const CandidateWeightUpdate& candidate) const;
   int64_t VoteWeight(const std::map<int, WeightUpdateVote>& votes) const;
   std::unique_ptr<WeightUpdateCert> MaybeFormCert(VoteBucket* bucket) const;
 
   const int node_id_;
   const int total_replicas_;
   std::shared_ptr<WeightSchedule> weight_schedule_;
+  std::shared_ptr<LeaderSelectionSchedule> leader_schedule_;
   SignatureVerifier* verifier_ = nullptr;
   mutable std::mutex mutex_;
 

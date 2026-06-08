@@ -157,6 +157,7 @@ bool ReputationPluginRuntime::Enqueue(RuntimeEvent event) {
   if (!options_.enabled) {
     return false;
   }
+  bool should_notify = false;
   {
     std::lock_guard<std::mutex> lk(mutex_);
     if (stop_ || pending_.size() >= options_.queue_capacity) {
@@ -166,10 +167,13 @@ bool ReputationPluginRuntime::Enqueue(RuntimeEvent event) {
           << dropped_count_.load();
       return false;
     }
+    should_notify = pending_.empty();
     pending_.push_back(std::move(event));
     queued_count_.fetch_add(1);
   }
-  cv_.notify_one();
+  if (should_notify) {
+    cv_.notify_one();
+  }
   return true;
 }
 
@@ -214,26 +218,23 @@ std::optional<ReputationCandidate> ReputationPluginRuntime::FindLocalCandidate(
 
 void ReputationPluginRuntime::WorkerLoop() {
   while (true) {
-    RuntimeEvent event;
-    bool has_event = false;
+    std::deque<RuntimeEvent> batch;
     {
       std::unique_lock<std::mutex> lk(mutex_);
       cv_.wait(lk, [this]() { return stop_ || !pending_.empty(); });
-      if (!pending_.empty()) {
-        event = std::move(pending_.front());
-        pending_.pop_front();
-        has_event = true;
-      } else if (stop_) {
+      if (pending_.empty() && stop_) {
         break;
       }
+      batch.swap(pending_);
     }
-    if (!has_event) {
-      continue;
-    }
-    if (event.type == RuntimeEvent::Type::kEvidence) {
-      ProcessEvidence(std::move(event.evidence));
-    } else {
-      ProcessWatermark(event.watermark);
+    while (!batch.empty()) {
+      RuntimeEvent event = std::move(batch.front());
+      batch.pop_front();
+      if (event.type == RuntimeEvent::Type::kEvidence) {
+        ProcessEvidence(std::move(event.evidence));
+      } else {
+        ProcessWatermark(event.watermark);
+      }
     }
   }
 }

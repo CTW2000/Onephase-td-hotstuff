@@ -247,6 +247,10 @@ struct ReputationCandidate {
   std::vector<ValidatorReputation> validators;
   std::vector<StrongFaultRecord> strong_faults;
   std::vector<int64_t> next_weights;
+  std::vector<int64_t> leader_weights;
+  std::string leader_weight_root_hex;
+  int leader_selection_version = 1;
+  int64_t leader_eligible_min_weight = 10;
   std::string metric_root_hex;
   std::string reputation_root_hex;
   std::string strong_fault_root_hex;

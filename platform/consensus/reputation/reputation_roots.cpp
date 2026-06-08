@@ -95,7 +95,11 @@ std::string CandidateCanonicalFromParts(
     const std::string& next_weight_root_hex,
     const std::vector<int64_t>& next_weights,
     const std::string& strong_fault_root_hex,
-    const std::string& penalty_root_hex) {
+    const std::string& penalty_root_hex,
+    const std::vector<int64_t>& leader_weights,
+    const std::string& leader_weight_root_hex,
+    int64_t leader_eligible_min_weight,
+    int leader_selection_version) {
   (void)metric_root_hex;
   (void)reputation_root_hex;
   std::ostringstream out;
@@ -103,9 +107,13 @@ std::string CandidateCanonicalFromParts(
       << start_view << '|' << end_view << '|' << old_weight_root_hex << '|'
       << old_weight_version << '|' << activation_view << '|'
       << next_weight_root_hex << '|' << strong_fault_root_hex << '|'
-      << penalty_root_hex;
+      << penalty_root_hex << "|leader:" << leader_selection_version << '|'
+      << leader_eligible_min_weight << '|' << leader_weight_root_hex;
   for (size_t i = 0; i < next_weights.size(); ++i) {
-    out << '|' << (i + 1) << ':' << next_weights[i];
+    out << "|w" << (i + 1) << ':' << next_weights[i];
+  }
+  for (size_t i = 0; i < leader_weights.size(); ++i) {
+    out << "|l" << (i + 1) << ':' << leader_weights[i];
   }
   return out.str();
 }
@@ -115,6 +123,18 @@ std::string CandidateCanonicalFromParts(
 std::string WeightRootHex(const std::vector<int64_t>& weights) {
   std::ostringstream out;
   out << "protocol_neutral_weight_root_v1";
+  for (size_t i = 0; i < weights.size(); ++i) {
+    out << '|' << (i + 1) << ':' << weights[i];
+  }
+  return HashHex(out.str());
+}
+
+std::string LeaderWeightRootHex(const std::vector<int64_t>& weights,
+                                int64_t eligible_min_weight,
+                                int leader_selection_version) {
+  std::ostringstream out;
+  out << "protocol_neutral_leader_weight_root_v1|"
+      << leader_selection_version << '|' << eligible_min_weight;
   for (size_t i = 0; i < weights.size(); ++i) {
     out << '|' << (i + 1) << ':' << weights[i];
   }
@@ -135,6 +155,18 @@ void RecomputeReputationCandidateRoots(ReputationCandidate* candidate) {
   candidate->strong_fault_root_hex = HashHex(StrongFaultCanonical(*candidate));
   candidate->penalty_root_hex = HashHex(PenaltyCanonical(*candidate));
   candidate->next_weight_root_hex = WeightRootHex(candidate->next_weights);
+  if (candidate->leader_weights.empty()) {
+    candidate->leader_weights = candidate->next_weights;
+  }
+  if (candidate->leader_eligible_min_weight <= 0) {
+    candidate->leader_eligible_min_weight = 10;
+  }
+  if (candidate->leader_selection_version <= 0) {
+    candidate->leader_selection_version = 1;
+  }
+  candidate->leader_weight_root_hex = LeaderWeightRootHex(
+      candidate->leader_weights, candidate->leader_eligible_min_weight,
+      candidate->leader_selection_version);
   candidate->candidate_digest_hex = ReputationCandidateDigest(
       candidate->total_replicas, candidate->window_index, candidate->start_view,
       candidate->end_view, candidate->event_count,
@@ -142,7 +174,9 @@ void RecomputeReputationCandidateRoots(ReputationCandidate* candidate) {
       candidate->activation_view, candidate->metric_root_hex,
       candidate->reputation_root_hex, candidate->next_weight_root_hex,
       candidate->next_weights, candidate->strong_fault_root_hex,
-      candidate->penalty_root_hex);
+      candidate->penalty_root_hex, candidate->leader_weights,
+      candidate->leader_weight_root_hex, candidate->leader_eligible_min_weight,
+      candidate->leader_selection_version);
 }
 
 std::string ReputationCandidateDigest(
@@ -154,14 +188,20 @@ std::string ReputationCandidateDigest(
     const std::string& next_weight_root_hex,
     const std::vector<int64_t>& next_weights,
     const std::string& strong_fault_root_hex,
-    const std::string& penalty_root_hex) {
+    const std::string& penalty_root_hex,
+    const std::vector<int64_t>& leader_weights,
+    const std::string& leader_weight_root_hex,
+    int64_t leader_eligible_min_weight,
+    int leader_selection_version) {
   (void)window_index;
   (void)event_count;
   return HashHex(CandidateCanonicalFromParts(
       total_replicas, start_view, end_view, old_weight_root_hex,
       old_weight_version, activation_view, metric_root_hex,
       reputation_root_hex, next_weight_root_hex, next_weights,
-      strong_fault_root_hex, penalty_root_hex));
+      strong_fault_root_hex, penalty_root_hex, leader_weights,
+      leader_weight_root_hex, leader_eligible_min_weight,
+      leader_selection_version));
 }
 
 }  // namespace reputation

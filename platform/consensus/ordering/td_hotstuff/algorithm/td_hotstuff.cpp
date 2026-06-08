@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -42,6 +43,39 @@ bool EnvFlagEnabled(const char* name) {
 
 bool WeightUpdateEnabled() {
   return EnvFlagEnabled("TD_HS_WEIGHT_UPDATE_ENABLE");
+}
+
+bool ReputationEnabled() {
+  return EnvFlagEnabled("TD_HS_REPUTATION_ENABLE");
+}
+
+bool LeaderSelectionEnabled() {
+  return EnvFlagEnabled("TD_HS_LEADER_SELECTION_ENABLE");
+}
+
+std::vector<int64_t> InitialReplicaWeightsForMode(
+    const std::vector<int64_t>& replica_weights, int total_replicas) {
+  if (!replica_weights.empty() ||
+      (!ReputationEnabled() && !WeightUpdateEnabled() &&
+       !LeaderSelectionEnabled())) {
+    return replica_weights;
+  }
+  return std::vector<int64_t>(std::max(total_replicas, 0), 100);
+}
+
+std::string JoinInt64Vector(const std::vector<int64_t>& values) {
+  std::ostringstream oss;
+  for (size_t i = 0; i < values.size(); ++i) {
+    if (i > 0) {
+      oss << ',';
+    }
+    oss << values[i];
+  }
+  return oss.str();
+}
+
+int64_t LeaderEligibleMinWeightFromEnv() {
+  return PositiveIntFromEnv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT", 10);
 }
 
 bool EnvListContainsId(const char* name, int id) {
@@ -95,18 +129,23 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
       fork_tail_num_(fork_tail_num),
       timer_length_(timer_length),
       timeout_config_(TimeoutConfigFromEnv()),
-      replica_weights_(NormalizeReplicaWeights(replica_weights, total_num)),
+      replica_weights_(NormalizeReplicaWeights(
+          InitialReplicaWeightsForMode(replica_weights, total_num),
+          total_num)),
       quorum_weight_(quorum_weight > 0
                          ? quorum_weight
                          : CalculateQuorumWeight(replica_weights_)),
       weight_schedule_(
-          std::make_shared<WeightSchedule>(total_num, replica_weights_)) {
+          std::make_shared<WeightSchedule>(total_num, replica_weights_)),
+      leader_schedule_(std::make_shared<LeaderSelectionSchedule>(
+          total_num, replica_weights_, LeaderSelectionEnabled(),
+          LeaderEligibleMinWeightFromEnv())) {
   LOG(ERROR) << "id:" << id << " f:" << f << " total:" << total_num_;
 
   global_stats_ = Stats::GetGlobalStats();
   proposal_manager_ = std::make_unique<ProposalManager>(
       id, 2 * f_ + 1, verifier, total_num, non_responsive_num, fork_tail_num,
-      replica_weights_, quorum_weight_, weight_schedule_);
+      replica_weights_, quorum_weight_, weight_schedule_, leader_schedule_);
   if (timeout_config_.enabled) {
     timeout_manager_ = std::make_unique<TimeoutManager>(
         id_, total_num_, verifier_, weight_schedule_);
@@ -122,7 +161,7 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
     reputation_adapter_->Start();
     if (WeightUpdateEnabled()) {
       weight_update_controller_ = std::make_unique<WeightUpdateController>(
-          id_, total_num_, weight_schedule_, verifier_);
+          id_, total_num_, weight_schedule_, verifier_, leader_schedule_);
     }
   }
   async_verifier_ = std::make_unique<AsyncConsensusVerifier>(
@@ -837,6 +876,14 @@ void HotStuff::ActivateReadyWeightUpdates() {
     snapshot.weights = weight_schedule_->ActiveWeights();
     snapshot.weight_root_hex = weight_schedule_->ActiveWeightRoot();
     snapshot.weight_version = weight_schedule_->ActiveWeightVersion();
+    const std::vector<int64_t> active_leader_weights =
+        leader_schedule_ == nullptr ? snapshot.weights
+                                    : leader_schedule_->ActiveLeaderWeights();
+    LOG(INFO) << "TD-Hotstuff activated certified weights view:" << CurrentView()
+              << " weight_version:" << snapshot.weight_version
+              << " active_weights:[" << JoinInt64Vector(snapshot.weights) << "]"
+              << " leader_weights:[" << JoinInt64Vector(active_leader_weights)
+              << "]";
     reputation_adapter_->UpdateActiveWeights(std::move(snapshot));
   }
 }

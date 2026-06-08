@@ -75,6 +75,10 @@ message CandidateWeightUpdate {
   string next_weight_root = 12;
   repeated CandidateWeight next_weights = 13;
   string candidate_digest = 14;
+  repeated CandidateWeight leader_weights = 15;
+  string leader_weight_root = 16;
+  int32 leader_selection_version = 17;
+  int64 leader_eligible_min_weight = 18;
 }
 
 message WeightUpdateVote {

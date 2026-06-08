@@ -9,6 +9,7 @@
 
 #include "common/crypto/signature_verifier.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/certificate_verifier.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/safety_rules.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/timeout_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h"
@@ -31,7 +32,8 @@ class ProposalManager {
                   int total_num, int non_responsive_num, int fork_tail_num,
                   const std::vector<int64_t>& replica_weights = {},
                   int64_t quorum_weight = 0,
-                  std::shared_ptr<WeightSchedule> weight_schedule = nullptr);
+                  std::shared_ptr<WeightSchedule> weight_schedule = nullptr,
+                  std::shared_ptr<LeaderSelectionSchedule> leader_schedule = nullptr);
 
   std::unique_ptr<Proposal> GenerateProposal(
       const std::vector<std::unique_ptr<Transaction>>& txns);
@@ -61,6 +63,7 @@ class ProposalManager {
   bool VerifyQC(const QC& qc);
   bool VerifyHash(const Proposal& proposal);
   bool VerifyLeader(const Proposal& proposal);
+  bool VerifyLeaderContext(const Proposal& proposal);
   bool VerifyProposalSignature(const Proposal& proposal);
   bool VerifyTimeoutJustification(const Proposal& proposal);
   int64_t WeightForSigner(int signer, int view) const;
@@ -77,6 +80,7 @@ class ProposalManager {
   std::vector<int64_t> replica_weights_;
   int64_t quorum_weight_ = 0;
   std::shared_ptr<WeightSchedule> weight_schedule_;
+  std::shared_ptr<LeaderSelectionSchedule> leader_schedule_;
 
   std::mutex txn_mutex_;
   std::map<std::string, std::unique_ptr<Proposal>> local_block_;

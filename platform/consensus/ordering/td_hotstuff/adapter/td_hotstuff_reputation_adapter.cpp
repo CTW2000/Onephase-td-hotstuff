@@ -91,6 +91,9 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
                           kDefaultQueueCapacity));
   options.activation_delay_windows = PositiveIntFromEnv(
       "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY", 1);
+  options.reputation_config.leader_eligible_min_weight = PositiveIntFromEnv(
+      "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT",
+      options.reputation_config.leader_eligible_min_weight);
   options.audit_jsonl_enabled =
       EnvFlagEnabled("TD_HS_REPUTATION_AUDIT_JSONL_ENABLE");
   const char* audit_path = std::getenv("TD_HS_REPUTATION_AUDIT_JSONL_PATH");

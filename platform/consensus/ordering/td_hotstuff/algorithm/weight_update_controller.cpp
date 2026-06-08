@@ -44,8 +44,10 @@ std::vector<int> BitmapSigners(const std::string& bitmap, int total_replicas) {
   return signers;
 }
 
-std::string DigestForCandidateParts(const CandidateWeightUpdate& candidate,
-                                    const std::vector<int64_t>& weights) {
+std::string DigestForCandidateParts(
+    const CandidateWeightUpdate& candidate,
+    const std::vector<int64_t>& weights,
+    const std::vector<int64_t>& leader_weights) {
   return resdb::consensus::reputation::ReputationCandidateDigest(
       candidate.next_weights_size(), candidate.window_index(),
       candidate.window_start(), candidate.window_end(),
@@ -53,7 +55,9 @@ std::string DigestForCandidateParts(const CandidateWeightUpdate& candidate,
       candidate.old_weight_version(), candidate.activation_view(),
       candidate.metric_root(), candidate.reputation_root(),
       candidate.next_weight_root(), weights, candidate.strong_fault_root(),
-      candidate.penalty_root());
+      candidate.penalty_root(), leader_weights, candidate.leader_weight_root(),
+      candidate.leader_eligible_min_weight(),
+      candidate.leader_selection_version());
 }
 
 }  // namespace
@@ -74,10 +78,18 @@ CandidateWeightUpdate ToCandidateWeightUpdate(
   message.set_penalty_root(candidate.penalty_root_hex);
   message.set_next_weight_root(candidate.next_weight_root_hex);
   message.set_candidate_digest(candidate.candidate_digest_hex);
+  message.set_leader_weight_root(candidate.leader_weight_root_hex);
+  message.set_leader_selection_version(candidate.leader_selection_version);
+  message.set_leader_eligible_min_weight(candidate.leader_eligible_min_weight);
   for (size_t i = 0; i < candidate.next_weights.size(); ++i) {
     CandidateWeight* weight = message.add_next_weights();
     weight->set_validator_id(static_cast<int>(i) + 1);
     weight->set_weight(candidate.next_weights[i]);
+  }
+  for (size_t i = 0; i < candidate.leader_weights.size(); ++i) {
+    CandidateWeight* weight = message.add_leader_weights();
+    weight->set_validator_id(static_cast<int>(i) + 1);
+    weight->set_weight(candidate.leader_weights[i]);
   }
   return message;
 }
@@ -91,11 +103,13 @@ std::string WeightUpdateVotePayload(const WeightUpdateVote& vote) {
 }
 
 WeightUpdateController::WeightUpdateController(
-    int node_id, int total_replicas, std::shared_ptr<WeightSchedule> weight_schedule,
-    SignatureVerifier* verifier)
+    int node_id, int total_replicas,
+    std::shared_ptr<WeightSchedule> weight_schedule, SignatureVerifier* verifier,
+    std::shared_ptr<LeaderSelectionSchedule> leader_schedule)
     : node_id_(node_id),
       total_replicas_(total_replicas),
       weight_schedule_(std::move(weight_schedule)),
+      leader_schedule_(std::move(leader_schedule)),
       verifier_(verifier) {}
 
 bool WeightUpdateController::AddLocalCandidate(
@@ -197,10 +211,19 @@ bool WeightUpdateController::ActivateReady(int current_view) {
       continue;
     }
     const uint64_t before_version = weight_schedule_->ActiveWeightVersion();
+    const std::vector<int64_t> weights = CandidateWeights(candidate);
+    const std::vector<int64_t> leader_weights = CandidateLeaderWeights(candidate);
     if (weight_schedule_->ScheduleUpdate(
-            candidate.activation_view(), CandidateWeights(candidate),
-            candidate.old_weight_root(), candidate.old_weight_version()) &&
+            candidate.activation_view(), weights, candidate.old_weight_root(),
+            candidate.old_weight_version()) &&
+        (leader_schedule_ == nullptr ||
+         leader_schedule_->ScheduleUpdate(
+             candidate.activation_view(), before_version + 1,
+             candidate.leader_weight_root(), leader_weights,
+             candidate.leader_eligible_min_weight())) &&
         weight_schedule_->ActivateUpTo(current_view) &&
+        (leader_schedule_ == nullptr || leader_schedule_->ActivateUpTo(current_view) ||
+         !leader_schedule_->enabled()) &&
         weight_schedule_->ActiveWeightVersion() != before_version) {
       activated = true;
       it = pending_certs_.erase(it);
@@ -225,7 +248,8 @@ WeightUpdateController::CandidateKey WeightUpdateController::KeyForCandidate(
 
 bool WeightUpdateController::ValidateCandidateStructure(
     const CandidateWeightUpdate& candidate) const {
-  if (weight_schedule_ == nullptr || candidate.next_weights_size() != total_replicas_) {
+  if (weight_schedule_ == nullptr || candidate.next_weights_size() != total_replicas_ ||
+      candidate.leader_weights_size() != total_replicas_) {
     return false;
   }
   if (candidate.old_weight_root() != weight_schedule_->ActiveWeightRoot() ||
@@ -246,14 +270,36 @@ bool WeightUpdateController::ValidateCandidateStructure(
     }
     weights.push_back(weight.weight());
   }
+  std::vector<int64_t> leader_weights;
+  leader_weights.reserve(total_replicas_);
+  for (int i = 0; i < candidate.leader_weights_size(); ++i) {
+    const CandidateWeight& weight = candidate.leader_weights(i);
+    if (weight.validator_id() != i + 1 || weight.weight() < kMinCandidateWeight ||
+        weight.weight() > kMaxCandidateWeight) {
+      return false;
+    }
+    leader_weights.push_back(weight.weight());
+  }
+  if (candidate.leader_selection_version() != 1 ||
+      candidate.leader_eligible_min_weight() < kMinCandidateWeight ||
+      candidate.leader_eligible_min_weight() > kMaxCandidateWeight) {
+    return false;
+  }
   if (candidate.next_weight_root() !=
       resdb::consensus::reputation::WeightRootHex(weights)) {
+    return false;
+  }
+  if (candidate.leader_weight_root() !=
+      resdb::consensus::reputation::LeaderWeightRootHex(
+          leader_weights, candidate.leader_eligible_min_weight(),
+          candidate.leader_selection_version())) {
     return false;
   }
   if (weights == weight_schedule_->ActiveWeights()) {
     return false;
   }
-  if (DigestForCandidateParts(candidate, weights) != candidate.candidate_digest()) {
+  if (DigestForCandidateParts(candidate, weights, leader_weights) !=
+      candidate.candidate_digest()) {
     return false;
   }
   return true;
@@ -278,6 +324,16 @@ std::vector<int64_t> WeightUpdateController::CandidateWeights(
   std::vector<int64_t> weights;
   weights.reserve(candidate.next_weights_size());
   for (const CandidateWeight& weight : candidate.next_weights()) {
+    weights.push_back(weight.weight());
+  }
+  return weights;
+}
+
+std::vector<int64_t> WeightUpdateController::CandidateLeaderWeights(
+    const CandidateWeightUpdate& candidate) const {
+  std::vector<int64_t> weights;
+  weights.reserve(candidate.leader_weights_size());
+  for (const CandidateWeight& weight : candidate.leader_weights()) {
     weights.push_back(weight.weight());
   }
   return weights;

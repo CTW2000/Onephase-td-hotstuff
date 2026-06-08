@@ -33,40 +33,36 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
     def test_stable_env_sets_pipeline_defaults(self):
         values = source_helper()
 
-        self.assertEqual(values["TD_HS_REPUTATION_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_LEADER_SELECTION_ENABLE"], "1")
+        self.assertNotIn("TD_HS_REPUTATION_ENABLE", values)
+        self.assertNotIn("TD_HS_WEIGHT_UPDATE_ENABLE", values)
+        self.assertNotIn("TD_HS_LEADER_SELECTION_ENABLE", values)
+        self.assertNotIn("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT", values)
+        self.assertNotIn("TD_HS_QC_DIVERSITY_ENABLE", values)
+        self.assertNotIn("TD_HS_WEIGHTS", values)
         self.assertEqual(values["TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_QC_DIVERSITY_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES"], "2")
         self.assertEqual(values["TD_HS_TIMEOUT_ENABLE"], "0")
-        self.assertEqual(values["TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT"], "11")
-        self.assertEqual(values["TD_HS_WEIGHTS"], ",".join(["30"] * 20))
-        self.assertEqual(values["TD_HS_REPUTATION_WINDOW_SIZE"], "512")
-        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS"], "512")
-        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY"], "1")
-        self.assertEqual(values["TD_HS_REPUTATION_MAX_DELTA"], "5")
-        self.assertEqual(values["TD_HS_REPUTATION_DECAY_PER_EPOCH"], "5")
-        self.assertEqual(values["TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH"], "5")
-        self.assertEqual(values["TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES"], "1")
-        self.assertEqual(values["TD_HS_QC_SIGNER_COOLDOWN_ROUNDS"], "8")
-        self.assertEqual(values["TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS"], "256")
+        self.assertEqual(values["TD_HS_TIMEOUT_MS"], "120")
 
     def test_stable_env_preserves_explicit_overrides(self):
         values = source_helper(
             {
+                "TD_HS_REPUTATION_ENABLE": "1",
                 "TD_HS_REPUTATION_WINDOW_SIZE": "128",
+                "TD_HS_WEIGHT_UPDATE_ENABLE": "1",
+                "TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS": "128",
+                "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY": "2",
+                "TD_HS_LEADER_SELECTION_ENABLE": "1",
                 "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT": "12",
-                "TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE": "1",
-                "TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES": "1",
             }
         )
 
+        self.assertEqual(values["TD_HS_REPUTATION_ENABLE"], "1")
         self.assertEqual(values["TD_HS_REPUTATION_WINDOW_SIZE"], "128")
+        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS"], "128")
+        self.assertEqual(values["TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY"], "2")
+        self.assertEqual(values["TD_HS_LEADER_SELECTION_ENABLE"], "1")
         self.assertEqual(values["TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT"], "12")
-        self.assertEqual(values["TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE"], "1")
-        self.assertEqual(values["TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES"], "1")
 
     def test_silent_leader_ids_are_not_shared_with_all_replicas_or_clients(self):
         deploy_multi = os.path.join(REPO_ROOT, "scripts", "deploy", "script", "deploy_multi.sh")
@@ -181,10 +177,12 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertNotIn('ids=",$ids"', body)
         self.assertIn('ids="${ids},${i}"', body)
 
-    def test_signed_proposal_artifacts_are_exported_before_vote_safety(self):
+    def test_proposal_qc_evidence_is_deferred_until_after_vote_send(self):
         with open(os.path.join(REPO_ROOT, "platform", "consensus", "ordering", "td_hotstuff", "algorithm", "td_hotstuff.cpp")) as fp:
             body = fp.read()
-        self.assertLess(body.index("RecordSignedProposalArtifact"), body.index("RecordVote(*proposal"))
+        send_idx = body.index("const int send_result = SendMessage(MessageType::Vote")
+        record_idx = body.index("TryRecordCertifiedQc(std::move(proposal_qc_snapshot))", send_idx)
+        self.assertLess(send_idx, record_idx)
 
     def test_slow_experiment_scripts_restore_shared_configs(self):
         scripts = [

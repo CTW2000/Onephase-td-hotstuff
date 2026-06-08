@@ -39,7 +39,7 @@ resdb::consensus::reputation::ReputationCandidate Candidate() {
     resdb::consensus::reputation::ValidatorReputation validator;
     validator.validator_id = i;
     validator.current_weight = 1;
-    validator.next_weight = i == 4 ? 1 : 2;
+    validator.next_weight = i == 4 ? 1 : 20;
     candidate.validators.push_back(validator);
   }
   resdb::consensus::reputation::RecomputeReputationCandidateRoots(&candidate);
@@ -92,6 +92,10 @@ TEST(WeightUpdateControllerTest, VotesOnlyForMatchingLocalCandidate) {
   CandidateWeightUpdate wrong = CandidateMessage(candidate);
   wrong.set_candidate_digest("wrong");
   EXPECT_EQ(controller.HandleCandidate(wrong), nullptr);
+
+  CandidateWeightUpdate wrong_leader_root = CandidateMessage(candidate);
+  wrong_leader_root.set_leader_weight_root("wrong");
+  EXPECT_EQ(controller.HandleCandidate(wrong_leader_root), nullptr);
 }
 
 TEST(WeightUpdateControllerTest, FormsCertAfterOldWeightQuorumVotes) {
@@ -125,10 +129,13 @@ TEST(WeightUpdateControllerTest, FormsCertAfterOldWeightQuorumVotes) {
 
 TEST(WeightUpdateControllerTest, ActivatesCertifiedWeightsAtBoundary) {
   auto schedule = std::make_shared<WeightSchedule>(4, std::vector<int64_t>{1, 1, 1, 1});
+  auto leader_schedule = std::make_shared<LeaderSelectionSchedule>(
+      4, std::vector<int64_t>{1, 1, 1, 1}, /*enabled=*/true,
+      /*eligible_min_weight=*/10);
   MockSignatureVerifier verifier;
   EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
   WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
-                                    schedule, &verifier);
+                                    schedule, &verifier, leader_schedule);
   auto candidate = Candidate();
   WeightUpdateCert cert;
   *cert.mutable_candidate() = CandidateMessage(candidate);
@@ -149,6 +156,11 @@ TEST(WeightUpdateControllerTest, ActivatesCertifiedWeightsAtBoundary) {
   EXPECT_TRUE(controller.ActivateReady(/*current_view=*/9));
   EXPECT_EQ(schedule->ActiveWeightVersion(), 1);
   EXPECT_EQ(schedule->ActiveWeights(), candidate.next_weights);
+  EXPECT_EQ(leader_schedule->ActiveLeaderVersion(), 1);
+  EXPECT_FALSE(leader_schedule->ContextHashForView(9).empty());
+  for (int view = 9; view < 80; ++view) {
+    EXPECT_NE(4, leader_schedule->LeaderForView(view));
+  }
 }
 
 }  // namespace

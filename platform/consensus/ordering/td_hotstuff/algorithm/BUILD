@@ -6,6 +6,7 @@ cc_library(
     hdrs = ["proposal_manager.h"],
     deps = [
         ":certificate_verifier",
+        ":leader_selection_schedule",
         ":safety_rules",
         ":timeout_manager",
         ":weight_schedule",
@@ -74,10 +75,21 @@ cc_library(
 )
 
 cc_library(
+    name = "leader_selection_schedule",
+    srcs = ["leader_selection_schedule.cpp"],
+    hdrs = ["leader_selection_schedule.h"],
+    deps = [
+        ":td_hotstuff_digest",
+        "//common:glog",
+    ],
+)
+
+cc_library(
     name = "weight_update_controller",
     srcs = ["weight_update_controller.cpp"],
     hdrs = ["weight_update_controller.h"],
     deps = [
+        ":leader_selection_schedule",
         ":weight_schedule",
         "//common:glog",
         "//common/crypto:signature_verifier",
@@ -92,6 +104,7 @@ cc_library(
     hdrs = ["td_hotstuff.h"],
     deps = [
         ":async_consensus_verifier",
+        ":leader_selection_schedule",
         ":proposal_manager",
         ":timeout_manager",
         ":weight_schedule",
@@ -159,9 +172,21 @@ cc_test(
 
 
 cc_test(
+    name = "leader_selection_schedule_test",
+    srcs = ["leader_selection_schedule_test.cpp"],
+    deps = [
+        ":leader_selection_schedule",
+        ":proposal_manager",
+        "//common/test:test_main",
+        "//platform/consensus/reputation:reputation_algorithm",
+    ],
+)
+
+cc_test(
     name = "weight_update_controller_test",
     srcs = ["weight_update_controller_test.cpp"],
     deps = [
+        ":leader_selection_schedule",
         ":weight_schedule",
         ":weight_update_controller",
         "//common/crypto:mock_signature_verifier",
