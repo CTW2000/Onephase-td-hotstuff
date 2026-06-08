@@ -32,6 +32,9 @@ LATENCY_RE = re.compile(r"%s\s*:([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)")
 MAX_LATENCY_SECONDS = float(os.environ.get("TD_HS_RESULT_MAX_LATENCY_SECONDS", "300"))
 STEADY_AFTER_THRESHOLD_GRACE_SECONDS = float(
     os.environ.get("TD_HS_RESULT_STEADY_GRACE_SECONDS", "10"))
+RESULT_WARMUP_SECONDS = float(os.environ.get("TD_HS_RESULT_WARMUP_SECONDS", "30"))
+RESULT_WARMUP_SAMPLE_RATIO = float(
+    os.environ.get("TD_HS_RESULT_WARMUP_SAMPLE_RATIO", "0.20"))
 
 class ParsedLog:
     def __init__(self):
@@ -40,6 +43,11 @@ class ParsedLog:
         self.lat2 = []
         self.lat3 = []
         self.lat4 = []
+        self.warmup_tps = []
+        self.stable_tps = []
+        self.warmup_lat = []
+        self.stable_lat = []
+        self.stable_window_fallback = False
         self.before_threshold_tps = []
         self.after_threshold_tps = []
         self.before_threshold_lat = []
@@ -359,10 +367,39 @@ def parse_line_latency(line, label):
         return None
     return parse_positive_float(found.group(1), MAX_LATENCY_SECONDS)
 
+def bounded_warmup_ratio():
+    if not math.isfinite(RESULT_WARMUP_SAMPLE_RATIO):
+        return 0.20
+    return max(0.0, min(0.95, RESULT_WARMUP_SAMPLE_RATIO))
+
+def split_stable_records(records, first_txn_time):
+    if not records:
+        return [], [], False
+    has_usable_time = first_txn_time is not None and any(
+        line_time is not None for _, line_time in records)
+    if has_usable_time:
+        stable_cutoff = first_txn_time + max(0.0, RESULT_WARMUP_SECONDS)
+        warmup = [value for value, line_time in records
+                  if line_time is None or line_time < stable_cutoff]
+        stable = [value for value, line_time in records
+                  if line_time is not None and line_time >= stable_cutoff]
+    else:
+        warmup_count = int(math.ceil(len(records) * bounded_warmup_ratio()))
+        warmup_count = max(0, min(len(records) - 1, warmup_count))
+        warmup = [value for value, _ in records[:warmup_count]]
+        stable = [value for value, _ in records[warmup_count:]]
+    if stable:
+        return warmup, stable, False
+    return warmup, [value for value, _ in records], True
+
 def read_tps(file, threshold_time=None, bad_node_count=None,
              eligible_min_weight=11, bad_node_ids=None):
     parsed = ParsedLog()
     last_timestamp = None
+    first_txn_time = None
+    txn_records = []
+    latency_records = []
+    local_threshold_active = False
     with open(file) as f:
         for line in f:
             parsed_time = parse_timestamp(line)
@@ -375,16 +412,24 @@ def read_tps(file, threshold_time=None, bad_node_count=None,
             leader_weights = parse_leader_weights(line)
             if leader_weights is not None:
                 parsed.final_leader_weights = leader_weights
-            if all_bad_nodes_below_threshold(
+            threshold_reached_on_line = all_bad_nodes_below_threshold(
                     threshold_weights_for_line(line), bad_node_count,
-                    eligible_min_weight, bad_node_ids=bad_node_ids):
+                    eligible_min_weight, bad_node_ids=bad_node_ids)
+            if threshold_reached_on_line:
                 parsed.threshold_seen = True
+                if threshold_time is None:
+                    local_threshold_active = True
             window = classify_window(line_time, threshold_time)
+            if threshold_time is None and local_threshold_active:
+                window = "after"
             steady = is_steady_after_threshold(line_time, threshold_time)
 
             for match in TXN_RE.finditer(line):
                 value = int(match.group(1))
                 parsed.tps.append(value)
+                txn_records.append((value, line_time))
+                if first_txn_time is None and line_time is not None:
+                    first_txn_time = line_time
                 if window == "after":
                     parsed.after_threshold_tps.append(value)
                     if steady:
@@ -395,6 +440,7 @@ def read_tps(file, threshold_time=None, bad_node_count=None,
             value = parse_line_latency(line, "req client latency")
             if value is not None:
                 parsed.lat.append(value)
+                latency_records.append((value, line_time))
                 if window == "after":
                     parsed.after_threshold_lat.append(value)
                     if steady:
@@ -411,6 +457,11 @@ def read_tps(file, threshold_time=None, bad_node_count=None,
             value = parse_line_latency(line, "reply latency")
             if value is not None:
                 parsed.lat4.append(value)
+    (parsed.warmup_tps, parsed.stable_tps,
+     tps_fallback) = split_stable_records(txn_records, first_txn_time)
+    (parsed.warmup_lat, parsed.stable_lat,
+     lat_fallback) = split_stable_records(latency_records, first_txn_time)
+    parsed.stable_window_fallback = tps_fallback or lat_fallback
     return parsed
 
 def percentile(sorted_values, pct):
@@ -532,6 +583,11 @@ if __name__ == '__main__':
     lat2 = []
     lat3 = []
     lat4 = []
+    warmup_tps = []
+    stable_tps = []
+    warmup_lat = []
+    stable_lat = []
+    stable_window_fallback = False
     before_threshold_tps = []
     after_threshold_tps = []
     steady_after_threshold_tps = []
@@ -561,6 +617,12 @@ if __name__ == '__main__':
         lat2 += parsed_lat2
         lat3 += parsed_lat3
         lat4 += parsed_lat4
+        warmup_tps += parsed.warmup_tps
+        stable_tps += parsed.stable_tps
+        warmup_lat += parsed.warmup_lat
+        stable_lat += parsed.stable_lat
+        stable_window_fallback = (
+            stable_window_fallback or parsed.stable_window_fallback)
         before_threshold_tps += parsed.before_threshold_tps
         after_threshold_tps += parsed.after_threshold_tps
         steady_after_threshold_tps += parsed.steady_after_threshold_tps
@@ -573,7 +635,12 @@ if __name__ == '__main__':
             final_leader_weights_by_log.append(parsed.final_leader_weights)
         threshold_seen = threshold_seen or parsed.threshold_seen
 
-    max_tps, avg_tps = cal_tps(tps, len(files))
+    max_raw_tps, avg_raw_tps = cal_tps(tps, len(files), "raw")
+    print("warmup throughput samples:", len(warmup_tps))
+    print("stable throughput samples:", len(stable_tps))
+    if stable_window_fallback:
+        print("stable window fallback: insufficient samples after warmup")
+    max_tps, avg_tps = cal_tps(stable_tps, 0, "stable")
     if bad_node_count > 0 or bad_node_ids:
         print("bad-node threshold split: bad_node_count:",
               bad_node_count, "eligible_min_weight:", eligible_min_weight,
@@ -592,7 +659,9 @@ if __name__ == '__main__':
                                    final_leader_weights_by_log,
                                    bad_node_count, bad_node_ids)
         print_reputation_summary(files, bad_node_ids)
-    max_lat, avg_lat = cal_lat(lat, len(files) / 2)
+    max_raw_lat, avg_raw_lat = cal_lat(lat, len(files) / 2, "raw")
+    print("warmup latency samples:", len(warmup_lat))
+    max_lat, avg_lat = cal_lat(stable_lat, 0, "stable")
     cal_lat4(lat4, len(files) / 2)
     print(avg_tps)
     print(avg_lat)
