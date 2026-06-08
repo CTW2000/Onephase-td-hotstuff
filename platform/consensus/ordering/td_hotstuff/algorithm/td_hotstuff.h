@@ -16,8 +16,10 @@
 #include "platform/consensus/ordering/common/algorithm/protocol_base.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/async_consensus_verifier.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
+#include "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/timeout_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.h"
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
 #include "platform/statistic/stats.h"
 
@@ -39,6 +41,9 @@ class HotStuff : public common::ProtocolBase {
   bool ReceiveCertificate(std::unique_ptr<Certificate> cert);
   bool ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote);
   bool ReceiveTimeoutCert(std::unique_ptr<TimeoutCert> cert);
+  bool ReceiveCandidateWeightUpdate(std::unique_ptr<CandidateWeightUpdate> candidate);
+  bool ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote);
+  bool ReceiveWeightUpdateCert(std::unique_ptr<WeightUpdateCert> cert);
   int CurrentView();
   int LeaderForView(int view);
   int CurrentLeader();
@@ -50,6 +55,7 @@ class HotStuff : public common::ProtocolBase {
   void AsyncCommit();
   void AsyncTimeout();
   void AsyncVerifiedEvents();
+  void AsyncWeightUpdates();
   bool ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert);
   void ProcessVerifiedConsensusEvent(VerifiedConsensusEvent event);
 
@@ -65,10 +71,19 @@ class HotStuff : public common::ProtocolBase {
   std::vector<int> CertificateSigners(
       const std::map<int, std::unique_ptr<Certificate>>& certs,
       int view) const;
+  bool MaybeMakeQcEvidenceSnapshotLocked(const QC& qc,
+                                          TdHotstuffQcEvidenceSnapshot* snapshot);
   bool MaybeFormQcLocked(int view, const std::string& hash);
+  bool MaybeFormQcLocked(int view, const std::string& hash,
+                         TdHotstuffQcEvidenceSnapshot* reputation_snapshot);
   void MarkTimeoutProgressLocked();
   void BroadcastTimeoutVote(const TimeoutVote& vote);
   void BroadcastTimeoutCert(const TimeoutCert& cert);
+  void BroadcastCandidateWeightUpdate(const CandidateWeightUpdate& candidate);
+  void BroadcastWeightUpdateVote(const WeightUpdateVote& vote);
+  void BroadcastWeightUpdateCert(const WeightUpdateCert& cert);
+  void DrainCompletedWeightCandidates();
+  void ActivateReadyWeightUpdates();
   bool ApplyTimeoutCertLocked(const TimeoutCert& cert);
   bool IsSilentLeaderForExperiment() const;
   std::vector<std::unique_ptr<Transaction>> TakeTransactionsForView(
@@ -112,11 +127,15 @@ class HotStuff : public common::ProtocolBase {
   int64_t quorum_weight_ = 0;
   std::shared_ptr<WeightSchedule> weight_schedule_;
   std::unique_ptr<AsyncConsensusVerifier> async_verifier_;
+  std::unique_ptr<TdHotstuffReputationAdapter> reputation_adapter_;
+  std::unique_ptr<WeightUpdateController> weight_update_controller_;
   std::unique_ptr<TimeoutManager> timeout_manager_;
   std::set<int> timeout_echoed_views_;
   std::thread timeout_thread_;
+  std::thread weight_update_thread_;
   std::thread verified_event_thread_;
   std::atomic<bool> stop_timeout_{false};
+  std::atomic<bool> stop_weight_updates_{false};
   int timeout_empty_proposal_until_view_ = 0;
   int timeout_empty_proposal_budget_views_ = 0;
   uint64_t timeout_progress_epoch_ = 0;

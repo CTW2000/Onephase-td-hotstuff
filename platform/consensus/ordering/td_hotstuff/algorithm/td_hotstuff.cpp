@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string>
 #include <thread>
+#include <utility>
 
 #include "common/utils/utils.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/certificate_verifier.h"
@@ -37,6 +38,10 @@ bool EnvFlagEnabled(const char* name) {
   return value == "1" || value == "true" || value == "TRUE" ||
          value == "yes" || value == "YES" || value == "on" ||
          value == "ON";
+}
+
+bool WeightUpdateEnabled() {
+  return EnvFlagEnabled("TD_HS_WEIGHT_UPDATE_ENABLE");
 }
 
 bool EnvListContainsId(const char* name, int id) {
@@ -106,6 +111,20 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
     timeout_manager_ = std::make_unique<TimeoutManager>(
         id_, total_num_, verifier_, weight_schedule_);
   }
+  TdHotstuffReputationAdapterOptions reputation_options =
+      TdHotstuffReputationAdapter::OptionsFromEnv();
+  if (reputation_options.enabled) {
+    reputation_options.initial_weights = weight_schedule_->ActiveWeights();
+    reputation_options.initial_weight_root = weight_schedule_->ActiveWeightRoot();
+    reputation_options.initial_weight_version = weight_schedule_->ActiveWeightVersion();
+    reputation_adapter_ = std::make_unique<TdHotstuffReputationAdapter>(
+        id_, total_num_, std::move(reputation_options));
+    reputation_adapter_->Start();
+    if (WeightUpdateEnabled()) {
+      weight_update_controller_ = std::make_unique<WeightUpdateController>(
+          id_, total_num_, weight_schedule_, verifier_);
+    }
+  }
   async_verifier_ = std::make_unique<AsyncConsensusVerifier>(
       total_num_, verifier_, AsyncVerifierWorkerCountFromEnv(),
       AsyncVerifierQueueCapacityFromEnv(), weight_schedule_);
@@ -117,6 +136,9 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
   send_thread_ = std::thread(&HotStuff::AsyncSend, this);
   commit_thread_ = std::thread(&HotStuff::AsyncCommit, this);
   verified_event_thread_ = std::thread(&HotStuff::AsyncVerifiedEvents, this);
+  if (reputation_adapter_ != nullptr) {
+    weight_update_thread_ = std::thread(&HotStuff::AsyncWeightUpdates, this);
+  }
   if (timeout_manager_ != nullptr) {
     timeout_thread_ = std::thread(&HotStuff::AsyncTimeout, this);
   }
@@ -129,6 +151,13 @@ HotStuff::~HotStuff() {
   }
   if (verified_event_thread_.joinable()) {
     verified_event_thread_.join();
+  }
+  stop_weight_updates_.store(true);
+  if (weight_update_thread_.joinable()) {
+    weight_update_thread_.join();
+  }
+  if (reputation_adapter_ != nullptr) {
+    reputation_adapter_->Stop();
   }
 
   stop_timeout_.store(true);
@@ -381,6 +410,19 @@ void HotStuff::AsyncVerifiedEvents() {
   }
 }
 
+void HotStuff::AsyncWeightUpdates() {
+  while (!IsStop() && !stop_weight_updates_.load()) {
+    if (reputation_adapter_ != nullptr) {
+      reputation_adapter_->AdvanceWatermark(CurrentView());
+      DrainCompletedWeightCandidates();
+      ActivateReadyWeightUpdates();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  DrainCompletedWeightCandidates();
+  ActivateReadyWeightUpdates();
+}
+
 void HotStuff::ProcessVerifiedConsensusEvent(VerifiedConsensusEvent event) {
   switch (event.type) {
     case VerifiedConsensusEvent::Type::kVote:
@@ -519,7 +561,35 @@ std::vector<int> HotStuff::CertificateSigners(
   return signers;
 }
 
+bool HotStuff::MaybeMakeQcEvidenceSnapshotLocked(
+    const QC& qc, TdHotstuffQcEvidenceSnapshot* snapshot) {
+  if (snapshot == nullptr || reputation_adapter_ == nullptr ||
+      qc.hash().empty() || weight_schedule_ == nullptr) {
+    return false;
+  }
+  snapshot->local_node_id = id_;
+  snapshot->total_replicas = total_num_;
+  snapshot->view = qc.view();
+  snapshot->slot = qc.slot();
+  snapshot->leader_id = LeaderForView(qc.view());
+  snapshot->qc_hash = qc.hash();
+  snapshot->signer_bitmap = qc.signer_bitmap();
+  snapshot->available_signer_bitmap =
+      qc.available_signer_bitmap().empty() ? qc.signer_bitmap()
+                                           : qc.available_signer_bitmap();
+  snapshot->active_weight_root = weight_schedule_->WeightRootForView(qc.view());
+  snapshot->active_weight_version =
+      weight_schedule_->WeightVersionForView(qc.view());
+  return true;
+}
+
 bool HotStuff::MaybeFormQcLocked(int view, const std::string& hash) {
+  return MaybeFormQcLocked(view, hash, nullptr);
+}
+
+bool HotStuff::MaybeFormQcLocked(
+    int view, const std::string& hash,
+    TdHotstuffQcEvidenceSnapshot* reputation_snapshot) {
   auto view_it = receive_.find(view);
   if (view_it == receive_.end()) {
     return false;
@@ -541,11 +611,23 @@ bool HotStuff::MaybeFormQcLocked(int view, const std::string& hash) {
     return false;
   }
 
+  std::vector<int> available_signers;
+  available_signers.reserve(certs.size());
+  for (const auto& entry : certs) {
+    if (WeightForSigner(entry.first, view) > 0) {
+      available_signers.push_back(entry.first);
+    }
+  }
+  if (available_signers.empty()) {
+    available_signers = selected_signers;
+  }
+
   std::unique_ptr<QC> qc = std::make_unique<QC>();
   qc->set_hash(hash);
   qc->set_view(view);
   qc->set_signer_bitmap(BuildSignerBitmap(selected_signers, total_num_));
-  qc->set_available_signer_bitmap(qc->signer_bitmap());
+  qc->set_available_signer_bitmap(BuildSignerBitmap(available_signers,
+                                                    total_num_));
   qc->set_collector_id(id_);
   for (int signer : selected_signers) {
     auto it = certs.find(signer);
@@ -555,6 +637,22 @@ bool HotStuff::MaybeFormQcLocked(int view, const std::string& hash) {
       }
       *qc->add_signatures() = it->second->sign();
     }
+  }
+
+  if (reputation_snapshot != nullptr) {
+    reputation_snapshot->local_node_id = id_;
+    reputation_snapshot->total_replicas = total_num_;
+    reputation_snapshot->view = view;
+    reputation_snapshot->slot = qc->slot();
+    reputation_snapshot->leader_id = LeaderForView(view);
+    reputation_snapshot->qc_hash = hash;
+    reputation_snapshot->signer_bitmap = qc->signer_bitmap();
+    reputation_snapshot->available_signer_bitmap =
+        qc->available_signer_bitmap();
+    reputation_snapshot->active_weight_root =
+        weight_schedule_->WeightRootForView(view);
+    reputation_snapshot->active_weight_version =
+        weight_schedule_->WeightVersionForView(view);
   }
 
   qc_formed_ = true;
@@ -588,6 +686,8 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
   if (cert == nullptr) {
     return false;
   }
+  TdHotstuffQcEvidenceSnapshot reputation_snapshot;
+  bool has_reputation_snapshot = false;
   {
     std::unique_lock<std::mutex> lk(mutex_);
     const int view = cert->view();
@@ -605,8 +705,13 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
                                     : quorum_weight_;
     if (previous_weight < quorum_weight && current_weight >= quorum_weight) {
       MarkTimeoutProgressLocked();
-      MaybeFormQcLocked(view, hash);
+      has_reputation_snapshot = MaybeFormQcLocked(
+          view, hash,
+          reputation_adapter_ != nullptr ? &reputation_snapshot : nullptr);
     }
+  }
+  if (has_reputation_snapshot && reputation_adapter_ != nullptr) {
+    reputation_adapter_->TryRecordCertifiedQc(std::move(reputation_snapshot));
   }
   return true;
 }
@@ -692,6 +797,87 @@ void HotStuff::BroadcastTimeoutCert(const TimeoutCert& cert) {
   }
 }
 
+void HotStuff::BroadcastCandidateWeightUpdate(
+    const CandidateWeightUpdate& candidate) {
+  if (broadcast_call_ != nullptr) {
+    broadcast_call_(MessageType::CandidateWeightUpdateMsg, candidate);
+  }
+}
+
+void HotStuff::BroadcastWeightUpdateVote(const WeightUpdateVote& vote) {
+  if (broadcast_call_ != nullptr) {
+    broadcast_call_(MessageType::WeightUpdateVoteMsg, vote);
+  }
+}
+
+void HotStuff::BroadcastWeightUpdateCert(const WeightUpdateCert& cert) {
+  if (broadcast_call_ != nullptr) {
+    broadcast_call_(MessageType::WeightUpdateCertMsg, cert);
+  }
+}
+
+void HotStuff::DrainCompletedWeightCandidates() {
+  if (reputation_adapter_ == nullptr || weight_update_controller_ == nullptr) {
+    return;
+  }
+  for (const auto& candidate : reputation_adapter_->TakeCompletedCandidates()) {
+    if (weight_update_controller_->AddLocalCandidate(candidate)) {
+      BroadcastCandidateWeightUpdate(ToCandidateWeightUpdate(candidate));
+    }
+  }
+}
+
+void HotStuff::ActivateReadyWeightUpdates() {
+  if (weight_update_controller_ == nullptr || weight_schedule_ == nullptr) {
+    return;
+  }
+  if (weight_update_controller_->ActivateReady(CurrentView()) &&
+      reputation_adapter_ != nullptr) {
+    resdb::consensus::reputation::ReputationWeightSnapshot snapshot;
+    snapshot.weights = weight_schedule_->ActiveWeights();
+    snapshot.weight_root_hex = weight_schedule_->ActiveWeightRoot();
+    snapshot.weight_version = weight_schedule_->ActiveWeightVersion();
+    reputation_adapter_->UpdateActiveWeights(std::move(snapshot));
+  }
+}
+
+bool HotStuff::ReceiveCandidateWeightUpdate(
+    std::unique_ptr<CandidateWeightUpdate> candidate) {
+  if (candidate == nullptr || weight_update_controller_ == nullptr) {
+    return false;
+  }
+  std::unique_ptr<WeightUpdateVote> vote =
+      weight_update_controller_->HandleCandidate(*candidate);
+  if (vote == nullptr) {
+    return false;
+  }
+  BroadcastWeightUpdateVote(*vote);
+  return true;
+}
+
+bool HotStuff::ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote) {
+  if (vote == nullptr || weight_update_controller_ == nullptr) {
+    return false;
+  }
+  std::unique_ptr<WeightUpdateCert> cert =
+      weight_update_controller_->HandleVote(*vote);
+  if (cert != nullptr) {
+    BroadcastWeightUpdateCert(*cert);
+  }
+  return true;
+}
+
+bool HotStuff::ReceiveWeightUpdateCert(std::unique_ptr<WeightUpdateCert> cert) {
+  if (cert == nullptr || weight_update_controller_ == nullptr) {
+    return false;
+  }
+  const bool accepted = weight_update_controller_->HandleCert(*cert);
+  if (accepted) {
+    ActivateReadyWeightUpdates();
+  }
+  return accepted;
+}
+
 bool HotStuff::ApplyTimeoutCertLocked(const TimeoutCert& cert) {
   if (timeout_manager_ == nullptr ||
       !timeout_manager_->VerifyTimeoutCert(cert)) {
@@ -728,6 +914,8 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   }
   const int view = proposal->header().view();
   std::unique_ptr<Certificate> cert;
+  TdHotstuffQcEvidenceSnapshot proposal_qc_snapshot;
+  bool has_proposal_qc_snapshot = false;
   bool proposal_valid = true;
   bool stale_proposal = false;
   int next_leader = 0;
@@ -749,6 +937,11 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
       LOG(ERROR) << "proposal invalid";
       proposal_valid = false;
     } else {
+      if (reputation_adapter_ != nullptr &&
+          !proposal->header().qc().hash().empty()) {
+        has_proposal_qc_snapshot = MaybeMakeQcEvidenceSnapshotLocked(
+            proposal->header().qc(), &proposal_qc_snapshot);
+      }
       std::string safety_error;
       if (!proposal_manager_->RecordVote(*proposal, &safety_error)) {
         LOG(ERROR) << "proposal vote safety rejected: " << safety_error;
@@ -784,13 +977,19 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   }
 
   if (stale_proposal) {
+    if (has_proposal_qc_snapshot && reputation_adapter_ != nullptr) {
+      reputation_adapter_->TryRecordCertifiedQc(std::move(proposal_qc_snapshot));
+    }
     return true;
   }
   if (!proposal_valid || cert == nullptr) {
     return false;
   }
-  SendMessage(MessageType::Vote, *cert, next_leader);
-  return true;
+  const int send_result = SendMessage(MessageType::Vote, *cert, next_leader);
+  if (has_proposal_qc_snapshot && reputation_adapter_ != nullptr) {
+    reputation_adapter_->TryRecordCertifiedQc(std::move(proposal_qc_snapshot));
+  }
+  return send_result >= 0;
 }
 
 void HotStuff::CommitProposal(std::unique_ptr<Proposal> p) {

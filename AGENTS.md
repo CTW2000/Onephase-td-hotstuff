@@ -18,8 +18,6 @@ Codex 改代码，但不提交 commit；我在 Cursor 的 Git 面板里审查 di
 - If the needed evidence does not exist because the consensus protocol itself is incomplete, stop and ask the user whether to extend the consensus protocol. Such changes must be minimal, protocol-correct, and only expose or verify the missing artifact needed by the adapter.
 - When changing code, preserve this boundary explicitly: consensus verifies and advances the protocol; the adapter extracts evidence; the plugin computes; consensus certifies and activates the plugin result.
 
-
-
 ## End-to-end pipeline checks
 
 - When adding a new function or changing existing behavior, check the whole live pipeline before experiments: consensus protocol logic, reputation plugin logic, client request routing, benchmark deployment scripts, and metric parsing/summary code.
@@ -28,7 +26,6 @@ Codex 改代码，但不提交 commit；我在 Cursor 的 Git 面板里审查 di
 - In normal no-Byzantine 20-replica + 1-client experiments, throughput should recover to the normal baseline, usually around `82000+`, unless the new mechanism intentionally adds unavoidable work. If no-Byzantine throughput stays far below that level, treat it as a bug or pipeline mismatch and find the source before running larger Byzantine experiments.
 - Every time no-Byzantine performance drops below the normal level after a code or config change, first inspect the exact code, benchmark, and metric changes made in that iteration and try to fix the regression. Only accept the lower baseline when the new feature itself truly adds unavoidable work and that cost has been measured and explained.
 - Before interpreting Byzantine results, verify that metric logic reports both aggregate and post-activation behavior, including latency, throughput, protocol mismatch counters, active weights, leader eligibility, and benchmark routing decisions.
-
 
 ## Experiment integrity and anti-fake-control rules
 
@@ -47,3 +44,16 @@ Codex 改代码，但不提交 commit；我在 Cursor 的 Git 面板里审查 di
 - Replicas do not strictly need the full source checkout to run after deployment because the deploy script copies binaries, configs, and certificates into `~/resilientdb_app`. Still, keeping the replica checkouts synced prevents debugging/redeploy mistakes and makes version checks deterministic.
 - Documentation-only changes do not require redeployment. Sync the checkout only when the documentation itself should be available on every server.
 - Do not commit automatically; leave diffs for Cursor review unless the user explicitly asks to commit.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

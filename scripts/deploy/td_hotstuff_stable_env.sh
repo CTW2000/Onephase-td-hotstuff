@@ -1,14 +1,17 @@
 #!/bin/bash
 
+_TD_HS_EXPLICIT_WEIGHT_UPDATE_ENABLE="${TD_HS_WEIGHT_UPDATE_ENABLE:-}"
+_TD_HS_EXPLICIT_WEIGHT_UPDATE_EPOCH_VIEWS="${TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS:-}"
+_TD_HS_EXPLICIT_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY="${TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY:-}"
+
 # Stable defaults for the classic TD-Hotstuff core. This branch intentionally
 # keeps reputation, dynamic weights, dynamic leader selection, QC diversity, and
 # strong-fault plugin wiring out of live consensus runs.
 
 unset TD_HS_WEIGHTS
-unset TD_HS_REPUTATION_ENABLE
-unset TD_HS_REPUTATION_WINDOW_SIZE
+# Reputation V1 adapter envs are opt-in and must be preserved when the
+# experiment runner explicitly enables them. If unset, the adapter defaults off.
 unset TD_HS_REPUTATION_OUTPUT_DIR
-unset TD_HS_REPUTATION_QUEUE_CAPACITY
 unset TD_HS_REPUTATION_MAX_DELTA
 unset TD_HS_REPUTATION_DECAY_PER_EPOCH
 unset TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH
@@ -53,4 +56,14 @@ export TD_HS_REQUEST_VIEW_LOOKAHEAD
 export TD_HS_TX_FORWARD_LOOKAHEAD
 export TD_HS_TIMEOUT_ENABLE
 export TD_HS_TIMEOUT_MS
+if [ -n "${_TD_HS_EXPLICIT_WEIGHT_UPDATE_ENABLE}" ]; then
+  export TD_HS_WEIGHT_UPDATE_ENABLE="${_TD_HS_EXPLICIT_WEIGHT_UPDATE_ENABLE}"
+fi
+if [ -n "${_TD_HS_EXPLICIT_WEIGHT_UPDATE_EPOCH_VIEWS}" ]; then
+  export TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS="${_TD_HS_EXPLICIT_WEIGHT_UPDATE_EPOCH_VIEWS}"
+fi
+if [ -n "${_TD_HS_EXPLICIT_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY}" ]; then
+  export TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY="${_TD_HS_EXPLICIT_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY}"
+fi
+
 export TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS

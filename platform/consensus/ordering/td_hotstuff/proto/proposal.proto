@@ -54,6 +54,45 @@ message TimeoutCert {
   string quorum_rule_id = 5;
 }
 
+
+message CandidateWeight {
+  int32 validator_id = 1;
+  int64 weight = 2;
+}
+
+message CandidateWeightUpdate {
+  string algorithm = 1;
+  uint64 window_index = 2;
+  int32 window_start = 3;
+  int32 window_end = 4;
+  string old_weight_root = 5;
+  uint64 old_weight_version = 6;
+  int32 activation_view = 7;
+  string metric_root = 8;
+  string reputation_root = 9;
+  string strong_fault_root = 10;
+  string penalty_root = 11;
+  string next_weight_root = 12;
+  repeated CandidateWeight next_weights = 13;
+  string candidate_digest = 14;
+}
+
+message WeightUpdateVote {
+  int32 signer = 1;
+  string old_weight_root = 2;
+  uint64 old_weight_version = 3;
+  int32 activation_view = 4;
+  string candidate_digest = 5;
+  SignatureInfo signature = 6;
+}
+
+message WeightUpdateCert {
+  CandidateWeightUpdate candidate = 1;
+  bytes signer_bitmap = 2;
+  repeated WeightUpdateVote votes = 3;
+  string quorum_rule_id = 4;
+}
+
 message Header {
   int32 proposer_id = 1;
   int32 proposal_id = 2;
@@ -79,4 +118,7 @@ enum MessageType {
   Vote = 1;
   TimeoutVoteMsg = 2;
   TimeoutCertMsg = 3;
+  CandidateWeightUpdateMsg = 4;
+  WeightUpdateVoteMsg = 5;
+  WeightUpdateCertMsg = 6;
 };

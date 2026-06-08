@@ -24,11 +24,32 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "reputation_plugin_runtime",
+    srcs = ["reputation_plugin_runtime.cpp"],
+    hdrs = ["reputation_plugin_runtime.h"],
+    deps = [
+        ":reputation_algorithm",
+        "//common:glog",
+    ],
+)
+
 cc_test(
     name = "reputation_algorithm_test",
     srcs = ["reputation_algorithm_test.cpp"],
     deps = [
         ":reputation_algorithm",
+        "//common/test:test_main",
+    ],
+)
+
+
+cc_test(
+    name = "reputation_plugin_runtime_test",
+    srcs = ["reputation_plugin_runtime_test.cpp"],
+    deps = [
+        ":reputation_algorithm",
+        ":reputation_plugin_runtime",
         "//common/test:test_main",
     ],
 )
