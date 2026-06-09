@@ -74,6 +74,8 @@ class HotStuff : public common::ProtocolBase {
       int view) const;
   bool MaybeMakeQcEvidenceSnapshotLocked(const QC& qc,
                                           TdHotstuffQcEvidenceSnapshot* snapshot);
+  bool MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
+      const TimeoutCert& cert, TdHotstuffLeaderOutcomeEvidenceSnapshot* snapshot);
   bool MaybeFormQcLocked(int view, const std::string& hash);
   bool MaybeFormQcLocked(int view, const std::string& hash,
                          TdHotstuffQcEvidenceSnapshot* reputation_snapshot);

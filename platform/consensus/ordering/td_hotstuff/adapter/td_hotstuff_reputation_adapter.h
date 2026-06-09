@@ -26,6 +26,19 @@ struct TdHotstuffQcEvidenceSnapshot {
   uint64_t active_weight_version = 0;
 };
 
+struct TdHotstuffLeaderOutcomeEvidenceSnapshot {
+  int local_node_id = 0;
+  int total_replicas = 0;
+  int view = 0;
+  int leader_id = 0;
+  resdb::consensus::reputation::OutcomeClass outcome_class =
+      resdb::consensus::reputation::OutcomeClass::kNone;
+  std::string artifact_digest;
+  std::vector<int64_t> active_weights;
+  std::string active_weight_root;
+  uint64_t active_weight_version = 0;
+};
+
 struct TdHotstuffReputationAdapterOptions {
   bool enabled = false;
   size_t window_size = 4096;
@@ -44,6 +57,10 @@ ToCertifiedSignerEvidence(const TdHotstuffQcEvidenceSnapshot& snapshot);
 
 resdb::consensus::reputation::CertifiedSignerEvidenceRecord
 ToCertifiedSignerEvidenceRecord(const TdHotstuffQcEvidenceSnapshot& snapshot);
+
+resdb::consensus::reputation::LeaderOutcomeEvidenceRecord
+ToLeaderOutcomeEvidenceRecord(
+    const TdHotstuffLeaderOutcomeEvidenceSnapshot& snapshot);
 
 class TdHotstuffReputationAdapter {
  public:
@@ -67,6 +84,7 @@ class TdHotstuffReputationAdapter {
   void Stop();
 
   bool TryRecordCertifiedQc(TdHotstuffQcEvidenceSnapshot snapshot);
+  bool TryRecordLeaderOutcome(TdHotstuffLeaderOutcomeEvidenceSnapshot snapshot);
   bool AdvanceWatermark(int view);
   void UpdateActiveWeights(
       resdb::consensus::reputation::ReputationWeightSnapshot snapshot);

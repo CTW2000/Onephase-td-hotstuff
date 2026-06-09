@@ -66,9 +66,10 @@ std::string AuditValidatorsJson(const std::vector<ValidatorReputation>& validato
 }  // namespace
 
 struct ReputationPluginRuntime::RuntimeEvent {
-  enum class Type { kEvidence, kWatermark };
-  Type type = Type::kEvidence;
+  enum class Type { kCertifiedSignerEvidence, kLeaderOutcomeEvidence, kWatermark };
+  Type type = Type::kCertifiedSignerEvidence;
   CertifiedSignerEvidenceRecord evidence;
+  LeaderOutcomeEvidenceRecord leader_outcome;
   int watermark = 0;
 };
 
@@ -89,8 +90,18 @@ struct ReputationPluginRuntime::WindowBuffer {
   int end_view = 0;
   ReputationWeightSnapshot snapshot;
   std::vector<CertifiedSignerEvidenceRecord> evidence;
+  std::vector<LeaderOutcomeEvidenceRecord> leader_outcomes;
   std::set<std::tuple<int, int, std::string>> seen;
+  std::set<std::tuple<int, int, std::string>> seen_leader_outcomes;
 };
+
+bool CandidateComesBefore(const ReputationCandidate& lhs,
+                          const ReputationCandidate& rhs) {
+  return std::tie(lhs.activation_view, lhs.start_view, lhs.end_view,
+                  lhs.candidate_digest_hex) <
+         std::tie(rhs.activation_view, rhs.start_view, rhs.end_view,
+                  rhs.candidate_digest_hex);
+}
 
 ReputationCandidateKey ReputationCandidateKey::FromCandidate(
     const ReputationCandidate& candidate) {
@@ -168,8 +179,16 @@ void ReputationPluginRuntime::Stop() {
 bool ReputationPluginRuntime::RecordEvidence(
     CertifiedSignerEvidenceRecord evidence) {
   RuntimeEvent event;
-  event.type = RuntimeEvent::Type::kEvidence;
+  event.type = RuntimeEvent::Type::kCertifiedSignerEvidence;
   event.evidence = std::move(evidence);
+  return Enqueue(std::move(event));
+}
+
+bool ReputationPluginRuntime::RecordLeaderOutcome(
+    LeaderOutcomeEvidenceRecord evidence) {
+  RuntimeEvent event;
+  event.type = RuntimeEvent::Type::kLeaderOutcomeEvidence;
+  event.leader_outcome = std::move(evidence);
   return Enqueue(std::move(event));
 }
 
@@ -219,16 +238,15 @@ void ReputationPluginRuntime::UpdateActiveWeights(
 
 std::vector<ReputationCandidate>
 ReputationPluginRuntime::TakeCompletedCandidates() {
-  std::deque<ReputationCandidate> drained;
+  std::map<uint64_t, ReputationCandidate> drained;
   {
     std::lock_guard<std::mutex> lk(mutex_);
-    drained.swap(completed_);
+    drained.swap(completed_by_version_);
   }
   std::vector<ReputationCandidate> output;
   output.reserve(drained.size());
-  while (!drained.empty()) {
-    output.push_back(std::move(drained.front()));
-    drained.pop_front();
+  for (auto& entry : drained) {
+    output.push_back(std::move(entry.second));
   }
   return output;
 }
@@ -257,8 +275,10 @@ void ReputationPluginRuntime::WorkerLoop() {
     while (!batch.empty()) {
       RuntimeEvent event = std::move(batch.front());
       batch.pop_front();
-      if (event.type == RuntimeEvent::Type::kEvidence) {
+      if (event.type == RuntimeEvent::Type::kCertifiedSignerEvidence) {
         ProcessEvidence(std::move(event.evidence));
+      } else if (event.type == RuntimeEvent::Type::kLeaderOutcomeEvidence) {
+        ProcessLeaderOutcome(std::move(event.leader_outcome));
       } else {
         ProcessWatermark(event.watermark);
       }
@@ -266,15 +286,16 @@ void ReputationPluginRuntime::WorkerLoop() {
   }
 }
 
-ReputationWeightSnapshot ReputationPluginRuntime::SnapshotForEvidence(
-    const CertifiedSignerEvidenceRecord& evidence) const {
+ReputationWeightSnapshot ReputationPluginRuntime::SnapshotFromFields(
+    const std::string& weight_root_hex, uint64_t weight_version,
+    const std::vector<int64_t>& weights) const {
   ReputationWeightSnapshot snapshot;
-  snapshot.weight_root_hex = evidence.weight_root_hex.empty()
+  snapshot.weight_root_hex = weight_root_hex.empty()
                                  ? active_snapshot_.weight_root_hex
-                                 : evidence.weight_root_hex;
-  snapshot.weight_version = evidence.weight_version;
-  if (!evidence.active_weights.empty()) {
-    snapshot.weights = evidence.active_weights;
+                                 : weight_root_hex;
+  snapshot.weight_version = weight_version;
+  if (!weights.empty()) {
+    snapshot.weights = weights;
   } else {
     auto it = known_weights_.find({snapshot.weight_root_hex,
                                    snapshot.weight_version});
@@ -285,6 +306,18 @@ ReputationWeightSnapshot ReputationPluginRuntime::SnapshotForEvidence(
     }
   }
   return snapshot;
+}
+
+ReputationWeightSnapshot ReputationPluginRuntime::SnapshotForEvidence(
+    const CertifiedSignerEvidenceRecord& evidence) const {
+  return SnapshotFromFields(evidence.weight_root_hex, evidence.weight_version,
+                            evidence.active_weights);
+}
+
+ReputationWeightSnapshot ReputationPluginRuntime::SnapshotForLeaderOutcome(
+    const LeaderOutcomeEvidenceRecord& evidence) const {
+  return SnapshotFromFields(evidence.weight_root_hex, evidence.weight_version,
+                            evidence.active_weights);
 }
 
 void ReputationPluginRuntime::ProcessEvidence(
@@ -306,7 +339,7 @@ void ReputationPluginRuntime::ProcessEvidence(
 
   std::lock_guard<std::mutex> lk(mutex_);
   WindowBuffer& buffer = windows_[key];
-  if (buffer.evidence.empty()) {
+  if (buffer.evidence.empty() && buffer.leader_outcomes.empty()) {
     buffer.start_view = window_start;
     buffer.end_view = window_end;
     buffer.snapshot = std::move(snapshot);
@@ -317,6 +350,39 @@ void ReputationPluginRuntime::ProcessEvidence(
     return;
   }
   buffer.evidence.push_back(std::move(evidence));
+}
+
+void ReputationPluginRuntime::ProcessLeaderOutcome(
+    LeaderOutcomeEvidenceRecord evidence) {
+  if (evidence.view_or_round < 0 || evidence.leader_id <= 0 ||
+      evidence.outcome_class == OutcomeClass::kNone) {
+    return;
+  }
+  const uint64_t window_index =
+      static_cast<uint64_t>(evidence.view_or_round) / options_.window_size_views;
+  const int window_start =
+      static_cast<int>(window_index * options_.window_size_views);
+  const int window_end =
+      static_cast<int>(window_start + options_.window_size_views);
+  ReputationWeightSnapshot snapshot = SnapshotForLeaderOutcome(evidence);
+  WindowKey key;
+  key.window_index = window_index;
+  key.weight_root_hex = snapshot.weight_root_hex;
+  key.weight_version = snapshot.weight_version;
+
+  std::lock_guard<std::mutex> lk(mutex_);
+  WindowBuffer& buffer = windows_[key];
+  if (buffer.evidence.empty() && buffer.leader_outcomes.empty()) {
+    buffer.start_view = window_start;
+    buffer.end_view = window_end;
+    buffer.snapshot = std::move(snapshot);
+  }
+  const auto dedupe_key = std::make_tuple(
+      evidence.view_or_round, evidence.leader_id, evidence.artifact_digest);
+  if (!buffer.seen_leader_outcomes.insert(dedupe_key).second) {
+    return;
+  }
+  buffer.leader_outcomes.push_back(std::move(evidence));
 }
 
 void ReputationPluginRuntime::ProcessWatermark(int view_or_round) {
@@ -339,7 +405,8 @@ void ReputationPluginRuntime::ProcessWatermark(int view_or_round) {
 
 void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
                                              WindowBuffer* buffer) {
-  if (buffer == nullptr || buffer->evidence.empty()) {
+  if (buffer == nullptr ||
+      (buffer->evidence.empty() && buffer->leader_outcomes.empty())) {
     return;
   }
   std::sort(buffer->evidence.begin(), buffer->evidence.end(),
@@ -349,6 +416,14 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
                               lhs.artifact_digest) <
                      std::tie(rhs.view_or_round, rhs.slot_or_height,
                               rhs.artifact_digest);
+            });
+  std::sort(buffer->leader_outcomes.begin(), buffer->leader_outcomes.end(),
+            [](const LeaderOutcomeEvidenceRecord& lhs,
+               const LeaderOutcomeEvidenceRecord& rhs) {
+              return std::tie(lhs.view_or_round, lhs.leader_id,
+                              lhs.outcome_class, lhs.artifact_digest) <
+                     std::tie(rhs.view_or_round, rhs.leader_id,
+                              rhs.outcome_class, rhs.artifact_digest);
             });
 
   ReputationWindowInput input;
@@ -370,12 +445,22 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
     evidence.available_signer_bitmap = record.available_signer_bitmap;
     input.certified_signer_evidence.push_back(std::move(evidence));
   }
+  input.leader_outcome_evidence.reserve(buffer->leader_outcomes.size());
+  for (const LeaderOutcomeEvidenceRecord& record : buffer->leader_outcomes) {
+    LeaderOutcomeEvidence evidence;
+    evidence.view_or_round = record.view_or_round;
+    evidence.leader_id = record.leader_id;
+    evidence.outcome_class = record.outcome_class;
+    evidence.artifact_digest = record.artifact_digest;
+    input.leader_outcome_evidence.push_back(std::move(evidence));
+  }
 
   ReputationCandidate candidate = ComputeReputationCandidate(input, options_.config);
   candidate.window_index = key.window_index;
   candidate.start_view = buffer->start_view;
   candidate.end_view = buffer->end_view;
-  candidate.event_count = input.certified_signer_evidence.size();
+  candidate.event_count = input.certified_signer_evidence.size() +
+                          input.leader_outcome_evidence.size();
   candidate.activation_view = input.activation_view;
   candidate.old_weight_root_hex = input.old_weight_root_hex;
   candidate.old_weight_version = input.old_weight_version;
@@ -389,7 +474,11 @@ void ReputationPluginRuntime::PushCompleted(ReputationCandidate candidate) {
   const ReputationCandidateKey key = ReputationCandidateKey::FromCandidate(candidate);
   std::lock_guard<std::mutex> lk(mutex_);
   completed_index_[key] = candidate;
-  completed_.push_back(std::move(candidate));
+  auto it = completed_by_version_.find(candidate.old_weight_version);
+  if (it == completed_by_version_.end() ||
+      CandidateComesBefore(candidate, it->second)) {
+    completed_by_version_[candidate.old_weight_version] = std::move(candidate);
+  }
 }
 
 void ReputationPluginRuntime::WriteAudit(const ReputationCandidate& candidate) {

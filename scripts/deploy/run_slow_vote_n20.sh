@@ -128,7 +128,12 @@ run_single_experiment() {
 
   local log_files=$(ls result_*_log 2>/dev/null)
   if [ -n "$log_files" ]; then
+    local parser_bad_node_ids=""
+    if [ "${num_slow:-0}" -gt 0 ]; then
+      parser_bad_node_ids=$(seq -s, 1 "$num_slow")
+    fi
     TD_HS_BAD_NODE_COUNT="${num_slow:-0}" \
+      TD_HS_BAD_NODE_IDS="$parser_bad_node_ids" \
       python3 performance/calculate_result.py $log_files > "$result_file" 2>&1
     local tps=$(grep "^[0-9]" "$result_file" | head -1)
     local lat=$(grep "^[0-9]" "$result_file" | tail -1)

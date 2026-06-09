@@ -34,6 +34,16 @@ struct CertifiedSignerEvidenceRecord {
   std::vector<int64_t> active_weights;
 };
 
+struct LeaderOutcomeEvidenceRecord {
+  int view_or_round = 0;
+  int leader_id = 0;
+  OutcomeClass outcome_class = OutcomeClass::kNone;
+  std::string artifact_digest;
+  std::string weight_root_hex;
+  uint64_t weight_version = 0;
+  std::vector<int64_t> active_weights;
+};
+
 struct ReputationWeightSnapshot {
   std::vector<int64_t> weights;
   std::string weight_root_hex;
@@ -85,6 +95,7 @@ class ReputationPluginRuntime {
   void Stop();
 
   bool RecordEvidence(CertifiedSignerEvidenceRecord evidence);
+  bool RecordLeaderOutcome(LeaderOutcomeEvidenceRecord evidence);
   bool AdvanceWatermark(int view_or_round);
   void UpdateActiveWeights(ReputationWeightSnapshot snapshot);
 
@@ -105,12 +116,18 @@ class ReputationPluginRuntime {
   bool Enqueue(RuntimeEvent event);
   void WorkerLoop();
   void ProcessEvidence(CertifiedSignerEvidenceRecord evidence);
+  void ProcessLeaderOutcome(LeaderOutcomeEvidenceRecord evidence);
   void ProcessWatermark(int view_or_round);
   void FinalizeWindow(const WindowKey& key, WindowBuffer* buffer);
   void PushCompleted(ReputationCandidate candidate);
   void WriteAudit(const ReputationCandidate& candidate);
+  ReputationWeightSnapshot SnapshotFromFields(
+      const std::string& weight_root_hex, uint64_t weight_version,
+      const std::vector<int64_t>& weights) const;
   ReputationWeightSnapshot SnapshotForEvidence(
       const CertifiedSignerEvidenceRecord& evidence) const;
+  ReputationWeightSnapshot SnapshotForLeaderOutcome(
+      const LeaderOutcomeEvidenceRecord& evidence) const;
 
   ReputationRuntimeOptions options_;
 
@@ -124,7 +141,7 @@ class ReputationPluginRuntime {
   ReputationWeightSnapshot active_snapshot_;
   std::map<std::pair<std::string, uint64_t>, std::vector<int64_t>> known_weights_;
   std::map<WindowKey, WindowBuffer> windows_;
-  std::deque<ReputationCandidate> completed_;
+  std::map<uint64_t, ReputationCandidate> completed_by_version_;
   std::map<ReputationCandidateKey, ReputationCandidate> completed_index_;
   std::ofstream audit_file_;
 

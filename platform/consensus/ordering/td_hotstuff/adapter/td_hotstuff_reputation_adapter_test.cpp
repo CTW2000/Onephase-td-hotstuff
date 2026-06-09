@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <initializer_list>
 #include <thread>
 #include <vector>
@@ -58,6 +59,22 @@ TdHotstuffQcEvidenceSnapshot Snapshot(
   return snapshot;
 }
 
+TdHotstuffLeaderOutcomeEvidenceSnapshot TimeoutSnapshot(int view, int leader) {
+  TdHotstuffLeaderOutcomeEvidenceSnapshot snapshot;
+  snapshot.local_node_id = 1;
+  snapshot.total_replicas = 4;
+  snapshot.view = view;
+  snapshot.leader_id = leader;
+  snapshot.outcome_class =
+      resdb::consensus::reputation::OutcomeClass::kTimeoutOrViewChange;
+  snapshot.artifact_digest = "tc-" + std::to_string(view);
+  snapshot.active_weights = {100, 100, 100, 100};
+  snapshot.active_weight_root =
+      resdb::consensus::reputation::WeightRootHex(snapshot.active_weights);
+  snapshot.active_weight_version = 0;
+  return snapshot;
+}
+
 std::vector<resdb::consensus::reputation::ReputationCandidate>
 WaitForCandidates(TdHotstuffReputationAdapter* adapter, size_t count) {
   for (int i = 0; i < 200; ++i) {
@@ -69,6 +86,29 @@ WaitForCandidates(TdHotstuffReputationAdapter* adapter, size_t count) {
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
   return adapter->DrainCompletedCandidatesForTesting();
+}
+
+TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
+  setenv("TD_HS_REPUTATION_ENABLE", "1", 1);
+  setenv("TD_HS_REPUTATION_DECAY_PER_EPOCH", "30", 1);
+  setenv("TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH", "30", 1);
+  setenv("TD_HS_REPUTATION_BONUS_PER_EPOCH", "2", 1);
+  setenv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT", "10", 1);
+
+  const TdHotstuffReputationAdapterOptions options =
+      TdHotstuffReputationAdapter::OptionsFromEnv();
+
+  EXPECT_TRUE(options.enabled);
+  EXPECT_EQ(options.reputation_config.decay_per_epoch, 30);
+  EXPECT_EQ(options.reputation_config.max_recovery_per_epoch, 30);
+  EXPECT_EQ(options.reputation_config.bonus_per_epoch, 2);
+  EXPECT_EQ(options.reputation_config.leader_eligible_min_weight, 10);
+
+  unsetenv("TD_HS_REPUTATION_ENABLE");
+  unsetenv("TD_HS_REPUTATION_DECAY_PER_EPOCH");
+  unsetenv("TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH");
+  unsetenv("TD_HS_REPUTATION_BONUS_PER_EPOCH");
+  unsetenv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT");
 }
 
 TEST(TdHotstuffReputationAdapterTest, ConvertsQcSnapshotToCertifiedEvidence) {
@@ -85,7 +125,41 @@ TEST(TdHotstuffReputationAdapterTest, ConvertsQcSnapshotToCertifiedEvidence) {
 }
 
 TEST(TdHotstuffReputationAdapterTest,
-     CandidateUsesAvailableSignerBitmapForTimelyParticipation) {
+     ConvertsTimeoutSnapshotToLeaderOutcomeEvidence) {
+  const TdHotstuffLeaderOutcomeEvidenceSnapshot snapshot =
+      TimeoutSnapshot(/*view=*/7, /*leader=*/4);
+
+  const auto evidence = ToLeaderOutcomeEvidenceRecord(snapshot);
+
+  EXPECT_EQ(evidence.view_or_round, 7);
+  EXPECT_EQ(evidence.leader_id, 4);
+  EXPECT_EQ(evidence.outcome_class,
+            resdb::consensus::reputation::OutcomeClass::kTimeoutOrViewChange);
+  EXPECT_EQ(evidence.artifact_digest, "tc-7");
+}
+
+TEST(TdHotstuffReputationAdapterTest,
+     TimeoutLeaderOutcomeCanFinalizeCandidate) {
+  TdHotstuffReputationAdapterOptions options = TestOptions(/*window_size=*/1);
+  options.reputation_config.leader_recovery_enabled = true;
+  options.reputation_config.min_leader_opportunities = 1;
+  TdHotstuffReputationAdapter adapter(/*local_node_id=*/1, /*total_replicas=*/4,
+                                      options);
+  adapter.Start();
+
+  ASSERT_TRUE(adapter.TryRecordLeaderOutcome(TimeoutSnapshot(7, 4)));
+  ASSERT_TRUE(adapter.AdvanceWatermark(8));
+
+  auto candidates = WaitForCandidates(&adapter, 1);
+  adapter.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  EXPECT_EQ(candidates[0].validators[3].leader_opportunity_count, 1);
+}
+
+TEST(TdHotstuffReputationAdapterTest,
+     CandidateExcusesAvailableButUnselectedSigner) {
   TdHotstuffReputationAdapter adapter(/*local_node_id=*/1, /*total_replicas=*/4,
                                       TestOptions(/*window_size=*/1));
   adapter.Start();
@@ -102,8 +176,8 @@ TEST(TdHotstuffReputationAdapterTest,
   ASSERT_EQ(candidates[0].validators.size(), 4);
   EXPECT_EQ(candidates[0].validators[0].opportunities, 1);
   EXPECT_EQ(candidates[0].validators[0].inclusions, 1);
-  EXPECT_EQ(candidates[0].validators[3].opportunities, 1);
-  EXPECT_EQ(candidates[0].validators[3].inclusions, 1);
+  EXPECT_EQ(candidates[0].validators[3].opportunities, 0);
+  EXPECT_EQ(candidates[0].validators[3].inclusions, 0);
 }
 
 TEST(TdHotstuffReputationAdapterTest,

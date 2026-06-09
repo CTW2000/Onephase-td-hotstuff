@@ -51,6 +51,18 @@ CertifiedSignerEvidenceRecord Evidence(int view, const std::string& digest) {
   return record;
 }
 
+LeaderOutcomeEvidenceRecord TimeoutOutcome(int view, int leader) {
+  LeaderOutcomeEvidenceRecord record;
+  record.view_or_round = view;
+  record.leader_id = leader;
+  record.outcome_class = OutcomeClass::kTimeoutOrViewChange;
+  record.artifact_digest = "tc-" + std::to_string(view);
+  record.weight_root_hex = WeightRootHex({100, 100, 100, 100});
+  record.weight_version = 0;
+  record.active_weights = {100, 100, 100, 100};
+  return record;
+}
+
 std::vector<ReputationCandidate> WaitForCandidates(
     ReputationPluginRuntime* runtime, size_t count) {
   for (int i = 0; i < 100; ++i) {
@@ -128,6 +140,29 @@ TEST(ReputationPluginRuntimeTest, FindLocalCandidateReturnsCompletedCandidate) {
 }
 
 TEST(ReputationPluginRuntimeTest,
+     FinalizesLeaderOutcomeEvidenceForTimeoutWindows) {
+  ReputationRuntimeOptions options = RuntimeOptions();
+  options.initial_weights = {100, 100, 100, 100};
+  options.initial_weight_root = WeightRootHex(options.initial_weights);
+  options.config.min_leader_opportunities = 1;
+  options.config.leader_recovery_enabled = true;
+  ReputationPluginRuntime runtime(options);
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordLeaderOutcome(TimeoutOutcome(1, 2)));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  ASSERT_EQ(candidates[0].validators.size(), 4);
+  EXPECT_EQ(candidates[0].validators[1].leader_opportunity_count, 1);
+  EXPECT_EQ(candidates[0].validators[1].leader_certified_count, 0);
+  EXPECT_LT(candidates[0].validators[1].leader_score, 100);
+}
+
+TEST(ReputationPluginRuntimeTest,
      ComputesSuccessiveWindowsForSameWeightVersion) {
   ReputationPluginRuntime runtime(RuntimeOptions());
   runtime.Start();
@@ -153,6 +188,24 @@ TEST(ReputationPluginRuntimeTest,
             first_candidates[0].candidate_digest_hex);
 }
 
+
+TEST(ReputationPluginRuntimeTest, DrainsOnlyEarliestCandidatePerWeightVersion) {
+  ReputationPluginRuntime runtime(RuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(1, "qc-1")));
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(4, "qc-4")));
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(5, "qc-5")));
+  runtime.AdvanceWatermark(8);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].window_index, 0);
+  EXPECT_EQ(candidates[0].old_weight_version, 0);
+  EXPECT_EQ(runtime.computed_window_count(), 2);
+}
 
 TEST(ReputationPluginRuntimeTest, QueueOverflowDropsWithoutBlocking) {
   ReputationRuntimeOptions options = RuntimeOptions();

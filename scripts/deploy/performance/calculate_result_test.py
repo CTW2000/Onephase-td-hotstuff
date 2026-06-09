@@ -45,7 +45,9 @@ class CalculateResultTest(unittest.TestCase):
 
     def test_timestampless_logs_drop_first_sample_ratio(self):
         old_ratio = calculate_result.RESULT_WARMUP_SAMPLE_RATIO
+        old_cooldown_ratio = calculate_result.RESULT_COOLDOWN_SAMPLE_RATIO
         calculate_result.RESULT_WARMUP_SAMPLE_RATIO = 0.20
+        calculate_result.RESULT_COOLDOWN_SAMPLE_RATIO = 0.0
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 log_path = pathlib.Path(temp_dir) / "node.log"
@@ -71,6 +73,79 @@ class CalculateResultTest(unittest.TestCase):
             self.assertFalse(samples.stable_window_fallback)
         finally:
             calculate_result.RESULT_WARMUP_SAMPLE_RATIO = old_ratio
+            calculate_result.RESULT_COOLDOWN_SAMPLE_RATIO = old_cooldown_ratio
+
+    def test_timestamped_logs_exclude_shutdown_cooldown_samples(self):
+        old_warmup = calculate_result.RESULT_WARMUP_SECONDS
+        old_cooldown = calculate_result.RESULT_COOLDOWN_SECONDS
+        calculate_result.RESULT_WARMUP_SECONDS = 30
+        calculate_result.RESULT_COOLDOWN_SECONDS = 10
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                log_path = pathlib.Path(temp_dir) / "node.log"
+                stable_lines = [
+                    f"I20260608 10:00:{30 + index:02d}.000000 txn:{70000 + index} "
+                    f"req client latency:0.010"
+                    for index in range(12)
+                ]
+                log_path.write_text(
+                    "\n".join(
+                        [
+                            "I20260608 10:00:00.000000 txn:100 req client latency:0.010",
+                            "I20260608 10:00:10.000000 txn:200 req client latency:0.020",
+                            *stable_lines,
+                            "I20260608 10:02:30.000000 txn:60 req client latency:0.030",
+                            "I20260608 10:02:40.000000 txn:0 req client latency:0.040",
+                        ]
+                    )
+                    + "\n"
+                )
+
+                samples = calculate_result.read_tps(str(log_path))
+
+            self.assertEqual(samples.warmup_tps, [100, 200])
+            self.assertEqual(samples.stable_tps, [70000 + index for index in range(12)])
+            self.assertEqual(samples.stable_lat, [0.010 for _ in range(12)])
+            self.assertFalse(samples.stable_window_fallback)
+        finally:
+            calculate_result.RESULT_WARMUP_SECONDS = old_warmup
+            calculate_result.RESULT_COOLDOWN_SECONDS = old_cooldown
+
+    def test_benchmark_time_field_excludes_shutdown_cooldown_samples(self):
+        old_warmup = calculate_result.RESULT_WARMUP_SECONDS
+        old_cooldown = calculate_result.RESULT_COOLDOWN_SECONDS
+        calculate_result.RESULT_WARMUP_SECONDS = 30
+        calculate_result.RESULT_COOLDOWN_SECONDS = 10
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                log_path = pathlib.Path(temp_dir) / "node.log"
+                stable_lines = [
+                    f"server call:1 txn:{76000 + index} time:{35 + index} "
+                    f"req client latency:0.010"
+                    for index in range(12)
+                ]
+                log_path.write_text(
+                    "\n".join(
+                        [
+                            "server call:1 txn:100 time:5 req client latency:0.010",
+                            "server call:1 txn:200 time:15 req client latency:0.020",
+                            *stable_lines,
+                            "server call:1 txn:60 time:150 req client latency:0.030",
+                            "server call:1 txn:0 time:160 req client latency:0.040",
+                        ]
+                    )
+                    + "\n"
+                )
+
+                samples = calculate_result.read_tps(str(log_path))
+
+            self.assertEqual(samples.warmup_tps, [100, 200])
+            self.assertEqual(samples.stable_tps, [76000 + index for index in range(12)])
+            self.assertEqual(samples.stable_lat, [0.010 for _ in range(12)])
+            self.assertFalse(samples.stable_window_fallback)
+        finally:
+            calculate_result.RESULT_WARMUP_SECONDS = old_warmup
+            calculate_result.RESULT_COOLDOWN_SECONDS = old_cooldown
 
     def test_stable_window_falls_back_to_raw_when_no_samples_remain(self):
         old_warmup = calculate_result.RESULT_WARMUP_SECONDS

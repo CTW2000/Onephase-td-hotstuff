@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -72,6 +73,12 @@ std::string JoinInt64Vector(const std::vector<int64_t>& values) {
     oss << values[i];
   }
   return oss.str();
+}
+
+std::string TimeoutCertDigest(const TimeoutCert& cert) {
+  std::string bytes;
+  cert.SerializeToString(&bytes);
+  return SignatureVerifier::CalculateHash(bytes);
 }
 
 int64_t LeaderEligibleMinWeightFromEnv() {
@@ -296,6 +303,8 @@ void HotStuff::AsyncTimeout() {
     bool has_vote = false;
     bool has_cert = false;
     bool advanced = false;
+    TdHotstuffLeaderOutcomeEvidenceSnapshot timeout_outcome_snapshot;
+    bool has_timeout_outcome_snapshot = false;
     {
       std::unique_lock<std::mutex> lk(mutex_);
       if (timeout_progress_epoch_ != observed_progress_epoch) {
@@ -344,6 +353,11 @@ void HotStuff::AsyncTimeout() {
         cert = *formed_cert;
         has_cert = true;
         advanced = ApplyTimeoutCertLocked(cert);
+        if (advanced && reputation_adapter_ != nullptr) {
+          has_timeout_outcome_snapshot =
+              MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
+                  cert, &timeout_outcome_snapshot);
+        }
         if (advanced) {
           watched_view = proposal_manager_->CurrentView();
           view_started_at = now;
@@ -356,6 +370,10 @@ void HotStuff::AsyncTimeout() {
     }
     if (has_cert) {
       BroadcastTimeoutCert(cert);
+    }
+    if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
+      reputation_adapter_->TryRecordLeaderOutcome(
+          std::move(timeout_outcome_snapshot));
     }
     if (advanced) {
       StartNewRound();
@@ -623,6 +641,25 @@ bool HotStuff::MaybeMakeQcEvidenceSnapshotLocked(
   return true;
 }
 
+bool HotStuff::MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
+    const TimeoutCert& cert, TdHotstuffLeaderOutcomeEvidenceSnapshot* snapshot) {
+  if (snapshot == nullptr || reputation_adapter_ == nullptr ||
+      weight_schedule_ == nullptr || cert.view() < 0) {
+    return false;
+  }
+  snapshot->local_node_id = id_;
+  snapshot->total_replicas = total_num_;
+  snapshot->view = cert.view();
+  snapshot->leader_id = LeaderForView(cert.view());
+  snapshot->outcome_class =
+      resdb::consensus::reputation::OutcomeClass::kTimeoutOrViewChange;
+  snapshot->artifact_digest = TimeoutCertDigest(cert);
+  snapshot->active_weight_root = weight_schedule_->WeightRootForView(cert.view());
+  snapshot->active_weight_version =
+      weight_schedule_->WeightVersionForView(cert.view());
+  return true;
+}
+
 bool HotStuff::MaybeFormQcLocked(int view, const std::string& hash) {
   return MaybeFormQcLocked(view, hash, nullptr);
 }
@@ -759,6 +796,8 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
   bool has_local_vote = false;
   bool formed_cert = false;
   bool advanced = false;
+  TdHotstuffLeaderOutcomeEvidenceSnapshot timeout_outcome_snapshot;
+  bool has_timeout_outcome_snapshot = false;
   {
     std::unique_lock<std::mutex> lk(mutex_);
     const int current_view = proposal_manager_->CurrentView();
@@ -770,6 +809,11 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
       cert = *maybe_cert;
       formed_cert = true;
       advanced = ApplyTimeoutCertLocked(cert);
+      if (advanced && reputation_adapter_ != nullptr) {
+        has_timeout_outcome_snapshot =
+            MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
+                cert, &timeout_outcome_snapshot);
+      }
     }
 
     if (vote->signer() != id_ && vote->view() >= current_view &&
@@ -786,6 +830,11 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
           cert = *local_cert;
           formed_cert = true;
           advanced = ApplyTimeoutCertLocked(cert);
+          if (advanced && reputation_adapter_ != nullptr) {
+            has_timeout_outcome_snapshot =
+                MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
+                    cert, &timeout_outcome_snapshot);
+          }
         }
       }
     }
@@ -795,6 +844,10 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
   }
   if (formed_cert) {
     BroadcastTimeoutCert(cert);
+  }
+  if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
+    reputation_adapter_->TryRecordLeaderOutcome(
+        std::move(timeout_outcome_snapshot));
   }
   if (advanced) {
     StartNewRound();
@@ -808,9 +861,19 @@ bool HotStuff::ReceiveTimeoutCert(std::unique_ptr<TimeoutCert> cert) {
     return false;
   }
   bool advanced = false;
+  TdHotstuffLeaderOutcomeEvidenceSnapshot timeout_outcome_snapshot;
+  bool has_timeout_outcome_snapshot = false;
   {
     std::unique_lock<std::mutex> lk(mutex_);
     advanced = ApplyTimeoutCertLocked(*cert);
+    if (advanced && reputation_adapter_ != nullptr) {
+      has_timeout_outcome_snapshot =
+          MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
+              *cert, &timeout_outcome_snapshot);
+    }
+  }
+  if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
+    reputation_adapter_->TryRecordLeaderOutcome(std::move(timeout_outcome_snapshot));
   }
   if (advanced) {
     StartNewRound();
@@ -956,6 +1019,11 @@ void HotStuff::ActivateReadyWeightUpdates(int view) {
               << " active_weights:[" << JoinInt64Vector(snapshot.weights) << "]"
               << " leader_weights:[" << JoinInt64Vector(active_leader_weights)
               << "]";
+    std::cout << "activated TD-Hotstuff weight update version:"
+              << snapshot.weight_version << " view:" << view
+              << " active_weights:[" << JoinInt64Vector(snapshot.weights) << "]"
+              << " leader_weights:[" << JoinInt64Vector(active_leader_weights)
+              << "]" << std::endl;
     reputation_adapter_->UpdateActiveWeights(std::move(snapshot));
     weight_candidate_inflight_ = false;
   }
@@ -1043,6 +1111,8 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   std::unique_ptr<Certificate> cert;
   TdHotstuffQcEvidenceSnapshot proposal_qc_snapshot;
   bool has_proposal_qc_snapshot = false;
+  TdHotstuffLeaderOutcomeEvidenceSnapshot timeout_outcome_snapshot;
+  bool has_timeout_outcome_snapshot = false;
   bool proposal_valid = true;
   bool stale_proposal = false;
   int next_leader = 0;
@@ -1054,7 +1124,13 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     }
 
     if (proposal->header().has_timeout_cert()) {
-      ApplyTimeoutCertLocked(proposal->header().timeout_cert());
+      const bool advanced_by_tc =
+          ApplyTimeoutCertLocked(proposal->header().timeout_cert());
+      if (advanced_by_tc && reputation_adapter_ != nullptr) {
+        has_timeout_outcome_snapshot =
+            MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
+                proposal->header().timeout_cert(), &timeout_outcome_snapshot);
+      }
     }
     const int local_current_view = proposal_manager_->CurrentView();
     if (view < local_current_view) {
@@ -1107,14 +1183,26 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     if (has_proposal_qc_snapshot && reputation_adapter_ != nullptr) {
       reputation_adapter_->TryRecordCertifiedQc(std::move(proposal_qc_snapshot));
     }
+    if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
+      reputation_adapter_->TryRecordLeaderOutcome(
+          std::move(timeout_outcome_snapshot));
+    }
     return true;
   }
   if (!proposal_valid || cert == nullptr) {
+    if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
+      reputation_adapter_->TryRecordLeaderOutcome(
+          std::move(timeout_outcome_snapshot));
+    }
     return false;
   }
   const int send_result = SendMessage(MessageType::Vote, *cert, next_leader);
   if (has_proposal_qc_snapshot && reputation_adapter_ != nullptr) {
     reputation_adapter_->TryRecordCertifiedQc(std::move(proposal_qc_snapshot));
+  }
+  if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
+    reputation_adapter_->TryRecordLeaderOutcome(
+        std::move(timeout_outcome_snapshot));
   }
   return send_result >= 0;
 }

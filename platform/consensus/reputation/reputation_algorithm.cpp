@@ -21,6 +21,7 @@ namespace {
 constexpr const char* kAlgorithmBayesV4 = "bayes_v4";
 constexpr int64_t kCarryoverDecayWeightGap = 10;
 constexpr int kHealthyCatchUpScore = 40;
+constexpr uint64_t kMinLeaderFailureOpportunities = 2;
 
 struct CoreEvidenceEvent {
   int view_or_round = 0;
@@ -71,6 +72,32 @@ int CoreRecoveryCreditForScore(int score, int max_recovery_per_epoch) {
                        kFullRecoveryAt - kNoRecoveryBelow);
 }
 
+std::vector<int64_t> LeaderWeightsForCandidate(
+    const std::vector<ValidatorReputation>& validators,
+    const ReputationConfig& config) {
+  std::vector<int64_t> leader_weights;
+  leader_weights.reserve(validators.size());
+  bool all_validators_eligible = !validators.empty();
+  for (const ValidatorReputation& validator : validators) {
+    if (validator.next_weight <= config.leader_eligible_min_weight) {
+      all_validators_eligible = false;
+      break;
+    }
+  }
+  const int64_t equal_leader_weight = ClampWeight(config.max_weight, config);
+  const int64_t ineligible_leader_weight = ClampWeight(config.min_weight, config);
+  for (const ValidatorReputation& validator : validators) {
+    if (all_validators_eligible) {
+      leader_weights.push_back(equal_leader_weight);
+    } else if (validator.next_weight <= config.leader_eligible_min_weight) {
+      leader_weights.push_back(ineligible_leader_weight);
+    } else {
+      leader_weights.push_back(validator.next_weight);
+    }
+  }
+  return leader_weights;
+}
+
 std::vector<StrongFaultRecord> SummarizeFaultedValidators(
     const std::vector<StrongFaultRecord>& faults) {
   std::map<std::pair<int, int>, StrongFaultRecord> summary;
@@ -119,26 +146,31 @@ bool UseCoreOnlyFastPath(const ReputationWindowInput& input,
          !HasStrongFaultEvidence(input);
 }
 
-uint64_t BroadAvailableSignerThreshold(int total_replicas,
-                                       const ReputationConfig& config) {
+uint64_t QuorumAvailableSignerThreshold(int total_replicas) {
   if (total_replicas <= 0) {
     return 0;
   }
-  const int quorum_threshold = (total_replicas * 2) / 3 + 1;
-  int threshold = quorum_threshold;
-  if (config.leader_recovery_enabled || config.peertrust_enabled ||
-      config.sybil_graph_enabled) {
-    const int broad_coverage_threshold = (total_replicas * 4 + 4) / 5;
-    threshold = std::max(threshold, broad_coverage_threshold);
-  }
-  return static_cast<uint64_t>(std::min(total_replicas, threshold));
+  return static_cast<uint64_t>(
+      std::min(total_replicas, (total_replicas * 2) / 3 + 1));
 }
 
-bool HasBroadAvailableSignerCoverage(const std::vector<int>& available_signers,
-                                     int total_replicas,
-                                     const ReputationConfig& config) {
-  const uint64_t threshold =
-      BroadAvailableSignerThreshold(total_replicas, config);
+uint64_t WindowFairAvailableSignerThreshold(int total_replicas) {
+  if (total_replicas <= 0) {
+    return 0;
+  }
+  return static_cast<uint64_t>(
+      std::min(total_replicas, (total_replicas * 4 + 4) / 5));
+}
+
+bool HasQuorumAvailableSignerCoverage(
+    const std::vector<int>& available_signers, int total_replicas) {
+  const uint64_t threshold = QuorumAvailableSignerThreshold(total_replicas);
+  return threshold > 0 && available_signers.size() >= threshold;
+}
+
+bool HasWindowFairAvailableSignerCoverage(
+    const std::set<int>& available_signers, int total_replicas) {
+  const uint64_t threshold = WindowFairAvailableSignerThreshold(total_replicas);
   return threshold > 0 && available_signers.size() >= threshold;
 }
 
@@ -156,6 +188,9 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
   uint64_t broad_available_event_count = 0;
   std::vector<uint64_t> signer_opportunity_count(
       std::max(total_replicas, 0), 0);
+  std::vector<uint64_t> available_not_selected_count(
+      std::max(total_replicas, 0), 0);
+  std::set<int> window_quorum_available_signers;
   std::set<std::pair<int, std::string>> seen_certificates;
   std::set<std::pair<int, int>> seen_leader_opportunities;
 
@@ -192,18 +227,28 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
     if (available_signers.empty()) {
       available_signers = signers;
     }
+    std::set<int> signer_set(signers.begin(), signers.end());
     if (has_available_signer_evidence) {
-      const bool broad_available_signer_evidence =
-          HasBroadAvailableSignerCoverage(available_signers, total_replicas,
-                                          config);
-      if (broad_available_signer_evidence) {
+      if (HasQuorumAvailableSignerCoverage(available_signers,
+                                           total_replicas)) {
         broad_available_signer_slots += available_signers.size();
         ++broad_available_event_count;
+        for (int signer : available_signers) {
+          if (signer >= 1 && signer <= total_replicas) {
+            window_quorum_available_signers.insert(signer);
+          }
+        }
+      }
+      for (int signer : signers) {
+        if (signer >= 1 && signer <= total_replicas) {
+          ++candidate->validators[signer - 1].inclusions;
+          ++signer_opportunity_count[signer - 1];
+        }
       }
       for (int signer : available_signers) {
-        if (signer >= 1 && signer <= total_replicas) {
-          ++signer_opportunity_count[signer - 1];
-          ++candidate->validators[signer - 1].inclusions;
+        if (signer >= 1 && signer <= total_replicas &&
+            signer_set.find(signer) == signer_set.end()) {
+          ++available_not_selected_count[signer - 1];
         }
       }
     } else {
@@ -229,17 +274,31 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
       legacy_selected_signer_slots, total_replicas,
       legacy_certificate_event_count);
   const uint64_t broad_available_fair_opportunities =
-      FairExpectedSignerOpportunities(broad_available_signer_slots,
-                                      total_replicas,
-                                      broad_available_event_count);
+      HasWindowFairAvailableSignerCoverage(window_quorum_available_signers,
+                                           total_replicas)
+          ? FairExpectedSignerOpportunities(broad_available_signer_slots,
+                                            total_replicas,
+                                            broad_available_event_count)
+          : 0;
   for (ValidatorReputation& validator : candidate->validators) {
     const int idx = validator.validator_id - 1;
     const uint64_t direct_opportunities =
         idx >= 0 && idx < static_cast<int>(signer_opportunity_count.size())
             ? signer_opportunity_count[idx]
             : 0;
+    const uint64_t excused_available_not_selected =
+        idx >= 0 &&
+                idx < static_cast<int>(available_not_selected_count.size())
+            ? available_not_selected_count[idx]
+            : 0;
+    const uint64_t adjusted_broad_available_fair_opportunities =
+        broad_available_fair_opportunities > excused_available_not_selected
+            ? broad_available_fair_opportunities -
+                  excused_available_not_selected
+            : 0;
     validator.opportunities =
-        std::max(direct_opportunities, broad_available_fair_opportunities) +
+        std::max(direct_opportunities,
+                 adjusted_broad_available_fair_opportunities) +
         fair_opportunities;
   }
 
@@ -382,9 +441,8 @@ ReputationCandidate ComputeReputationCandidate(
 
   if (UseCoreOnlyFastPath(input, config)) {
     ComputeCoreOnlyReputation(ordered_events, weights, config, &candidate);
-    for (const ValidatorReputation& validator : candidate.validators) {
-      candidate.leader_weights.push_back(validator.next_weight);
-    }
+    candidate.leader_weights =
+        LeaderWeightsForCandidate(candidate.validators, config);
     candidate.leader_selection_version = 1;
     candidate.leader_eligible_min_weight = config.leader_eligible_min_weight;
     RecomputeReputationCandidateRoots(&candidate);
@@ -430,6 +488,9 @@ ReputationCandidate ComputeReputationCandidate(
   uint64_t certificate_event_count = 0;
   std::vector<uint64_t> signer_opportunity_count(
       std::max(total_replicas, 0), 0);
+  std::vector<uint64_t> available_not_selected_count(
+      std::max(total_replicas, 0), 0);
+  std::set<int> window_quorum_available_signers;
   std::set<std::pair<int, std::string>> seen_certificates;
   std::set<std::pair<int, int>> seen_leader_opportunities;
   for (const CoreEvidenceEvent& event : ordered_events) {
@@ -469,18 +530,28 @@ ReputationCandidate ComputeReputationCandidate(
       available_signers = signers;
     }
     ++certificate_event_count;
+    std::set<int> signer_set(signers.begin(), signers.end());
     if (has_available_signer_evidence) {
-      const bool broad_available_signer_evidence =
-          HasBroadAvailableSignerCoverage(available_signers, total_replicas,
-                                          config);
-      if (broad_available_signer_evidence) {
+      if (HasQuorumAvailableSignerCoverage(available_signers,
+                                           total_replicas)) {
         broad_available_signer_slots += available_signers.size();
         ++broad_available_event_count;
+        for (int signer : available_signers) {
+          if (signer >= 1 && signer <= total_replicas) {
+            window_quorum_available_signers.insert(signer);
+          }
+        }
       }
-      for (int signer : available_signers) {
+      for (int signer : signers) {
         if (signer >= 1 && signer <= total_replicas) {
           ++signer_opportunity_count[signer - 1];
           ++candidate.validators[signer - 1].inclusions;
+        }
+      }
+      for (int signer : available_signers) {
+        if (signer >= 1 && signer <= total_replicas &&
+            signer_set.find(signer) == signer_set.end()) {
+          ++available_not_selected_count[signer - 1];
         }
       }
     } else {
@@ -546,17 +617,31 @@ ReputationCandidate ComputeReputationCandidate(
       legacy_selected_signer_slots, total_replicas,
       legacy_certificate_event_count);
   const uint64_t broad_available_fair_opportunities =
-      FairExpectedSignerOpportunities(broad_available_signer_slots,
-                                      total_replicas,
-                                      broad_available_event_count);
+      HasWindowFairAvailableSignerCoverage(window_quorum_available_signers,
+                                           total_replicas)
+          ? FairExpectedSignerOpportunities(broad_available_signer_slots,
+                                            total_replicas,
+                                            broad_available_event_count)
+          : 0;
   for (ValidatorReputation& validator : candidate.validators) {
     const int idx = validator.validator_id - 1;
     const uint64_t direct_opportunities =
         idx >= 0 && idx < static_cast<int>(signer_opportunity_count.size())
             ? signer_opportunity_count[idx]
             : 0;
+    const uint64_t excused_available_not_selected =
+        idx >= 0 &&
+                idx < static_cast<int>(available_not_selected_count.size())
+            ? available_not_selected_count[idx]
+            : 0;
+    const uint64_t adjusted_broad_available_fair_opportunities =
+        broad_available_fair_opportunities > excused_available_not_selected
+            ? broad_available_fair_opportunities -
+                  excused_available_not_selected
+            : 0;
     validator.opportunities =
-        std::max(direct_opportunities, broad_available_fair_opportunities) +
+        std::max(direct_opportunities,
+                 adjusted_broad_available_fair_opportunities) +
         fair_opportunities;
   }
 
@@ -971,8 +1056,8 @@ ReputationCandidate ComputeReputationCandidate(
 
     int recovery_score = validator.vote_score;
     const bool has_strong_leader_failure_signal =
-        leader_opportunities > 0 && validator.leader_certified_count == 0 &&
-        validator.leader_score < 50;
+        leader_opportunities >= kMinLeaderFailureOpportunities &&
+        validator.leader_certified_count == 0 && validator.leader_score < 50;
     if (config.leader_recovery_enabled &&
         (leader_opportunities >= config.min_leader_opportunities ||
          has_strong_leader_failure_signal)) {
@@ -1039,8 +1124,17 @@ ReputationCandidate ComputeReputationCandidate(
         !has_recovery_debt && fully_recovered_decay &&
         validator.vote_score >= kHealthyCatchUpScore &&
         recovery_score >= kHealthyCatchUpScore;
+    const bool at_leader_reentry_boundary =
+        config.leader_recovery_enabled && below_mean_weight &&
+        validator.current_weight <= config.leader_eligible_min_weight;
+    const bool has_good_leader_reentry_evidence =
+        leader_opportunities >= config.min_leader_opportunities &&
+        validator.leader_score >= 95;
+    const bool leader_reentry_bonus_allowed =
+        !at_leader_reentry_boundary || has_good_leader_reentry_evidence;
     const bool earns_bonus =
-        validator_has_enough_decay_evidence && below_mean_weight &&
+        leader_reentry_bonus_allowed && validator_has_enough_decay_evidence &&
+        below_mean_weight &&
         ((recovery_score >= 95 && validator.vote_score >= 95) ||
          (near_fair_vote && recovery_score >= 67) || healthy_catchup_score);
     validator.bonus_credit = earns_bonus ? config.bonus_per_epoch : 0;
@@ -1142,11 +1236,7 @@ ReputationCandidate ComputeReputationCandidate(
     }
   }
 
-  candidate.leader_weights.clear();
-  candidate.leader_weights.reserve(candidate.validators.size());
-  for (const ValidatorReputation& validator : candidate.validators) {
-    candidate.leader_weights.push_back(validator.next_weight);
-  }
+  candidate.leader_weights = LeaderWeightsForCandidate(candidate.validators, config);
   candidate.leader_selection_version = 1;
   candidate.leader_eligible_min_weight = config.leader_eligible_min_weight;
 

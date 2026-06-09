@@ -27,6 +27,8 @@ LEADER_WEIGHT_RE = re.compile(r"leader_weights:\[([^\]]*)\]")
 GLOG_TIME_RE = re.compile(
     r"^[A-Z](\d{8})\s+(\d{2}:\d{2}:\d{2})(?:\.(\d+))?")
 TXN_RE = re.compile(r"(?:^|\s)txn:(\d+)(?:\s|$)")
+BENCH_TIME_RE = re.compile(
+    r"(?:^|\s)time:([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(?:\s|$)")
 LATENCY_RE = re.compile(r"%s\s*:([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)")
 
 MAX_LATENCY_SECONDS = float(os.environ.get("TD_HS_RESULT_MAX_LATENCY_SECONDS", "300"))
@@ -35,6 +37,9 @@ STEADY_AFTER_THRESHOLD_GRACE_SECONDS = float(
 RESULT_WARMUP_SECONDS = float(os.environ.get("TD_HS_RESULT_WARMUP_SECONDS", "30"))
 RESULT_WARMUP_SAMPLE_RATIO = float(
     os.environ.get("TD_HS_RESULT_WARMUP_SAMPLE_RATIO", "0.20"))
+RESULT_COOLDOWN_SECONDS = float(os.environ.get("TD_HS_RESULT_COOLDOWN_SECONDS", "10"))
+RESULT_COOLDOWN_SAMPLE_RATIO = float(
+    os.environ.get("TD_HS_RESULT_COOLDOWN_SAMPLE_RATIO", "0.05"))
 
 class ParsedLog:
     def __init__(self):
@@ -91,6 +96,12 @@ def parse_timestamp(line):
     except ValueError:
         return None
     return dt.timestamp()
+
+def parse_benchmark_time(line):
+    match = BENCH_TIME_RE.search(line)
+    if not match:
+        return None
+    return parse_positive_float(match.group(1))
 
 def parse_weights_from_match(match):
     if not match:
@@ -372,6 +383,11 @@ def bounded_warmup_ratio():
         return 0.20
     return max(0.0, min(0.95, RESULT_WARMUP_SAMPLE_RATIO))
 
+def bounded_cooldown_ratio():
+    if not math.isfinite(RESULT_COOLDOWN_SAMPLE_RATIO):
+        return 0.05
+    return max(0.0, min(0.95, RESULT_COOLDOWN_SAMPLE_RATIO))
+
 def split_stable_records(records, first_txn_time):
     if not records:
         return [], [], False
@@ -379,15 +395,29 @@ def split_stable_records(records, first_txn_time):
         line_time is not None for _, line_time in records)
     if has_usable_time:
         stable_cutoff = first_txn_time + max(0.0, RESULT_WARMUP_SECONDS)
+        timed_records = [(value, line_time) for value, line_time in records
+                         if line_time is not None]
+        last_record_time = max(line_time for _, line_time in timed_records)
+        cooldown_cutoff = last_record_time - max(0.0, RESULT_COOLDOWN_SECONDS)
         warmup = [value for value, line_time in records
                   if line_time is None or line_time < stable_cutoff]
-        stable = [value for value, line_time in records
-                  if line_time is not None and line_time >= stable_cutoff]
+        stable = [value for value, line_time in timed_records
+                  if line_time >= stable_cutoff]
+        if len(stable) >= 10 and cooldown_cutoff > stable_cutoff:
+            cooled_stable = [value for value, line_time in timed_records
+                             if (line_time >= stable_cutoff and
+                                 line_time < cooldown_cutoff)]
+            if cooled_stable:
+                stable = cooled_stable
     else:
         warmup_count = int(math.ceil(len(records) * bounded_warmup_ratio()))
         warmup_count = max(0, min(len(records) - 1, warmup_count))
+        cooldown_count = int(math.ceil(len(records) * bounded_cooldown_ratio()))
+        cooldown_count = max(0, min(len(records) - warmup_count - 1,
+                                    cooldown_count))
+        stable_end = len(records) - cooldown_count
         warmup = [value for value, _ in records[:warmup_count]]
-        stable = [value for value, _ in records[warmup_count:]]
+        stable = [value for value, _ in records[warmup_count:stable_end]]
     if stable:
         return warmup, stable, False
     return warmup, [value for value, _ in records], True
@@ -405,7 +435,10 @@ def read_tps(file, threshold_time=None, bad_node_count=None,
             parsed_time = parse_timestamp(line)
             if parsed_time is not None:
                 last_timestamp = parsed_time
-            line_time = parsed_time if parsed_time is not None else last_timestamp
+            benchmark_time = parse_benchmark_time(line)
+            line_time = parsed_time if parsed_time is not None else benchmark_time
+            if line_time is None:
+                line_time = last_timestamp
             weights = parse_active_weights(line)
             if weights is not None:
                 parsed.final_weights = weights

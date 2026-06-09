@@ -78,6 +78,20 @@ ToCertifiedSignerEvidenceRecord(const TdHotstuffQcEvidenceSnapshot& snapshot) {
   return record;
 }
 
+resdb::consensus::reputation::LeaderOutcomeEvidenceRecord
+ToLeaderOutcomeEvidenceRecord(
+    const TdHotstuffLeaderOutcomeEvidenceSnapshot& snapshot) {
+  resdb::consensus::reputation::LeaderOutcomeEvidenceRecord record;
+  record.view_or_round = snapshot.view;
+  record.leader_id = snapshot.leader_id;
+  record.outcome_class = snapshot.outcome_class;
+  record.artifact_digest = snapshot.artifact_digest;
+  record.weight_root_hex = snapshot.active_weight_root;
+  record.weight_version = snapshot.active_weight_version;
+  record.active_weights = snapshot.active_weights;
+  return record;
+}
+
 TdHotstuffReputationAdapterOptions
 TdHotstuffReputationAdapter::OptionsFromEnv() {
   TdHotstuffReputationAdapterOptions options;
@@ -91,9 +105,20 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
                           kDefaultQueueCapacity));
   options.activation_delay_windows = PositiveIntFromEnv(
       "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY", 1);
+  options.reputation_config.decay_per_epoch = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_DECAY_PER_EPOCH",
+      options.reputation_config.decay_per_epoch);
+  options.reputation_config.max_recovery_per_epoch = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH",
+      options.reputation_config.max_recovery_per_epoch);
+  options.reputation_config.bonus_per_epoch = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_BONUS_PER_EPOCH",
+      options.reputation_config.bonus_per_epoch);
   options.reputation_config.leader_eligible_min_weight = PositiveIntFromEnv(
       "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT",
       options.reputation_config.leader_eligible_min_weight);
+  options.reputation_config.leader_recovery_enabled =
+      EnvFlagEnabled("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE");
   options.audit_jsonl_enabled =
       EnvFlagEnabled("TD_HS_REPUTATION_AUDIT_JSONL_ENABLE");
   const char* audit_path = std::getenv("TD_HS_REPUTATION_AUDIT_JSONL_PATH");
@@ -170,6 +195,21 @@ bool TdHotstuffReputationAdapter::TryRecordCertifiedQc(
     snapshot.local_node_id = local_node_id_;
   }
   return runtime_->RecordEvidence(ToCertifiedSignerEvidenceRecord(snapshot));
+}
+
+bool TdHotstuffReputationAdapter::TryRecordLeaderOutcome(
+    TdHotstuffLeaderOutcomeEvidenceSnapshot snapshot) {
+  if (!enabled_ || runtime_ == nullptr) {
+    return false;
+  }
+  if (snapshot.total_replicas <= 0) {
+    snapshot.total_replicas = total_replicas_;
+  }
+  if (snapshot.local_node_id <= 0) {
+    snapshot.local_node_id = local_node_id_;
+  }
+  return runtime_->RecordLeaderOutcome(
+      ToLeaderOutcomeEvidenceRecord(snapshot));
 }
 
 bool TdHotstuffReputationAdapter::AdvanceWatermark(int view) {
