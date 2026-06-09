@@ -46,7 +46,6 @@ struct ReputationRuntimeOptions {
   size_t window_size_views = 4096;
   size_t queue_capacity = 65536;
   int activation_delay_windows = 1;
-  int min_activation_lead_views = 0;
   std::vector<int64_t> initial_weights;
   std::string initial_weight_root;
   uint64_t initial_weight_version = 0;
@@ -125,10 +124,8 @@ class ReputationPluginRuntime {
   ReputationWeightSnapshot active_snapshot_;
   std::map<std::pair<std::string, uint64_t>, std::vector<int64_t>> known_weights_;
   std::map<WindowKey, WindowBuffer> windows_;
-  int closed_watermark_ = -1;
   std::deque<ReputationCandidate> completed_;
   std::map<ReputationCandidateKey, ReputationCandidate> completed_index_;
-  std::set<uint64_t> completed_update_versions_;
   std::ofstream audit_file_;
 
   std::atomic<uint64_t> queued_count_{0};

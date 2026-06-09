@@ -70,7 +70,7 @@ int LeaderSelectionSchedule::LeaderForView(int view) const {
   }
   std::lock_guard<std::mutex> lk(mutex_);
   const Record& record = RecordForViewLocked(view);
-  if (!record.context_required || record.sequence.empty()) {
+  if (record.sequence.empty()) {
     return RoundRobinLeaderForView(view, total_replicas_);
   }
   const int idx = ((view % static_cast<int>(record.sequence.size())) +
@@ -88,7 +88,11 @@ std::string LeaderSelectionSchedule::ContextHashForView(int view) const {
   if (!record.context_required) {
     return EmptyContextHash();
   }
-  return record.context_prefix + std::to_string(view);
+  std::ostringstream out;
+  out << "td_hotstuff_leader_context_v1|" << view << '|'
+      << record.version << '|' << record.root << '|'
+      << record.eligible_min_weight << '|' << kLeaderParamsVersion;
+  return HashHexForTesting(out.str());
 }
 
 bool LeaderSelectionSchedule::ScheduleUpdate(
@@ -177,10 +181,7 @@ int64_t LeaderSelectionSchedule::ActiveEligibleMinWeight() const {
 const LeaderSelectionSchedule::Record& LeaderSelectionSchedule::RecordForViewLocked(
     int view) const {
   const Record* selected = &records_.front();
-  const size_t last_active =
-      std::min(active_index_, records_.empty() ? size_t{0} : records_.size() - 1);
-  for (size_t i = 0; i <= last_active; ++i) {
-    const Record& record = records_[i];
+  for (const Record& record : records_) {
     if (record.activation_view < view) {
       selected = &record;
     } else {
@@ -207,13 +208,6 @@ LeaderSelectionSchedule::Record LeaderSelectionSchedule::BuildRecord(
                                                   record.eligible_min_weight);
   record.context_required = !IsExactRoundRobinProfile(record.weights,
                                                       record.eligible_min_weight);
-  if (record.context_required) {
-    std::ostringstream out;
-    out << "td_hotstuff_leader_context_v1|" << record.version << '|'
-        << record.root << '|' << record.eligible_min_weight << '|'
-        << kLeaderParamsVersion << '|';
-    record.context_prefix = out.str();
-  }
   return record;
 }
 

@@ -51,16 +51,6 @@ CertifiedSignerEvidenceRecord Evidence(int view, const std::string& digest) {
   return record;
 }
 
-CertifiedSignerEvidenceRecord EvidenceForWeights(
-    int view, const std::string& digest, const std::vector<int64_t>& weights,
-    uint64_t version) {
-  CertifiedSignerEvidenceRecord record = Evidence(view, digest);
-  record.weight_root_hex = WeightRootHex(weights);
-  record.weight_version = version;
-  record.active_weights = weights;
-  return record;
-}
-
 std::vector<ReputationCandidate> WaitForCandidates(
     ReputationPluginRuntime* runtime, size_t count) {
   for (int i = 0; i < 100; ++i) {
@@ -94,23 +84,6 @@ TEST(ReputationPluginRuntimeTest, FinalizesOnlyAfterWatermarkReachesWindowEnd) {
   EXPECT_EQ(candidates[0].activation_view, 8);
 }
 
-
-TEST(ReputationPluginRuntimeTest, MinActivationLeadOverridesShortWindowDelay) {
-  ReputationRuntimeOptions options = RuntimeOptions();
-  options.min_activation_lead_views = 32;
-  ReputationPluginRuntime runtime(options);
-  runtime.Start();
-
-  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
-  runtime.AdvanceWatermark(4);
-  auto candidates = WaitForCandidates(&runtime, 1);
-  runtime.Stop();
-
-  ASSERT_EQ(candidates.size(), 1);
-  EXPECT_EQ(candidates[0].end_view, 4);
-  EXPECT_EQ(candidates[0].activation_view, 36);
-}
-
 TEST(ReputationPluginRuntimeTest, DedupesAndSortsEquivalentEvidence) {
   ReputationPluginRuntime first(RuntimeOptions());
   ReputationPluginRuntime second(RuntimeOptions());
@@ -137,23 +110,6 @@ TEST(ReputationPluginRuntimeTest, DedupesAndSortsEquivalentEvidence) {
             second_candidates[0].candidate_digest_hex);
 }
 
-TEST(ReputationPluginRuntimeTest, IgnoresEvidenceForClosedWindows) {
-  ReputationPluginRuntime runtime(RuntimeOptions());
-  runtime.Start();
-
-  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
-  runtime.AdvanceWatermark(4);
-  auto candidates = WaitForCandidates(&runtime, 1);
-  ASSERT_EQ(candidates.size(), 1);
-
-  EXPECT_TRUE(runtime.RecordEvidence(Evidence(1, "qc-late")));
-  runtime.AdvanceWatermark(8);
-  auto late_candidates = WaitForCandidates(&runtime, 1);
-  runtime.Stop();
-
-  EXPECT_TRUE(late_candidates.empty());
-}
-
 TEST(ReputationPluginRuntimeTest, FindLocalCandidateReturnsCompletedCandidate) {
   ReputationPluginRuntime runtime(RuntimeOptions());
   runtime.Start();
@@ -169,56 +125,6 @@ TEST(ReputationPluginRuntimeTest, FindLocalCandidateReturnsCompletedCandidate) {
 
   ASSERT_TRUE(found.has_value());
   EXPECT_EQ(found->candidate_digest_hex, candidates[0].candidate_digest_hex);
-}
-
-
-TEST(ReputationPluginRuntimeTest, EmitsOneCandidatePerWeightVersion) {
-  ReputationRuntimeOptions options = RuntimeOptions();
-  options.initial_weights = {20, 20, 20, 20};
-  options.initial_weight_root = WeightRootHex(options.initial_weights);
-  ReputationPluginRuntime runtime(options);
-  runtime.Start();
-
-  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
-  EXPECT_TRUE(runtime.RecordEvidence(Evidence(4, "qc-4")));
-  runtime.AdvanceWatermark(8);
-  auto candidates = WaitForCandidates(&runtime, 1);
-  std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  auto extra = runtime.TakeCompletedCandidates();
-  runtime.Stop();
-
-  ASSERT_EQ(candidates.size(), 1);
-  EXPECT_TRUE(extra.empty());
-  EXPECT_EQ(candidates[0].old_weight_version, options.initial_weight_version);
-}
-
-TEST(ReputationPluginRuntimeTest, DoesNotEmitStaleOldVersionAfterActivation) {
-  ReputationRuntimeOptions options = RuntimeOptions();
-  options.initial_weights = {20, 20, 20, 20};
-  options.initial_weight_root = WeightRootHex(options.initial_weights);
-  ReputationPluginRuntime runtime(options);
-  runtime.Start();
-
-  EXPECT_TRUE(runtime.RecordEvidence(
-      EvidenceForWeights(0, "qc-v0", options.initial_weights, 0)));
-  runtime.AdvanceWatermark(4);
-  auto first = WaitForCandidates(&runtime, 1);
-  ASSERT_EQ(first.size(), 1);
-  EXPECT_EQ(first[0].old_weight_version, 0);
-
-  ReputationWeightSnapshot activated;
-  activated.weights = {19, 20, 20, 20};
-  activated.weight_root_hex = WeightRootHex(activated.weights);
-  activated.weight_version = 1;
-  runtime.UpdateActiveWeights(std::move(activated));
-
-  EXPECT_TRUE(runtime.RecordEvidence(
-      EvidenceForWeights(4, "late-qc-v0", options.initial_weights, 0)));
-  runtime.AdvanceWatermark(8);
-  auto stale = WaitForCandidates(&runtime, 1);
-  runtime.Stop();
-
-  EXPECT_TRUE(stale.empty());
 }
 
 TEST(ReputationPluginRuntimeTest, QueueOverflowDropsWithoutBlocking) {

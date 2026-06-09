@@ -32,7 +32,6 @@ struct ReputationConfig {
   uint64_t min_decay_opportunities = 1;
   uint64_t min_leader_opportunities = 8;
   int64_t leader_eligible_min_weight = 10;
-  int64_t leader_weight_deadband = 5;
   bool leader_recovery_enabled = false;
   bool strong_fault_enabled = false;
   bool double_proposal_detection_enabled = false;

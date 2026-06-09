@@ -31,7 +31,6 @@ struct TdHotstuffReputationAdapterOptions {
   size_t window_size = 4096;
   size_t queue_capacity = 65536;
   int activation_delay_windows = 1;
-  int min_activation_lead_views = 32768;
   bool audit_jsonl_enabled = false;
   std::string audit_jsonl_path;
   std::vector<int64_t> initial_weights;

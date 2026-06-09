@@ -231,7 +231,6 @@ bool HotStuff::Ready() {
 }
 
 void HotStuff::StartNewRound() {
-  MaybeActivateReadyWeightUpdatesAfterViewAdvance();
   std::unique_lock<std::mutex> lk(n_mutex_);
   has_sent_ = false;
   vote_cv_.notify_one();
@@ -726,6 +725,8 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
   if (cert == nullptr) {
     return false;
   }
+  TdHotstuffQcEvidenceSnapshot reputation_snapshot;
+  bool has_reputation_snapshot = false;
   {
     std::unique_lock<std::mutex> lk(mutex_);
     const int view = cert->view();
@@ -743,8 +744,13 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
                                     : quorum_weight_;
     if (previous_weight < quorum_weight && current_weight >= quorum_weight) {
       MarkTimeoutProgressLocked();
-      MaybeFormQcLocked(view, hash);
+      has_reputation_snapshot = MaybeFormQcLocked(
+          view, hash,
+          reputation_adapter_ != nullptr ? &reputation_snapshot : nullptr);
     }
+  }
+  if (has_reputation_snapshot && reputation_adapter_ != nullptr) {
+    reputation_adapter_->TryRecordCertifiedQc(std::move(reputation_snapshot));
   }
   return true;
 }
@@ -850,99 +856,21 @@ void HotStuff::BroadcastWeightUpdateCert(const WeightUpdateCert& cert) {
 }
 
 void HotStuff::DrainCompletedWeightCandidates() {
-  if (reputation_adapter_ == nullptr || weight_update_controller_ == nullptr ||
-      weight_schedule_ == nullptr) {
+  if (reputation_adapter_ == nullptr || weight_update_controller_ == nullptr) {
     return;
   }
-  const uint64_t active_version = weight_schedule_->ActiveWeightVersion();
-  if (weight_candidate_inflight_ &&
-      weight_candidate_inflight_version_ == active_version) {
-    return;
-  }
-  if (weight_candidate_inflight_ &&
-      weight_candidate_inflight_version_ != active_version) {
-    weight_candidate_inflight_ = false;
-  }
-  std::vector<resdb::consensus::reputation::ReputationCandidate> candidates =
-      reputation_adapter_->TakeCompletedCandidates();
-  std::sort(candidates.begin(), candidates.end(),
-            [](const auto& lhs, const auto& rhs) {
-              return std::tie(lhs.old_weight_version, lhs.activation_view,
-                              lhs.start_view, lhs.end_view,
-                              lhs.candidate_digest_hex) <
-                     std::tie(rhs.old_weight_version, rhs.activation_view,
-                              rhs.start_view, rhs.end_view,
-                              rhs.candidate_digest_hex);
-            });
-  for (const auto& candidate : candidates) {
-    if (candidate.old_weight_version != active_version) {
-      continue;
+  for (const auto& candidate : reputation_adapter_->TakeCompletedCandidates()) {
+    if (weight_update_controller_->AddLocalCandidate(candidate)) {
+      BroadcastCandidateWeightUpdate(ToCandidateWeightUpdate(candidate));
     }
-    CandidateWeightUpdate message = ToCandidateWeightUpdate(candidate);
-    if (!weight_update_controller_->AddLocalCandidate(candidate)) {
-      continue;
-    }
-    weight_candidate_inflight_ = true;
-    weight_candidate_inflight_version_ = active_version;
-    BroadcastCandidateWeightUpdate(message);
-    std::unique_ptr<WeightUpdateVote> vote =
-        weight_update_controller_->HandleCandidate(message);
-    if (vote == nullptr) {
-      return;
-    }
-    std::unique_ptr<WeightUpdateCert> cert =
-        weight_update_controller_->HandleVote(*vote);
-    BroadcastWeightUpdateVote(*vote);
-    if (cert != nullptr) {
-      weight_update_controller_->HandleCert(*cert);
-      RefreshPendingWeightActivationView();
-      BroadcastWeightUpdateCert(*cert);
-      ActivateReadyWeightUpdates();
-    }
-    return;
   }
 }
 
 void HotStuff::ActivateReadyWeightUpdates() {
-  ActivateReadyWeightUpdates(CurrentView());
-}
-
-void HotStuff::RefreshPendingWeightActivationView() {
-  const int pending_view =
-      weight_update_controller_ == nullptr
-          ? 0
-          : weight_update_controller_->EarliestPendingActivationView();
-  next_pending_weight_activation_view_.store(pending_view,
-                                             std::memory_order_release);
-}
-
-void HotStuff::MaybeActivateReadyWeightUpdatesAfterViewAdvance() {
-  const int pending_view = next_pending_weight_activation_view_.load(
-      std::memory_order_acquire);
-  if (pending_view <= 0 || proposal_manager_ == nullptr) {
-    return;
-  }
-  const int current_view = proposal_manager_->CurrentView();
-  if (current_view > pending_view) {
-    ActivateReadyWeightUpdates(current_view);
-  }
-}
-
-void HotStuff::ActivateReadyWeightUpdates(int view) {
   if (weight_update_controller_ == nullptr || weight_schedule_ == nullptr) {
     return;
   }
-  int pending_view = next_pending_weight_activation_view_.load(
-      std::memory_order_acquire);
-  if (pending_view <= 0) {
-    RefreshPendingWeightActivationView();
-    pending_view = next_pending_weight_activation_view_.load(
-        std::memory_order_acquire);
-  }
-  if (pending_view <= 0 || view <= pending_view) {
-    return;
-  }
-  if (weight_update_controller_->ActivateReady(view) &&
+  if (weight_update_controller_->ActivateReady(CurrentView()) &&
       reputation_adapter_ != nullptr) {
     resdb::consensus::reputation::ReputationWeightSnapshot snapshot;
     snapshot.weights = weight_schedule_->ActiveWeights();
@@ -951,15 +879,13 @@ void HotStuff::ActivateReadyWeightUpdates(int view) {
     const std::vector<int64_t> active_leader_weights =
         leader_schedule_ == nullptr ? snapshot.weights
                                     : leader_schedule_->ActiveLeaderWeights();
-    LOG(INFO) << "TD-Hotstuff activated certified weights view:" << view
+    LOG(INFO) << "TD-Hotstuff activated certified weights view:" << CurrentView()
               << " weight_version:" << snapshot.weight_version
               << " active_weights:[" << JoinInt64Vector(snapshot.weights) << "]"
               << " leader_weights:[" << JoinInt64Vector(active_leader_weights)
               << "]";
     reputation_adapter_->UpdateActiveWeights(std::move(snapshot));
-    weight_candidate_inflight_ = false;
   }
-  RefreshPendingWeightActivationView();
 }
 
 bool HotStuff::ReceiveCandidateWeightUpdate(
@@ -983,11 +909,7 @@ bool HotStuff::ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote) {
   std::unique_ptr<WeightUpdateCert> cert =
       weight_update_controller_->HandleVote(*vote);
   if (cert != nullptr) {
-    if (weight_update_controller_->HandleCert(*cert)) {
-      RefreshPendingWeightActivationView();
-    }
     BroadcastWeightUpdateCert(*cert);
-    ActivateReadyWeightUpdates();
   }
   return true;
 }
@@ -998,8 +920,6 @@ bool HotStuff::ReceiveWeightUpdateCert(std::unique_ptr<WeightUpdateCert> cert) {
   }
   const bool accepted = weight_update_controller_->HandleCert(*cert);
   if (accepted) {
-    RefreshPendingWeightActivationView();
-    BroadcastWeightUpdateCert(*cert);
     ActivateReadyWeightUpdates();
   }
   return accepted;

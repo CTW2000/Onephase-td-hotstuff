@@ -91,15 +91,9 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
                           kDefaultQueueCapacity));
   options.activation_delay_windows = PositiveIntFromEnv(
       "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY", 1);
-  options.min_activation_lead_views = PositiveIntFromEnv(
-      "TD_HS_WEIGHT_UPDATE_MIN_ACTIVATION_LEAD_VIEWS",
-      options.min_activation_lead_views);
   options.reputation_config.leader_eligible_min_weight = PositiveIntFromEnv(
       "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT",
       options.reputation_config.leader_eligible_min_weight);
-  options.reputation_config.leader_weight_deadband = PositiveIntFromEnv(
-      "TD_HS_REPUTATION_LEADER_WEIGHT_DEADBAND",
-      options.reputation_config.leader_weight_deadband);
   options.audit_jsonl_enabled =
       EnvFlagEnabled("TD_HS_REPUTATION_AUDIT_JSONL_ENABLE");
   const char* audit_path = std::getenv("TD_HS_REPUTATION_AUDIT_JSONL_PATH");
@@ -139,7 +133,6 @@ TdHotstuffReputationAdapter::RuntimeFromOptions(
   runtime_options.window_size_views = options.window_size;
   runtime_options.queue_capacity = options.queue_capacity;
   runtime_options.activation_delay_windows = options.activation_delay_windows;
-  runtime_options.min_activation_lead_views = options.min_activation_lead_views;
   runtime_options.initial_weights = options.initial_weights;
   runtime_options.initial_weight_root = options.initial_weight_root;
   runtime_options.initial_weight_version = options.initial_weight_version;

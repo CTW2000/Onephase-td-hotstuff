@@ -36,7 +36,6 @@ class WeightUpdateController {
   std::unique_ptr<WeightUpdateCert> HandleVote(const WeightUpdateVote& vote);
   bool HandleCert(const WeightUpdateCert& cert);
   bool ActivateReady(int current_view);
-  int EarliestPendingActivationView() const;
 
  private:
   struct CandidateKey {
@@ -69,10 +68,7 @@ class WeightUpdateController {
       const CandidateWeightUpdate& candidate) const;
   std::vector<int64_t> CandidateLeaderWeights(
       const CandidateWeightUpdate& candidate) const;
-  int64_t VoteWeight(const std::map<int, WeightUpdateVote>& votes,
-                     uint64_t old_weight_version) const;
-  void AbsorbPendingVotesLocked(const std::string& digest,
-                                const CandidateWeightUpdate& candidate);
+  int64_t VoteWeight(const std::map<int, WeightUpdateVote>& votes) const;
   std::unique_ptr<WeightUpdateCert> MaybeFormCert(VoteBucket* bucket) const;
 
   const int node_id_;
@@ -85,9 +81,7 @@ class WeightUpdateController {
   std::map<CandidateKey, CandidateWeightUpdate> local_candidates_;
   std::map<std::string, CandidateWeightUpdate> candidates_by_digest_;
   std::map<std::string, VoteBucket> vote_buckets_;
-  std::map<std::string, std::map<int, WeightUpdateVote>> pending_votes_by_digest_;
   std::map<std::string, WeightUpdateCert> pending_certs_;
-  std::set<std::string> accepted_cert_digests_;
   std::set<std::string> voted_digests_;
 };
 

@@ -30,32 +30,6 @@ struct CoreEvidenceEvent {
   OutcomeClass outcome_class = OutcomeClass::kNone;
 };
 
-std::vector<int64_t> BuildLeaderSelectionWeights(
-    const std::vector<ValidatorReputation>& validators,
-    const ReputationConfig& config) {
-  std::vector<int64_t> leader_weights;
-  leader_weights.reserve(validators.size());
-  if (validators.empty()) {
-    return leader_weights;
-  }
-  int64_t min_weight = validators.front().next_weight;
-  int64_t max_weight = validators.front().next_weight;
-  bool all_eligible = true;
-  for (const ValidatorReputation& validator : validators) {
-    leader_weights.push_back(validator.next_weight);
-    min_weight = std::min<int64_t>(min_weight, validator.next_weight);
-    max_weight = std::max<int64_t>(max_weight, validator.next_weight);
-    if (validator.next_weight < config.leader_eligible_min_weight) {
-      all_eligible = false;
-    }
-  }
-  if (all_eligible && config.leader_weight_deadband > 0 &&
-      max_weight - min_weight <= config.leader_weight_deadband) {
-    std::fill(leader_weights.begin(), leader_weights.end(), config.max_weight);
-  }
-  return leader_weights;
-}
-
 std::string StrongFaultTypeName(StrongFaultType type) {
   switch (type) {
     case StrongFaultType::kDoubleProposal:
@@ -380,7 +354,9 @@ ReputationCandidate ComputeReputationCandidate(
 
   if (UseCoreOnlyFastPath(input, config)) {
     ComputeCoreOnlyReputation(ordered_events, weights, config, &candidate);
-    candidate.leader_weights = BuildLeaderSelectionWeights(candidate.validators, config);
+    for (const ValidatorReputation& validator : candidate.validators) {
+      candidate.leader_weights.push_back(validator.next_weight);
+    }
     candidate.leader_selection_version = 1;
     candidate.leader_eligible_min_weight = config.leader_eligible_min_weight;
     RecomputeReputationCandidateRoots(&candidate);
@@ -1129,7 +1105,11 @@ ReputationCandidate ComputeReputationCandidate(
     }
   }
 
-  candidate.leader_weights = BuildLeaderSelectionWeights(candidate.validators, config);
+  candidate.leader_weights.clear();
+  candidate.leader_weights.reserve(candidate.validators.size());
+  for (const ValidatorReputation& validator : candidate.validators) {
+    candidate.leader_weights.push_back(validator.next_weight);
+  }
   candidate.leader_selection_version = 1;
   candidate.leader_eligible_min_weight = config.leader_eligible_min_weight;
 

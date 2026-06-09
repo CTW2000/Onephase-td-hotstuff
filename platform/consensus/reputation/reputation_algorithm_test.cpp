@@ -300,31 +300,6 @@ TEST(ReputationAlgorithmTest, AllGoodWindowKeepsWeightsStable) {
   EXPECT_FALSE(candidate.candidate_digest_hex.empty());
 }
 
-TEST(ReputationAlgorithmTest, LeaderWeightsUseRoundRobinDeadbandForTinyAllEligibleDifferences) {
-  ReputationConfig config = TestConfig();
-  config.leader_eligible_min_weight = 10;
-  config.leader_weight_deadband = 5;
-
-  const ReputationCandidate candidate = ComputeCandidate(
-      1, 4, 1, {}, {100, 100, 98, 97}, config, "old-root", 0, 64);
-
-  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({100, 100, 98, 97}));
-  EXPECT_EQ(candidate.leader_weights,
-            std::vector<int64_t>({100, 100, 100, 100}));
-}
-
-TEST(ReputationAlgorithmTest, LeaderWeightsKeepBelowThresholdValidatorsIneligible) {
-  ReputationConfig config = TestConfig();
-  config.leader_eligible_min_weight = 10;
-  config.leader_weight_deadband = 100;
-
-  const ReputationCandidate candidate = ComputeCandidate(
-      1, 4, 1, {}, {100, 100, 98, 8}, config, "old-root", 0, 64);
-
-  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({100, 100, 98, 3}));
-  EXPECT_EQ(candidate.leader_weights, candidate.next_weights);
-}
-
 TEST(ReputationAlgorithmTest, BonusDoesNotDriftBalancedAllGoodWeights) {
   ReputationConfig config = TestConfig();
   config.bonus_per_epoch = 1;
