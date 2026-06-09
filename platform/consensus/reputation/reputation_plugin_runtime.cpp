@@ -36,6 +36,34 @@ std::string AuditWeightsJson(const std::vector<int64_t>& values) {
   return out.str();
 }
 
+std::string AuditValidatorsJson(
+    const std::vector<ValidatorReputation>& validators) {
+  std::ostringstream out;
+  out << '[';
+  for (size_t i = 0; i < validators.size(); ++i) {
+    const ValidatorReputation& validator = validators[i];
+    if (i > 0) {
+      out << ',';
+    }
+    out << '{'
+        << "\"id\":" << validator.validator_id << ','
+        << "\"opportunities\":" << validator.opportunities << ','
+        << "\"inclusions\":" << validator.inclusions << ','
+        << "\"vote_score\":" << validator.vote_score << ','
+        << "\"leader_certified\":" << validator.leader_certified_count << ','
+        << "\"leader_opportunities\":" << validator.leader_opportunity_count << ','
+        << "\"leader_score\":" << validator.leader_score << ','
+        << "\"decay\":" << validator.decay_applied << ','
+        << "\"recovery\":" << validator.recovery_credit << ','
+        << "\"bonus\":" << validator.bonus_credit << ','
+        << "\"current_weight\":" << validator.current_weight << ','
+        << "\"next_weight\":" << validator.next_weight
+        << '}';
+  }
+  out << ']';
+  return out.str();
+}
+
 }  // namespace
 
 struct ReputationPluginRuntime::RuntimeEvent {
@@ -278,6 +306,9 @@ void ReputationPluginRuntime::ProcessEvidence(
   key.weight_version = snapshot.weight_version;
 
   std::lock_guard<std::mutex> lk(mutex_);
+  if (window_end <= closed_watermark_) {
+    return;
+  }
   WindowBuffer& buffer = windows_[key];
   if (buffer.evidence.empty()) {
     buffer.start_view = window_start;
@@ -296,6 +327,7 @@ void ReputationPluginRuntime::ProcessWatermark(int view_or_round) {
   std::vector<std::pair<WindowKey, WindowBuffer>> ready;
   {
     std::lock_guard<std::mutex> lk(mutex_);
+    closed_watermark_ = std::max(closed_watermark_, view_or_round);
     for (auto it = windows_.begin(); it != windows_.end();) {
       if (view_or_round >= it->second.end_view) {
         ready.emplace_back(it->first, std::move(it->second));
@@ -306,6 +338,13 @@ void ReputationPluginRuntime::ProcessWatermark(int view_or_round) {
     }
   }
   for (auto& item : ready) {
+    {
+      std::lock_guard<std::mutex> lk(mutex_);
+      if (completed_update_versions_.find(item.first.weight_version) !=
+          completed_update_versions_.end()) {
+        continue;
+      }
+    }
     FinalizeWindow(item.first, &item.second);
   }
 }
@@ -330,9 +369,12 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
   input.current_weights = buffer->snapshot.weights;
   input.old_weight_root_hex = buffer->snapshot.weight_root_hex;
   input.old_weight_version = buffer->snapshot.weight_version;
-  input.activation_view = buffer->end_view +
-                          options_.activation_delay_windows *
-                              static_cast<int>(options_.window_size_views);
+  const int configured_delay_views =
+      options_.activation_delay_windows *
+      static_cast<int>(options_.window_size_views);
+  const int activation_lead_views = std::max(
+      configured_delay_views, std::max(0, options_.min_activation_lead_views));
+  input.activation_view = buffer->end_view + activation_lead_views;
   input.certified_signer_evidence.reserve(buffer->evidence.size());
   for (const CertifiedSignerEvidenceRecord& record : buffer->evidence) {
     CertifiedSignerEvidence evidence;
@@ -353,6 +395,10 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
   candidate.old_weight_root_hex = input.old_weight_root_hex;
   candidate.old_weight_version = input.old_weight_version;
   RecomputeReputationCandidateRoots(&candidate);
+  {
+    std::lock_guard<std::mutex> lk(mutex_);
+    completed_update_versions_.insert(key.weight_version);
+  }
   WriteAudit(candidate);
   PushCompleted(std::move(candidate));
   computed_window_count_.fetch_add(1);
@@ -378,7 +424,8 @@ void ReputationPluginRuntime::WriteAudit(const ReputationCandidate& candidate) {
   audit_file_ << "\"old_weight_root\":\"" << candidate.old_weight_root_hex << "\",";
   audit_file_ << "\"activation_view\":" << candidate.activation_view << ',';
   audit_file_ << "\"candidate_digest\":\"" << candidate.candidate_digest_hex << "\",";
-  audit_file_ << "\"next_weights\":" << AuditWeightsJson(candidate.next_weights);
+  audit_file_ << "\"next_weights\":" << AuditWeightsJson(candidate.next_weights) << ',';
+  audit_file_ << "\"validators\":" << AuditValidatorsJson(candidate.validators);
   audit_file_ << "}\n";
   audit_file_.flush();
 }

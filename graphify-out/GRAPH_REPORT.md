@@ -1,16 +1,16 @@
-# Graph Report - Onephase-td-hotstuff-classic-core  (2026-06-08)
+# Graph Report - Onephase-td-hotstuff-classic-core  (2026-06-09)
 
 ## Corpus Check
-- 869 files · ~597,307 words
+- 869 files · ~599,191 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7551 nodes · 10327 edges · 716 communities (484 shown, 232 thin omitted)
+- 7583 nodes · 10404 edges · 712 communities (482 shown, 230 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 353 edges (avg confidence: 0.74)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c5256913`
+- Built from commit: `e0ac60c9`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -650,24 +650,20 @@
 - [[_COMMUNITY_Community 657|Community 657]]
 - [[_COMMUNITY_Community 660|Community 660]]
 - [[_COMMUNITY_Community 661|Community 661]]
-- [[_COMMUNITY_Community 708|Community 708]]
 - [[_COMMUNITY_Community 709|Community 709]]
 - [[_COMMUNITY_Community 710|Community 710]]
 - [[_COMMUNITY_Community 711|Community 711]]
 - [[_COMMUNITY_Community 712|Community 712]]
-- [[_COMMUNITY_Community 713|Community 713]]
-- [[_COMMUNITY_Community 714|Community 714]]
-- [[_COMMUNITY_Community 715|Community 715]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `TEST()` - 73 edges
+1. `TEST()` - 78 edges
 2. `GetCurrentTime()` - 59 edges
 3. `Transaction` - 47 edges
 4. `ResDB` - 45 edges
 5. `GenerateResDBConfig()` - 38 edges
 6. `thread` - 37 edges
 7. `Transaction` - 36 edges
-8. `ComputeReputationCandidate()` - 34 edges
+8. `ComputeReputationCandidate()` - 36 edges
 9. `getEnv()` - 27 edges
 10. `future` - 27 edges
 
@@ -680,27 +676,27 @@
   platform/consensus/ordering/hs/algorithm/hs.cpp → common/utils/utils.cpp
 - `AsyncCommit()` --calls--> `GetCurrentTime()`  [INFERRED]
   platform/consensus/ordering/slot_hs1/algorithm/slot_hs1.cpp → common/utils/utils.cpp
-- `TimeoutLeft()` --calls--> `GetCurrentTime()`  [INFERRED]
-  platform/consensus/ordering/zzy/framework/performance_manager.cpp → common/utils/utils.cpp
+- `get()` --calls--> `GenerateResDBConfig()`  [INFERRED]
+  api/pybind_kv_service.cpp → platform/config/resdb_config_utils.cpp
 
 ## Import Cycles
 - 1-file cycle: `ecosystem/sdk/rust-sdk/src/blocks.rs -> ecosystem/sdk/rust-sdk/src/blocks.rs`
 - 1-file cycle: `ecosystem/sdk/rust-sdk/src/resdb.rs -> ecosystem/sdk/rust-sdk/src/resdb.rs`
 - 1-file cycle: `ecosystem/sdk/rust-sdk/src/transaction.rs -> ecosystem/sdk/rust-sdk/src/transaction.rs`
 
-## Communities (716 total, 232 thin omitted)
+## Communities (712 total, 230 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.10
-Nodes (30): AsyncConsensusVerifier(), AsyncVerifierQueueCapacityFromEnv(), AsyncVerifierWorkerCountFromEnv(), DrainVerified(), PositiveSizeFromEnv(), PushVerified(), Stop(), Submit() (+22 more)
+Cohesion: 0.11
+Nodes (28): AsyncConsensusVerifier(), AsyncVerifierQueueCapacityFromEnv(), AsyncVerifierWorkerCountFromEnv(), DrainVerified(), PositiveSizeFromEnv(), PushVerified(), Stop(), Submit() (+20 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.05
-Nodes (28): AssetsEndpoint, BlocksEndpoint, MetadataEndpoint, NamespacedDriver, OutputsEndpoint, ! :class:`~resdb_driver.driver.AssetsEndpoint`:         Exposes functionalities, ! :class:`~resdb_driver.driver.MetadataEndpoint`:         Exposes functionalitie, ! :class:`~resdb_driver.driver.BlocksEndpoint`:         Exposes functionalities (+20 more)
+Cohesion: 0.04
+Nodes (36): AssetsEndpoint, BlocksEndpoint, MetadataEndpoint, NamespacedDriver, OutputsEndpoint, ! :class:`~resdb_driver.driver.AssetsEndpoint`:         Exposes functionalities, ! :class:`~resdb_driver.driver.MetadataEndpoint`:         Exposes functionalitie, ! :class:`~resdb_driver.driver.BlocksEndpoint`:         Exposes functionalities (+28 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.05
-Nodes (56): object, AmountError, AssetIdMismatch, BadRequest, ConfigurationError, CyclicBlockchainError, DatabaseAlreadyExists, DatabaseDoesNotExist (+48 more)
+Cohesion: 0.04
+Nodes (62): object, AmountError, AssetIdMismatch, BadRequest, ConfigurationError, CyclicBlockchainError, DatabaseAlreadyExists, DatabaseDoesNotExist (+54 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.04
@@ -712,7 +708,7 @@ Nodes (24): Asset, Condition, ConditionDetails, GlobalContext, GlobalProvider(),
 
 ### Community 5 - "Community 5"
 Cohesion: 0.04
-Nodes (49): AllGoodWindowKeepsWeightsStable, AvailableSignerBitmapLimitsVoterRecoveryOpportunities, BonusCanHelpBelowMeanHonestValidatorCatchUp, BonusDoesNotDriftBalancedAllGoodWeights, BroadAvailableSignerBitmapStillDetectsRepeatedSlowVoter, CandidateDigestChangesWhenPenaltyRootChanges, CandidateDigestIgnoresAuditRoots, CandidateDigestIsDeterministic (+41 more)
+Nodes (54): AllGoodWindowKeepsWeightsStable, AvailableSignerBitmapLimitsVoterRecoveryOpportunities, BonusCanHelpBelowMeanHonestValidatorCatchUp, BonusDoesNotDriftBalancedAllGoodWeights, BroadAvailableSignerBitmapDoesNotPunishUnselectedTimelyVoter, CandidateDigestChangesWhenPenaltyRootChanges, CandidateDigestIgnoresAuditRoots, CandidateDigestIsDeterministic (+46 more)
 
 ### Community 6 - "Community 6"
 Cohesion: 0.08
@@ -723,12 +719,12 @@ Cohesion: 0.06
 Nodes (22): ! Transforms the object to a Python dictionary.         @return The Transaction, ! Takes a Transaction dictionary and removes all signatures.         @param (dic, ! Get the asset id from a list of :class:`~.Transactions`.         This is usefu, ! Validate the transaction ID of a transaction         @param tx_body (dict): Th, ! Transforms a Python dictionary to a Transaction object.         @param tx_body, ! Helper method that reconstructs a transaction dict that was returned         f, ! For the given `tx` based on the `operation` key return its implementation clas, ! A Transaction is used to create and transfer assets.     Note:         For add (+14 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.06
-Nodes (48): AmountError, AssetIdMismatch, ConfigurationError, CyclicBlockchainError, DatabaseDoesNotExist, DoubleSpend, DuplicateTransaction, InputDoesNotExist (+40 more)
+Cohesion: 0.08
+Nodes (34): AmountError, AssetIdMismatch, DoubleSpend, DuplicateTransaction, InputDoesNotExist, InvalidHash, InvalidPowerChange, InvalidProposer (+26 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.09
-Nodes (46): BetterHighQc(), BuildBitmap(), CertificateVerifier(), DigestProto(), ProposalSignaturePayload(), QuorumWeightForView(), SameQcForTimeout(), SetError() (+38 more)
+Cohesion: 0.21
+Nodes (24): BetterHighQc(), BuildBitmap(), DigestProto(), ProposalSignaturePayload(), QuorumWeightForView(), SameQcForTimeout(), SetError(), TimeoutVotePayload() (+16 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.06
@@ -751,12 +747,12 @@ Cohesion: 0.09
 Nodes (38): AddExecuteMessage(), AddFuture(), AddNewData(), ClearPromise(), Commit(), Execute(), ExecuteMessage(), ExecuteMessageOutOfOrder() (+30 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.11
-Nodes (32): NewViewMessage, AddComplaintTimer(), AddRequest(), ChangeStatue(), CountViewChangeTimeout(), EraseViewChangeTimeout(), GetPrepareMsg(), IsInViewChange() (+24 more)
+Cohesion: 0.08
+Nodes (39): NewViewMessage, AddComplaintTimer(), AddRequest(), ChangeStatue(), CountViewChangeTimeout(), EraseViewChangeTimeout(), GetPrepareMsg(), IsInViewChange() (+31 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.05
-Nodes (43): Any, Exception, ! Fulfills the given transaction.          @param transaction (dict): The transa, MissingPrivateKeyError, Base exception for all resdb exceptions., Base exception for all Resdb exceptions., Raised if a private key is missing., ResdbException (+35 more)
+Cohesion: 0.07
+Nodes (30): Any, Exception, ! Fulfills the given transaction.          @param transaction (dict): The transa, MissingPrivateKeyError, Base exception for all resdb exceptions., Base exception for all Resdb exceptions., Raised if a private key is missing., ResdbException (+22 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.05
@@ -807,8 +803,8 @@ Cohesion: 0.12
 Nodes (27): all_bad_nodes_below_threshold(), bad_node_count_from_env_or_config(), bounded_warmup_ratio(), cal_lat(), cal_lat2(), cal_lat3(), cal_lat4(), cal_named_latency() (+19 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.11
-Nodes (13): future, resdb(), resdb(), namespace, resdb(), namespace, resdb(), namespace (+5 more)
+Cohesion: 0.08
+Nodes (17): TEST(), future, LocalExecutorTest, resdb(), resdb(), namespace, resdb(), namespace (+9 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.07
@@ -819,12 +815,12 @@ Cohesion: 0.06
 Nodes (30): "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY, `compileContract`, Configuration, `createAccount`, `deployContract`, distributed with this work for additional information, `executeContract`, GraphQL API (+22 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.13
-Nodes (32): AdvanceToViewByTimeout(), CalculateQuorumWeight(), NormalizeReplicaWeights(), RecordVote(), SignerBitmapMatchesSignatures(), VerifyEnvelopeForEvidence(), VerifyLeader(), VerifyLeaderContext() (+24 more)
+Cohesion: 0.15
+Nodes (29): AdvanceToViewByTimeout(), RecordVote(), SignerBitmapMatchesSignatures(), VerifyEnvelopeForEvidence(), VerifyLeader(), VerifyLeaderContext(), VerifyProposalSignature(), VerifyQcForEvidence() (+21 more)
 
 ### Community 35 - "Community 35"
-Cohesion: 0.22
-Nodes (9): AsyncIOEventEmitter, MongoConfig, ResilientPythonCache, MongoConfig, ResilientDBConfig, Base exception for ResilientPythonCache., ResilientPythonCacheError, ResilientDBConfig (+1 more)
+Cohesion: 0.15
+Nodes (13): AsyncIOEventEmitter, MongoConfig, resdb(), resdb(), namespace, namespace, ResilientPythonCache, MongoConfig (+5 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.09
@@ -923,8 +919,8 @@ Cohesion: 0.07
 Nodes (26): 1. Syncing Data from ResilientDB to MongoDB, API Documentation, "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY, Class `ResilientPythonCache`, Configuration, distributed with this work for additional information, Features, http://www.apache.org/licenses/LICENSE-2.0 (+18 more)
 
 ### Community 60 - "Community 60"
-Cohesion: 0.19
-Nodes (20): CertificateKeyInfo, CertificateInfo, KeyInfo, Message, SignatureInfo, StatusOr, string, AddPublicKey() (+12 more)
+Cohesion: 0.16
+Nodes (23): CertificateKeyInfo, CertificateInfo, CertificateKey, KeyInfo, Message, SignatureInfo, StatusOr, string (+15 more)
 
 ### Community 61 - "Community 61"
 Cohesion: 0.11
@@ -959,12 +955,12 @@ Cohesion: 0.12
 Nodes (22): Action, ActionType, actionTypes, addToRemoveQueue(), dispatch(), genId(), listeners, memoryState (+14 more)
 
 ### Community 69 - "Community 69"
-Cohesion: 0.05
-Nodes (39): NewRequest, NoPrimary, NoSignature, NotContesxt, CommitmentTest, checkpoint_manager_, commitment_, config_ (+31 more)
+Cohesion: 0.09
+Nodes (22): CommitmentTest, checkpoint_manager_, commitment_, config_, data_, global_stats_, message_manager_, replica_communicator_ (+14 more)
 
 ### Community 70 - "Community 70"
-Cohesion: 0.24
-Nodes (22): ReputationCandidate, ReputationConfig, set, vector, ComputeCoreOnlyReputation(), ComputeReputationCandidate(), ClampWeight(), DecodeSignerBitmap() (+14 more)
+Cohesion: 0.15
+Nodes (33): ReputationCandidate, ReputationConfig, ReputationWindowInput, StrongFaultRecord, ValidatorReputation, vector, ReputationConfig, set (+25 more)
 
 ### Community 71 - "Community 71"
 Cohesion: 0.08
@@ -987,8 +983,8 @@ Cohesion: 0.14
 Nodes (22): Code, AccountState, Address, Storage, string, uint256_t, Storage, uint256_t (+14 more)
 
 ### Community 76 - "Community 76"
-Cohesion: 0.12
-Nodes (26): BatchProposeMsg(), DoBatch(), GenerateUserRequest(), PerformanceManager(), SetDataFunc(), StartEval(), TrackPendingResponse(), UntrackPendingResponse() (+18 more)
+Cohesion: 0.14
+Nodes (22): BatchProposeMsg(), DoBatch(), GenerateUserRequest(), SetDataFunc(), StartEval(), TrackPendingResponse(), UntrackPendingResponse(), BatchUserResponse (+14 more)
 
 ### Community 77 - "Community 77"
 Cohesion: 0.08
@@ -1008,7 +1004,7 @@ Nodes (22): AddProposal(), AddQC(), FetchProposal(), GenerateFakeProposal(), Gen
 
 ### Community 81 - "Community 81"
 Cohesion: 0.07
-Nodes (46): CertifiedSignerEvidenceRecord, optional, ReputationCandidate, ReputationCandidateKey, ReputationRuntimeOptions, ReputationWeightSnapshot, set, string (+38 more)
+Nodes (48): CertifiedSignerEvidenceRecord, optional, ReputationCandidate, ReputationCandidateKey, ReputationRuntimeOptions, ReputationWeightSnapshot, set, string (+40 more)
 
 ### Community 82 - "Community 82"
 Cohesion: 0.08
@@ -1023,16 +1019,16 @@ Cohesion: 0.08
 Nodes (23): dependencies, bootstrap, bootstrap-vue-3, lottie-web, @popperjs/core, resvault-sdk, uuid, vue (+15 more)
 
 ### Community 85 - "Community 85"
-Cohesion: 0.11
-Nodes (30): ActiveLeaderVersion(), BuildLeaderWeightRoot(), BuildRecord(), BuildSmoothWeightedRoundRobin(), ContextHashForView(), IsExactRoundRobinProfile(), LeaderForView(), LeaderSelectionSchedule() (+22 more)
+Cohesion: 0.09
+Nodes (34): ActiveLeaderVersion(), BuildLeaderWeightRoot(), BuildRecord(), BuildSmoothWeightedRoundRobin(), ContextHashForView(), IsExactRoundRobinProfile(), LeaderForView(), LeaderSelectionSchedule() (+26 more)
 
 ### Community 86 - "Community 86"
 Cohesion: 0.13
 Nodes (18): ContractTransactionManager, DeployFail, Account, Contract, DeployInfo, ExecContract, json, NoFunc (+10 more)
 
 ### Community 87 - "Community 87"
-Cohesion: 0.14
-Nodes (22): AddPkg(), Broadcast(), CheckReady(), IsTimeout(), Notify(), PkgDone(), Ready(), ReceiveCommitACK() (+14 more)
+Cohesion: 0.13
+Nodes (23): AddPkg(), Broadcast(), CheckReady(), IsTimeout(), Notify(), PkgDone(), Ready(), ReceiveCommitACK() (+15 more)
 
 ### Community 88 - "Community 88"
 Cohesion: 0.09
@@ -1060,7 +1056,7 @@ Nodes (22): AcceptsWeightedQuorumBelowClassicCount, AdvanceToViewByTimeoutMovesT
 
 ### Community 94 - "Community 94"
 Cohesion: 0.15
-Nodes (22): QcFor(), SignatureFrom(), TEST(), TimeoutCertFor(), TimeoutVoteFor(), VoteFor(), WaitForEvents(), BuildSignerBitmap() (+14 more)
+Nodes (21): QcFor(), SignatureFrom(), TEST(), TimeoutCertFor(), TimeoutVoteFor(), VoteFor(), WaitForEvents(), AsyncConsensusVerifier (+13 more)
 
 ### Community 95 - "Community 95"
 Cohesion: 0.09
@@ -1155,8 +1151,8 @@ Cohesion: 0.19
 Nodes (17): AddNewClient(), AddNewReplica(), ConsensusManager(), GetAllReplicas(), GetBroadCastClient(), GetClientReplicas(), GetPrimary(), GetReplicaClient() (+9 more)
 
 ### Community 118 - "Community 118"
-Cohesion: 0.14
-Nodes (32): ActivateReady(), AddLocalCandidate(), BitmapSigners(), BuildBitmap(), CandidateLeaderWeights(), CandidateWeights(), DigestForCandidateParts(), HandleCandidate() (+24 more)
+Cohesion: 0.07
+Nodes (54): ActivatesCertifiedWeightsAtBoundary, AbsorbPendingVotesLocked(), ActivateReady(), AddLocalCandidate(), BitmapSigners(), BuildBitmap(), CandidateLeaderWeights(), CandidateWeights() (+46 more)
 
 ### Community 119 - "Community 119"
 Cohesion: 0.10
@@ -1175,8 +1171,8 @@ Cohesion: 0.10
 Nodes (19): "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY, distributed with this work for additional information, entrypoint, http://www.apache.org/licenses/LICENSE-2.0, KIND, either express or implied.  See the License for the, "License"); you may not use this file except in compliance, Licensed to the Apache Software Foundation (ASF) under one, or more contributor license agreements.  See the NOTICE file (+11 more)
 
 ### Community 123 - "Community 123"
-Cohesion: 0.09
-Nodes (23): Connection, json, HttpResponse, Connection, ! A Connection object to make HTTP requests to a particular node., ! Initializes a :class:`~resdb_driver.connection.Connection`         instance., ! Performs an HTTP request with the given parameters. Implements exponential bac, Raised if the request algorithm times out. (+15 more)
+Cohesion: 0.17
+Nodes (8): GatewayTimeout, NotFoundError, Base exception for transport related errors.      This is mainly for cases where, Exception for HTTP 404 errors., Exception for HTTP 503 errors., Exception for HTTP 503 errors., ServiceUnavailable, TransportError
 
 ### Community 124 - "Community 124"
 Cohesion: 0.13
@@ -1207,20 +1203,20 @@ Cohesion: 0.20
 Nodes (17): AsyncCommit(), AsyncSend(), CommitProposal(), GenerateCertificate(), HotStuff2(), IsLeader(), NextLeader(), Ready() (+9 more)
 
 ### Community 131 - "Community 131"
-Cohesion: 0.16
-Nodes (24): ActivateReadyWeightUpdates(), AsyncWeightUpdates(), BroadcastCandidateWeightUpdate(), BroadcastWeightUpdateCert(), BroadcastWeightUpdateVote(), DrainCompletedWeightCandidates(), EnvFlagEnabled(), EnvListContainsId() (+16 more)
+Cohesion: 0.08
+Nodes (72): ActivateReadyWeightUpdates(), ApplyTimeoutCertLocked(), AsyncCommit(), AsyncSend(), AsyncTimeout(), AsyncVerifiedEvents(), AsyncWeightUpdates(), BroadcastCandidateWeightUpdate() (+64 more)
 
 ### Community 132 - "Community 132"
 Cohesion: 0.20
 Nodes (17): AsyncCommit(), AsyncSend(), CommitProposal(), GenerateCertificate(), IsLeader(), NextLeader(), Ready(), ReceiveCertificate() (+9 more)
 
 ### Community 133 - "Community 133"
-Cohesion: 0.18
-Nodes (21): map, optional, pair, Storage, string, unique_ptr, vector, LevelDBInfo (+13 more)
+Cohesion: 0.25
+Nodes (16): map, pair, string, vector, CreateDB(), GetAllItems(), GetAllValues(), GetHistory() (+8 more)
 
 ### Community 134 - "Community 134"
-Cohesion: 0.22
-Nodes (10): Storage, unique_ptr, main(), NewStorage(), ShowUsage(), ResConfigData, Storage, string (+2 more)
+Cohesion: 0.13
+Nodes (15): optional, Storage, unique_ptr, Storage, unique_ptr, main(), NewStorage(), ShowUsage() (+7 more)
 
 ### Community 135 - "Community 135"
 Cohesion: 0.25
@@ -1311,8 +1307,8 @@ Cohesion: 0.13
 Nodes (12): error_code, AsyncAcceptor(), OnAccept(), Session::GetSocket(), Session::Session(), StartAccept(), CallBack, io_service (+4 more)
 
 ### Community 157 - "Community 157"
-Cohesion: 0.21
-Nodes (13): HotStuff1PerformanceManager, CommitMsg(), CommitMsgInternal(), Consensus(), GetPerformanceManager(), ProcessCustomConsensus(), ProcessNewTransaction(), Message (+5 more)
+Cohesion: 0.17
+Nodes (16): Init(), HotStuff1PerformanceManager, GetSignatureVerifier(), CommitMsg(), CommitMsgInternal(), Consensus(), GetPerformanceManager(), ProcessCustomConsensus() (+8 more)
 
 ### Community 158 - "Community 158"
 Cohesion: 0.12
@@ -1323,8 +1319,8 @@ Cohesion: 0.12
 Nodes (16): devDependencies, autoprefixer, clsx, prettier, prettier-plugin-svelte, svelte, svelte-check, @sveltejs/kit (+8 more)
 
 ### Community 160 - "Community 160"
-Cohesion: 0.21
-Nodes (16): InvalidQcProposalEvidence, InvalidTcProposalEvidence, SignedProposalEvidence, SignedTimeoutVoteEvidence, SignedVoteEvidence, SignedWeightUpdateVoteEvidence, StrongFaultRecord, vector (+8 more)
+Cohesion: 0.19
+Nodes (17): InvalidQcProposalEvidence, InvalidTcProposalEvidence, SignedProposalEvidence, SignedTimeoutVoteEvidence, SignedVoteEvidence, SignedWeightUpdateVoteEvidence, StrongFaultRecord, vector (+9 more)
 
 ### Community 161 - "Community 161"
 Cohesion: 0.14
@@ -1339,7 +1335,7 @@ Cohesion: 0.20
 Nodes (13): addAddress(), compileContract(), compiledContractsDir, createAccount(), deployContract(), executeContract(), handleExecFile(), logDir (+5 more)
 
 ### Community 164 - "Community 164"
-Cohesion: 0.13
+Cohesion: 0.14
 Nodes (15): GetValue, SetValue, SetValueWithVersion, Storage, string, unique_ptr, GetAllValueWithVersion, GetEmptyValueWithVersion (+7 more)
 
 ### Community 165 - "Community 165"
@@ -1352,7 +1348,7 @@ Nodes (8): KeyType, Get(), LRUCache<int, int>, LRUCache<int, std::string>, LRUCa
 
 ### Community 167 - "Community 167"
 Cohesion: 0.23
-Nodes (14): AddExecuted(), AddProposed(), CheckAndAddExecuted(), CheckAndAddProposed(), CheckIfExecuted(), CheckIfProposed(), DuplicateManager(), EraseExecuted() (+6 more)
+Nodes (13): AddExecuted(), AddProposed(), CheckAndAddExecuted(), CheckAndAddProposed(), CheckIfExecuted(), CheckIfProposed(), DuplicateManager(), EraseExecuted() (+5 more)
 
 ### Community 168 - "Community 168"
 Cohesion: 0.39
@@ -1379,8 +1375,8 @@ Cohesion: 0.19
 Nodes (15): BatchUserResponse, CommitMsg(), CommitMsgInternal(), Consensus(), GetPerformanceManager(), ProcessCustomConsensus(), ProcessNewTransaction(), ResponseMsg() (+7 more)
 
 ### Community 174 - "Community 174"
-Cohesion: 0.20
-Nodes (17): AsyncCommit(), AsyncSend(), CommitProposal(), GenerateCertificate(), HotStuff(), IsLeader(), NextLeader(), Ready() (+9 more)
+Cohesion: 0.09
+Nodes (23): Connection, json, HttpResponse, Connection, ! A Connection object to make HTTP requests to a particular node., ! Initializes a :class:`~resdb_driver.connection.Connection`         instance., ! Performs an HTTP request with the given parameters. Implements exponential bac, Raised if the request algorithm times out. (+15 more)
 
 ### Community 175 - "Community 175"
 Cohesion: 0.12
@@ -1407,8 +1403,8 @@ Cohesion: 0.16
 Nodes (12): AddValueAndCheckCache, BlockCacheEnabled, CacheEvictionPolicy, string, unique_ptr, ResLevelDB, LevelDBTest, path_ (+4 more)
 
 ### Community 181 - "Community 181"
-Cohesion: 0.19
-Nodes (14): ShouldTimeoutView(), HighQc(), SignatureFrom(), TEST(), VoteFor(), CreatesSignedLocalTimeoutVote, FormsCertAtWeightedQuorumAndIgnoresDuplicate, QC (+6 more)
+Cohesion: 0.21
+Nodes (13): HighQc(), SignatureFrom(), TEST(), VoteFor(), CreatesSignedLocalTimeoutVote, FormsCertAtWeightedQuorumAndIgnoresDuplicate, QC, SignatureInfo (+5 more)
 
 ### Community 182 - "Community 182"
 Cohesion: 0.15
@@ -1427,20 +1423,20 @@ Cohesion: 0.26
 Nodes (14): Config, StatusOr, string, UTXO, UTXOOut, vector, Wallet, AddCoin() (+6 more)
 
 ### Community 186 - "Community 186"
-Cohesion: 0.09
-Nodes (36): DefaultLeaderForView(), BenchmarkRetryTimeoutDoesNotUseConsensusTimeoutByDefault, DynamicRouteFallsBackToObservedPrimaryWithoutPrediction, DynamicRouteIgnoresInvalidPredictionAndObservedPrimary, DynamicRoutePrefersPredictedPrimary, DynamicRoutingDefaultsOffForClassicCore, BenchmarkDynamicRoutingEnabled(), BenchmarkRetryEnabled() (+28 more)
+Cohesion: 0.21
+Nodes (16): BenchmarkDynamicRoutingEnabled(), BenchmarkRetryEnabled(), BenchmarkRetryTimeoutUs(), BenchmarkRetryTimeoutUsForEnv(), BenchmarkRouteForObservedPrimaries(), EnvFlagEnabled(), EnvIntOrDefault(), ExpireTimedOutPendingResponses() (+8 more)
 
 ### Community 187 - "Community 187"
-Cohesion: 0.17
-Nodes (13): SlotHotStuff1PerformanceManager(), BatchUserResponse, CollectorResultCode, Context, AddResponseMsg(), ProcessResponseMsg(), SendResponseToClient(), function (+5 more)
+Cohesion: 0.29
+Nodes (6): AsyncReplicaClientTest, MultiSendMessage, TEST(), SendMessage, Reconnect, SendLargeMessage
 
 ### Community 188 - "Community 188"
 Cohesion: 0.13
 Nodes (14): "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY, distributed with this work for additional information, http://www.apache.org/licenses/LICENSE-2.0, KIND, either express or implied.  See the License for the, "License"); you may not use this file except in compliance, Licensed to the Apache Software Foundation (ASF) under one, or more contributor license agreements.  See the NOTICE file, regarding copyright ownership.  The ASF licenses this file (+6 more)
 
 ### Community 189 - "Community 189"
-Cohesion: 0.13
-Nodes (18): OutcomeClass, ReputationConfig, ReputationWindowInput, string, StrongFaultRecord, vector, CoreEvidenceEvent, artifact_digest (+10 more)
+Cohesion: 0.18
+Nodes (11): OutcomeClass, string, CoreEvidenceEvent, artifact_digest, available_signer_bitmap, leader_id, outcome_class, signer_bitmap (+3 more)
 
 ### Community 190 - "Community 190"
 Cohesion: 0.21
@@ -1483,8 +1479,8 @@ Cohesion: 0.29
 Nodes (13): Items, ResDBConfig, string, unique_ptr, ValueInfo, Get(), GetAllValues(), GetKeyHistory() (+5 more)
 
 ### Community 200 - "Community 200"
-Cohesion: 0.14
-Nodes (8): _fulfillment_to_details(), Input, Transforms the object to a Python dictionary.              Note:, Encode a fulfillment as a details dictionary      Args:         fulfillment: Cry, Transforms the object to a Python dictionary.              Note:, A Input is used to spend assets locked by an Output.      Wraps around a Crypto-, Converts a Transaction's outputs to spendable inputs.              Note:, Create an instance of an :class:`~.Input`.              Args:                 fu
+Cohesion: 0.12
+Nodes (9): _fulfillment_to_details(), Output, Transforms the object to a Python dictionary.              Note:, Encode a fulfillment as a details dictionary      Args:         fulfillment: Cry, An Output is used to lock an asset.      Wraps around a Crypto-condition Conditi, Create an instance of a :class:`~.Output`.              Args:                 fu, Transforms the object to a Python dictionary.              Note:, Generates a Output from a specifically formed tuple or list.              Note: (+1 more)
 
 ### Community 201 - "Community 201"
 Cohesion: 0.14
@@ -1495,16 +1491,16 @@ Cohesion: 0.21
 Nodes (13): CommitMsg(), CommitMsgInternal(), Consensus(), GetPerformanceManager(), ProcessCustomConsensus(), ProcessNewTransaction(), HotStuffPerformanceManager, Message (+5 more)
 
 ### Community 203 - "Community 203"
-Cohesion: 0.17
-Nodes (16): Init(), GetSignatureVerifier(), CommitMsg(), CommitMsgInternal(), Consensus(), GetPerformanceManager(), ProcessCustomConsensus(), ProcessNewTransaction() (+8 more)
+Cohesion: 0.21
+Nodes (13): CommitMsg(), CommitMsgInternal(), Consensus(), GetPerformanceManager(), ProcessCustomConsensus(), ProcessNewTransaction(), Message, Request (+5 more)
 
 ### Community 204 - "Community 204"
 Cohesion: 0.21
 Nodes (8): applyStylesToModal(), createOrUpdateLoginModal(), createOrUpdateModal(), generateLoginModalContent(), generateModalContent(), handleCommitOperation(), handleCustomOperation(), handleLoginOperation()
 
 ### Community 205 - "Community 205"
-Cohesion: 0.22
-Nodes (13): ActivatesCertifiedWeightsAtBoundary, Candidate(), CandidateMessage(), NoOpCandidate(), SignatureFor(), TEST(), FormsCertAfterOldWeightQuorumVotes, IgnoresNoOpLocalCandidate (+5 more)
+Cohesion: 0.20
+Nodes (17): AsyncCommit(), AsyncSend(), CommitProposal(), GenerateCertificate(), HotStuff(), IsLeader(), NextLeader(), Ready() (+9 more)
 
 ### Community 206 - "Community 206"
 Cohesion: 0.25
@@ -1519,8 +1515,8 @@ Cohesion: 0.14
 Nodes (9): { badgen }, badgeOpts, core, countThrottled, { glob }, ignore, path, patterns (+1 more)
 
 ### Community 209 - "Community 209"
-Cohesion: 0.15
-Nodes (17): DedupesAndSortsEquivalentEvidence, FinalizesOnlyAfterWatermarkReachesWindowEnd, FindLocalCandidateReturnsCompletedCandidate, CertifiedSignerEvidenceRecord, initializer_list, QueueOverflowDropsWithoutBlocking, ReputationCandidate, ReputationPluginRuntime (+9 more)
+Cohesion: 0.13
+Nodes (22): DedupesAndSortsEquivalentEvidence, DoesNotEmitStaleOldVersionAfterActivation, EmitsOneCandidatePerWeightVersion, FinalizesOnlyAfterWatermarkReachesWindowEnd, FindLocalCandidateReturnsCompletedCandidate, IgnoresEvidenceForClosedWindows, MinActivationLeadOverridesShortWindowDelay, CertifiedSignerEvidenceRecord (+14 more)
 
 ### Community 210 - "Community 210"
 Cohesion: 0.36
@@ -1531,8 +1527,8 @@ Cohesion: 0.18
 Nodes (12): optional, Storage, unique_ptr, ChainState, ResConfigData, string, unique_ptr, main() (+4 more)
 
 ### Community 212 - "Community 212"
-Cohesion: 0.29
-Nodes (7): CommitTransaction, GetBlockRange, GetTransaction, CrowServiceTest, app, TEST_F(), SimpleApp
+Cohesion: 0.17
+Nodes (11): CommitTransaction, SignatureVerifyTest, GetBlockRange, GetTransaction, CrowServiceTest, app, TEST_F(), ParseFromJson (+3 more)
 
 ### Community 213 - "Community 213"
 Cohesion: 0.17
@@ -1603,8 +1599,8 @@ Cohesion: 0.21
 Nodes (9): CalculateRIPEMD160, CalculateSHA256, string, SignatureVerifyTest, GenAddr(), CalculateRIPEMD160Hash(), CalculateSHA256Hash(), TEST() (+1 more)
 
 ### Community 230 - "Community 230"
-Cohesion: 0.20
-Nodes (11): CheckPoint2, GetStableCheckpoint(), CheckPoint, ResConfigData, string, vector, ReadLog, ReadLog_FlushOnce (+3 more)
+Cohesion: 0.12
+Nodes (18): CheckPoint2, MockCheckPoint, GetStableCheckpoint(), CheckPoint, ResConfigData, ResDBConfig, string, SystemInfo (+10 more)
 
 ### Community 231 - "Community 231"
 Cohesion: 0.23
@@ -1643,8 +1639,8 @@ Cohesion: 0.27
 Nodes (9): arrayBufferToBase64(), base64ToArrayBuffer(), base64ToUint8Array(), decryptData(), encryptData(), faviconUrls, getBaseDomain(), uint8ArrayToBase64() (+1 more)
 
 ### Community 242 - "Community 242"
-Cohesion: 0.17
-Nodes (8): GatewayTimeout, NotFoundError, Base exception for transport related errors.      This is mainly for cases where, Exception for HTTP 404 errors., Exception for HTTP 503 errors., Exception for HTTP 503 errors., ServiceUnavailable, TransportError
+Cohesion: 0.18
+Nodes (13): CreateOperation, gen_timestamp(), _get_default_port(), normalize_node(), normalize_nodes(), normalize_url(), ! Normalizes the given node url, ! Normalizes given node as str or dict with headers (+5 more)
 
 ### Community 243 - "Community 243"
 Cohesion: 0.17
@@ -1820,23 +1816,23 @@ Nodes (9): scripts, build, check, check:watch, dev, format, lint, preview (+1 mo
 
 ### Community 287 - "Community 287"
 Cohesion: 0.10
-Nodes (14): resdb(), resdb(), condition_variable, namespace, namespace, namespace, namespace, namespace (+6 more)
+Nodes (13): resdb(), resdb(), condition_variable, namespace, namespace, namespace, namespace, namespace (+5 more)
 
 ### Community 288 - "Community 288"
 Cohesion: 0.28
 Nodes (4): Fulfills a previous Transaction's Output by signing Inputs.              Note:, Signs a single Input.              Note:                 This method works only, Signs a Ed25519Fulfillment.              Args:                 input_ (:class:`~, Signs a ThresholdSha256.              Args:                 input_ (:class:`~res
 
 ### Community 289 - "Community 289"
-Cohesion: 0.40
-Nodes (5): ProposalManager(), LeaderSelectionSchedule, shared_ptr, SignatureVerifier, WeightSchedule
+Cohesion: 0.22
+Nodes (9): BuildSignerBitmap(), CalculateQuorumWeight(), NormalizeReplicaWeights(), ProposalManager(), LeaderSelectionSchedule, shared_ptr, SignatureVerifier, vector (+1 more)
 
 ### Community 290 - "Community 290"
 Cohesion: 0.43
 Nodes (7): ObserveLock(), RecordVote(), SetError(), TimeoutJustifiesLockedProposal(), Proposal, QC, string
 
 ### Community 291 - "Community 291"
-Cohesion: 0.21
-Nodes (19): CertificateSigners(), CertificateWeight(), CommitProposal(), CurrentLeader(), GenerateCertificate(), LeaderForView(), MaybeFormQcLocked(), MaybeMakeQcEvidenceSnapshotLocked() (+11 more)
+Cohesion: 0.11
+Nodes (17): NewRequest, NoPrimary, NoSignature, NotContesxt, TEST_F(), ProcessCommitMsg, ProcessCommitMsgProposeDelay, ProcessCommitMsgWithDuplicated (+9 more)
 
 ### Community 292 - "Community 292"
 Cohesion: 0.32
@@ -1887,16 +1883,16 @@ Cohesion: 0.43
 Nodes (7): Address, string, AddressToHex(), CreateContractAddress(), CreateRandomAddress(), Exist(), HexToAddress()
 
 ### Community 304 - "Community 304"
-Cohesion: 0.21
-Nodes (17): ApplyTimeoutCertLocked(), AsyncSend(), AsyncTimeout(), AsyncVerifiedEvents(), BroadcastTimeoutCert(), BroadcastTimeoutVote(), CurrentView(), IsLeader() (+9 more)
+Cohesion: 0.16
+Nodes (18): QcFor(), SignatureFrom(), TEST(), TimeoutVoteFor(), VoteFor(), CertificateVerifierTest, MissingProposalSignatureIsInvalid, Certificate (+10 more)
 
 ### Community 305 - "Community 305"
 Cohesion: 0.29
 Nodes (6): LockFreeQueue, QueueItem, ResDBConfig, Acceptor(), IsRunning(), Run()
 
 ### Community 306 - "Community 306"
-Cohesion: 0.25
-Nodes (7): MockCheckPoint, ResDBConfig, SystemInfo, RecoveryTest, checkpoint_, config_, system_info_
+Cohesion: 0.22
+Nodes (10): Broadcast(), Commit(), IsSlowReplica(), ProtocolBase(), SendMessage(), Stop(), BroadcastCallFuncType, CommitFuncType (+2 more)
 
 ### Community 307 - "Community 307"
 Cohesion: 0.25
@@ -1948,7 +1944,7 @@ Nodes (6): GenerateReplicaInfo(), TEST(), GetReplicas, ReplicaInfo, string, Syst
 
 ### Community 323 - "Community 323"
 Cohesion: 0.29
-Nodes (6): TEST(), GeoCommitTest, GeoRequestFromLocalRegion, GeoRequestFromOtherRegion, NoCert, ReceiveSameGeoRequest
+Nodes (7): TEST_F(), SendCheckPoint, SendCheckPointOnce, SendCheckPointTwo, StableCkpt, StableCkptNotEnough, Votes
 
 ### Community 324 - "Community 324"
 Cohesion: 0.33
@@ -1991,8 +1987,8 @@ Cohesion: 0.43
 Nodes (6): convertPprofToMarkdown(), { exec }, execAsync, parsePprofText(), toMarkdown(), util
 
 ### Community 334 - "Community 334"
-Cohesion: 0.22
-Nodes (8): AddRequest, SignatureVerifyTest, ParseFromJson, CollectorPoolTest, TEST_F(), LockFreeCollectorPool, Test, TEST()
+Cohesion: 0.47
+Nodes (4): AddRequest, CollectorPoolTest, TEST_F(), LockFreeCollectorPool
 
 ### Community 335 - "Community 335"
 Cohesion: 0.33
@@ -2055,8 +2051,8 @@ Cohesion: 0.40
 Nodes (6): AddCommitData(), Notify(), ProcessCheckPoint(), Context, Request, unique_ptr
 
 ### Community 350 - "Community 350"
-Cohesion: 0.14
-Nodes (8): ! Exposes functionality of the ``'/transactions/'`` endpoint.      Attributes:, ! Prepares a transaction payload, ready to be fulfilled.          @param operati, ! Given an asset id, get its list of transactions (and         optionally filter, !         Note:             Not used in resdb         Submit a transaction to th, ! Note:         Not used in resdb         Submit a transaction to the Federation, ! Submit a transaction to the Federation with the mode `commit`.          @param, ! Retrieves the transaction with the given id.          @param txid (str): Id of, TransactionsEndpoint
+Cohesion: 0.17
+Nodes (13): SlotHotStuff1PerformanceManager(), BatchUserResponse, CollectorResultCode, Context, AddResponseMsg(), ProcessResponseMsg(), SendResponseToClient(), function (+5 more)
 
 ### Community 351 - "Community 351"
 Cohesion: 0.22
@@ -2079,24 +2075,24 @@ Cohesion: 0.60
 Nodes (4): main(), OldAPI(), option, ShowUsage()
 
 ### Community 356 - "Community 356"
-Cohesion: 0.60
-Nodes (4): string, GetRandomKey(), main(), ShowUsage()
+Cohesion: 0.14
+Nodes (14): ConfigurationError, CyclicBlockchainError, DatabaseDoesNotExist, KeypairMismatchException, OperationError, Base class for ResDB exceptions., Raised when there is a problem with server configuration, Raised when trying to delete the database but the db is not there (+6 more)
 
 ### Community 357 - "Community 357"
 Cohesion: 0.60
 Nodes (4): string, GetRandomKey(), main(), ShowUsage()
 
 ### Community 358 - "Community 358"
-Cohesion: 0.48
-Nodes (7): AsyncCommit(), MarkTransactionCommitted(), ReceiveTransaction(), ReceiveTransactionForView(), TakeTransactionsForView(), TransactionDedupKey(), Transaction
+Cohesion: 0.18
+Nodes (12): DefaultLeaderForView(), BenchmarkRetryTimeoutDoesNotUseConsensusTimeoutByDefault, DynamicRouteFallsBackToObservedPrimaryWithoutPrediction, DynamicRouteIgnoresInvalidPredictionAndObservedPrimary, DynamicRoutePrefersPredictedPrimary, DynamicRoutingDefaultsOffForClassicCore, BenchmarkRouteForView(), TEST() (+4 more)
 
 ### Community 359 - "Community 359"
 Cohesion: 0.60
 Nodes (4): string, GetRandomKey(), main(), ShowUsage()
 
 ### Community 360 - "Community 360"
-Cohesion: 0.60
-Nodes (4): string, GetRandomKey(), main(), ShowUsage()
+Cohesion: 0.25
+Nodes (8): RecordObservedPrimary(), UntrackPendingSendTime(), CollectorResultCode, AddResponseMsg(), SendMessage(), function, Request, unique_ptr
 
 ### Community 361 - "Community 361"
 Cohesion: 0.60
@@ -2131,8 +2127,8 @@ Cohesion: 0.40
 Nodes (4): NewRequest(), Request, Type, unique_ptr
 
 ### Community 369 - "Community 369"
-Cohesion: 0.67
-Nodes (3): CertificateKey, vector, GetAllPublicKeys()
+Cohesion: 0.29
+Nodes (6): TEST(), GeoCommitTest, GeoRequestFromLocalRegion, GeoRequestFromOtherRegion, NoCert, ReceiveSameGeoRequest
 
 ### Community 370 - "Community 370"
 Cohesion: 0.40
@@ -2143,12 +2139,12 @@ Cohesion: 0.50
 Nodes (4): GetDNSName(), GetTcpUrl(), NetworkType, string
 
 ### Community 372 - "Community 372"
-Cohesion: 0.29
-Nodes (7): TEST_F(), SendCheckPoint, SendCheckPointOnce, SendCheckPointTwo, StableCkpt, StableCkptNotEnough, Votes
+Cohesion: 0.60
+Nodes (4): string, GetRandomKey(), main(), ShowUsage()
 
 ### Community 373 - "Community 373"
-Cohesion: 0.12
-Nodes (9): _fulfillment_from_details(), Output, Transforms a Python dictionary to an Input object.              Note:, Load a fulfillment for a signing spec dictionary      Args:         data: tx.out, An Output is used to lock an asset.      Wraps around a Crypto-condition Conditi, Create an instance of a :class:`~.Output`.              Args:                 fu, Generates a Output from a specifically formed tuple or list.              Note:, Generates ThresholdSha256 conditions from a list of new owners.              Not (+1 more)
+Cohesion: 0.14
+Nodes (8): _fulfillment_from_details(), Input, Transforms a Python dictionary to an Input object.              Note:, Load a fulfillment for a signing spec dictionary      Args:         data: tx.out, Transforms a Python dictionary to an Output object.              Note:, A Input is used to spend assets locked by an Output.      Wraps around a Crypto-, Converts a Transaction's outputs to spendable inputs.              Note:, Create an instance of an :class:`~.Input`.              Args:                 fu
 
 ### Community 374 - "Community 374"
 Cohesion: 0.40
@@ -2227,8 +2223,8 @@ Cohesion: 0.50
 Nodes (3): AddUTXO, TEST(), UTXOExecutorTest
 
 ### Community 394 - "Community 394"
-Cohesion: 0.14
-Nodes (6): ! An object for unidirectional linking to a Transaction's Output.     Attributes, ! Create an instance of a :class:`~.TransactionLink`.         Note:, ! Transforms a Python dictionary to a TransactionLink object.              @para, ! Transforms the object to a Python dictionary.             @return The link as, ! Converts a Transaction's outputs to spendable inputs.         Note:, TransactionLink
+Cohesion: 0.60
+Nodes (4): string, GetRandomKey(), main(), ShowUsage()
 
 ### Community 395 - "Community 395"
 Cohesion: 0.50
@@ -2247,8 +2243,8 @@ Cohesion: 0.67
 Nodes (3): String, generate_keypair(), hash_data()
 
 ### Community 400 - "Community 400"
-Cohesion: 0.29
-Nodes (7): ViewChangeManager(), CheckPointManager, MessageManager, ReplicaCommunicator, ResDBConfig, SignatureVerifier, SystemInfo
+Cohesion: 0.50
+Nodes (4): CertificateVerifier(), shared_ptr, SignatureVerifier, WeightSchedule
 
 ### Community 401 - "Community 401"
 Cohesion: 0.50
@@ -2267,8 +2263,8 @@ Cohesion: 0.50
 Nodes (3): server, TEMPLATE_PATH, zzy_performance.sh script
 
 ### Community 405 - "Community 405"
-Cohesion: 0.22
-Nodes (10): Broadcast(), Commit(), IsSlowReplica(), ProtocolBase(), SendMessage(), Stop(), BroadcastCallFuncType, CommitFuncType (+2 more)
+Cohesion: 0.50
+Nodes (4): PerformanceManager(), ReplicaCommunicator, ResDBConfig, SignatureVerifier
 
 ### Community 406 - "Community 406"
 Cohesion: 0.83
@@ -2310,10 +2306,6 @@ Nodes (3): BroadCast(), SendMessage(), Message
 Cohesion: 0.16
 Nodes (6): Validates an Input against a given set of Outputs.              Note:, Transforms the object to a Python dictionary.              Returns:, Takes a Transaction dictionary and removes all signatures.              Args:, Validate the transaction ID of a transaction              Args:, Tuple of :obj:`dict`: Inputs of this transaction. Each input         is represen, Validates the Inputs in the Transaction against given         Outputs.
 
-### Community 708 - "Community 708"
-Cohesion: 0.29
-Nodes (6): AsyncReplicaClientTest, MultiSendMessage, TEST(), SendMessage, Reconnect, SendLargeMessage
-
 ### Community 709 - "Community 709"
 Cohesion: 0.33
 Nodes (5): TestProposalManager, LeaderSelectionSchedule, shared_ptr, SignatureVerifier, ProposalManager
@@ -2330,24 +2322,20 @@ Nodes (4): string, GetRandomKey(), main(), ShowUsage()
 Cohesion: 0.40
 Nodes (5): CheckPointManager(), Stop(), ReplicaCommunicator, ResDBConfig, SignatureVerifier
 
-### Community 713 - "Community 713"
-Cohesion: 0.40
-Nodes (4): TEST(), LocalExecutorTest, PrimaryNodeBroadcast, PushToQueue
-
 ## Knowledge Gaps
-- **3033 isolated node(s):** `PreToolUse`, `INSTALL.sh script`, `install_bazel.sh script`, `install_protobuf.sh script`, `INSTALL_MAC.sh script` (+3028 more)
+- **3049 isolated node(s):** `PreToolUse`, `INSTALL.sh script`, `install_bazel.sh script`, `install_protobuf.sh script`, `INSTALL_MAC.sh script` (+3044 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **232 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **230 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `future` connect `Community 31` to `Community 139`, `Community 16`, `Community 20`, `Community 277`, `Community 24`, `Community 285`, `Community 36`, `Community 50`, `Community 194`, `Community 323`, `Community 708`, `Community 69`, `Community 713`, `Community 74`, `Community 206`, `Community 100`, `Community 249`, `Community 230`, `Community 245`, `Community 121`?**
-  _High betweenness centrality (0.082) - this node is a cross-community bridge._
-- **Why does `Semaphore` connect `Community 35` to `Community 714`, `Community 715`, `Community 31`?**
-  _High betweenness centrality (0.069) - this node is a cross-community bridge._
+- **Why does `future` connect `Community 31` to `Community 139`, `Community 16`, `Community 20`, `Community 277`, `Community 24`, `Community 285`, `Community 36`, `Community 50`, `Community 187`, `Community 194`, `Community 69`, `Community 74`, `Community 206`, `Community 100`, `Community 249`, `Community 230`, `Community 369`, `Community 245`, `Community 121`?**
+  _High betweenness centrality (0.078) - this node is a cross-community bridge._
+- **Why does `Semaphore` connect `Community 35` to `Community 31`?**
+  _High betweenness centrality (0.067) - this node is a cross-community bridge._
 - **Why does `ResilientPythonCacheError` connect `Community 35` to `Community 18`?**
-  _High betweenness centrality (0.069) - this node is a cross-community bridge._
+  _High betweenness centrality (0.067) - this node is a cross-community bridge._
 - **Are the 10 inferred relationships involving `TEST()` (e.g. with `ComputeReputationCandidate()` and `ReputationCandidateDigest()`) actually correct?**
   _`TEST()` has 10 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 58 inferred relationships involving `GetCurrentTime()` (e.g. with `AsyncCommit()` and `ReceiveProposal()`) actually correct?**
@@ -2355,4 +2343,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Are the 12 inferred relationships involving `Transaction` (e.g. with `AmountError` and `AssetIdMismatch`) actually correct?**
   _`Transaction` has 12 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `PreToolUse`, `INSTALL.sh script`, `install_bazel.sh script` to the rest of the system?**
-  _3326 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _3342 weakly-connected nodes found - possible documentation gaps or missing edges._

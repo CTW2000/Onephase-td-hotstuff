@@ -43,6 +43,7 @@ class LeaderSelectionSchedule {
     int64_t eligible_min_weight = 10;
     std::vector<int> sequence;
     bool context_required = false;
+    std::string context_prefix;
   };
 
   const Record& RecordForViewLocked(int view) const;

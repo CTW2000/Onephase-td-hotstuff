@@ -121,8 +121,10 @@ bool WeightUpdateController::AddLocalCandidate(
     return false;
   }
   const CandidateKey key = KeyForCandidate(message);
+  const std::string digest = message.candidate_digest();
   local_candidates_[key] = message;
-  candidates_by_digest_[message.candidate_digest()] = std::move(message);
+  candidates_by_digest_[digest] = message;
+  AbsorbPendingVotesLocked(digest, candidates_by_digest_[digest]);
   return true;
 }
 
@@ -141,6 +143,8 @@ std::unique_ptr<WeightUpdateVote> WeightUpdateController::HandleCandidate(
     return nullptr;
   }
   candidates_by_digest_[candidate.candidate_digest()] = candidate;
+  AbsorbPendingVotesLocked(candidate.candidate_digest(),
+                           candidates_by_digest_[candidate.candidate_digest()]);
   std::unique_ptr<WeightUpdateVote> vote = std::make_unique<WeightUpdateVote>();
   vote->set_signer(node_id_);
   vote->set_old_weight_root(candidate.old_weight_root());
@@ -161,6 +165,10 @@ std::unique_ptr<WeightUpdateCert> WeightUpdateController::HandleVote(
   std::lock_guard<std::mutex> lk(mutex_);
   auto candidate_it = candidates_by_digest_.find(vote.candidate_digest());
   if (candidate_it == candidates_by_digest_.end()) {
+    if (vote.signer() >= 1 && vote.signer() <= total_replicas_ &&
+        !vote.candidate_digest().empty()) {
+      pending_votes_by_digest_[vote.candidate_digest()][vote.signer()] = vote;
+    }
     return nullptr;
   }
   if (!VerifyVoteForCandidate(vote, candidate_it->second)) {
@@ -179,6 +187,10 @@ bool WeightUpdateController::HandleCert(const WeightUpdateCert& cert) {
   if (!ValidateCandidateStructure(cert.candidate())) {
     return false;
   }
+  const std::string& digest = cert.candidate().candidate_digest();
+  if (accepted_cert_digests_.find(digest) != accepted_cert_digests_.end()) {
+    return false;
+  }
   std::map<int, WeightUpdateVote> votes;
   for (const WeightUpdateVote& vote : cert.votes()) {
     if (!VerifyVoteForCandidate(vote, cert.candidate())) {
@@ -186,7 +198,9 @@ bool WeightUpdateController::HandleCert(const WeightUpdateCert& cert) {
     }
     votes.emplace(vote.signer(), vote);
   }
-  if (VoteWeight(votes) < weight_schedule_->QuorumWeightForView(0)) {
+  if (VoteWeight(votes, cert.candidate().old_weight_version()) <
+      weight_schedule_->QuorumWeightForVersion(
+          cert.candidate().old_weight_version())) {
     return false;
   }
   std::vector<int> signers;
@@ -196,8 +210,9 @@ bool WeightUpdateController::HandleCert(const WeightUpdateCert& cert) {
   if (cert.signer_bitmap() != BuildBitmap(signers, total_replicas_)) {
     return false;
   }
-  pending_certs_[cert.candidate().candidate_digest()] = cert;
-  candidates_by_digest_[cert.candidate().candidate_digest()] = cert.candidate();
+  accepted_cert_digests_.insert(digest);
+  pending_certs_[digest] = cert;
+  candidates_by_digest_[digest] = cert.candidate();
   return true;
 }
 
@@ -206,7 +221,8 @@ bool WeightUpdateController::ActivateReady(int current_view) {
   bool activated = false;
   for (auto it = pending_certs_.begin(); it != pending_certs_.end();) {
     const CandidateWeightUpdate& candidate = it->second.candidate();
-    if (candidate.activation_view() >= current_view) {
+    const int effective_activation_view = candidate.activation_view();
+    if (effective_activation_view >= current_view) {
       ++it;
       continue;
     }
@@ -214,11 +230,11 @@ bool WeightUpdateController::ActivateReady(int current_view) {
     const std::vector<int64_t> weights = CandidateWeights(candidate);
     const std::vector<int64_t> leader_weights = CandidateLeaderWeights(candidate);
     if (weight_schedule_->ScheduleUpdate(
-            candidate.activation_view(), weights, candidate.old_weight_root(),
+            effective_activation_view, weights, candidate.old_weight_root(),
             candidate.old_weight_version()) &&
         (leader_schedule_ == nullptr ||
          leader_schedule_->ScheduleUpdate(
-             candidate.activation_view(), before_version + 1,
+             effective_activation_view, before_version + 1,
              candidate.leader_weight_root(), leader_weights,
              candidate.leader_eligible_min_weight())) &&
         weight_schedule_->ActivateUpTo(current_view) &&
@@ -232,6 +248,21 @@ bool WeightUpdateController::ActivateReady(int current_view) {
     }
   }
   return activated;
+}
+
+int WeightUpdateController::EarliestPendingActivationView() const {
+  std::lock_guard<std::mutex> lk(mutex_);
+  int earliest = 0;
+  for (const auto& entry : pending_certs_) {
+    const int activation_view = entry.second.candidate().activation_view();
+    if (activation_view <= 0) {
+      continue;
+    }
+    if (earliest == 0 || activation_view < earliest) {
+      earliest = activation_view;
+    }
+  }
+  return earliest;
 }
 
 WeightUpdateController::CandidateKey WeightUpdateController::KeyForCandidate(
@@ -340,18 +371,45 @@ std::vector<int64_t> WeightUpdateController::CandidateLeaderWeights(
 }
 
 int64_t WeightUpdateController::VoteWeight(
-    const std::map<int, WeightUpdateVote>& votes) const {
+    const std::map<int, WeightUpdateVote>& votes,
+    uint64_t old_weight_version) const {
+  if (weight_schedule_ == nullptr) {
+    return 0;
+  }
   int64_t total = 0;
   for (const auto& entry : votes) {
-    total += weight_schedule_->WeightForSigner(entry.first, 0);
+    total += weight_schedule_->WeightForSignerInVersion(entry.first,
+                                                        old_weight_version);
   }
   return total;
+}
+
+
+void WeightUpdateController::AbsorbPendingVotesLocked(
+    const std::string& digest, const CandidateWeightUpdate& candidate) {
+  auto pending_it = pending_votes_by_digest_.find(digest);
+  if (pending_it == pending_votes_by_digest_.end()) {
+    return;
+  }
+  VoteBucket& bucket = vote_buckets_[digest];
+  if (bucket.candidate.candidate_digest().empty()) {
+    bucket.candidate = candidate;
+  }
+  for (const auto& entry : pending_it->second) {
+    const WeightUpdateVote& vote = entry.second;
+    if (VerifyVoteForCandidate(vote, candidate)) {
+      bucket.votes.emplace(vote.signer(), vote);
+    }
+  }
+  pending_votes_by_digest_.erase(pending_it);
 }
 
 std::unique_ptr<WeightUpdateCert> WeightUpdateController::MaybeFormCert(
     VoteBucket* bucket) const {
   if (bucket == nullptr ||
-      VoteWeight(bucket->votes) < weight_schedule_->QuorumWeightForView(0)) {
+      VoteWeight(bucket->votes, bucket->candidate.old_weight_version()) <
+          weight_schedule_->QuorumWeightForVersion(
+              bucket->candidate.old_weight_version())) {
     return nullptr;
   }
   std::vector<int> signers;

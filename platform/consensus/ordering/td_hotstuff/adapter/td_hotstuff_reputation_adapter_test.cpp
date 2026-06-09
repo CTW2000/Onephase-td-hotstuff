@@ -85,7 +85,7 @@ TEST(TdHotstuffReputationAdapterTest, ConvertsQcSnapshotToCertifiedEvidence) {
 }
 
 TEST(TdHotstuffReputationAdapterTest,
-     CandidateUsesAvailableSignerBitmapForOpportunities) {
+     CandidateUsesAvailableSignerBitmapForTimelyParticipation) {
   TdHotstuffReputationAdapter adapter(/*local_node_id=*/1, /*total_replicas=*/4,
                                       TestOptions(/*window_size=*/1));
   adapter.Start();
@@ -103,7 +103,7 @@ TEST(TdHotstuffReputationAdapterTest,
   EXPECT_EQ(candidates[0].validators[0].opportunities, 1);
   EXPECT_EQ(candidates[0].validators[0].inclusions, 1);
   EXPECT_EQ(candidates[0].validators[3].opportunities, 1);
-  EXPECT_EQ(candidates[0].validators[3].inclusions, 0);
+  EXPECT_EQ(candidates[0].validators[3].inclusions, 1);
 }
 
 TEST(TdHotstuffReputationAdapterTest,

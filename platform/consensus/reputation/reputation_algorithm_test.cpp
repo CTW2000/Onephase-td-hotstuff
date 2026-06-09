@@ -300,6 +300,30 @@ TEST(ReputationAlgorithmTest, AllGoodWindowKeepsWeightsStable) {
   EXPECT_FALSE(candidate.candidate_digest_hex.empty());
 }
 
+TEST(ReputationAlgorithmTest, LeaderWeightsUseRoundRobinDeadbandForTinyAllEligibleDifferences) {
+  ReputationConfig config = TestConfig();
+  config.leader_eligible_min_weight = 10;
+  config.leader_weight_deadband = 5;
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, {}, {100, 100, 98, 97}, config, "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({100, 100, 98, 97}));
+  EXPECT_EQ(candidate.leader_weights,
+            std::vector<int64_t>({100, 100, 100, 100}));
+}
+
+TEST(ReputationAlgorithmTest, LeaderWeightsKeepBelowThresholdValidatorsIneligible) {
+  ReputationConfig config = TestConfig();
+  config.leader_eligible_min_weight = 10;
+  config.leader_weight_deadband = 100;
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, {}, {100, 100, 98, 8}, config, "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({100, 100, 98, 3}));
+  EXPECT_EQ(candidate.leader_weights, candidate.next_weights);
+}
 
 TEST(ReputationAlgorithmTest, BonusDoesNotDriftBalancedAllGoodWeights) {
   ReputationConfig config = TestConfig();
@@ -340,19 +364,22 @@ TEST(ReputationAlgorithmTest, BonusCanHelpBelowMeanHonestValidatorCatchUp) {
 }
 
 TEST(ReputationAlgorithmTest, SlowVoterLosesRecoveryWithoutDirectSlash) {
+  ReputationConfig config = TestConfig();
+  config.leader_recovery_enabled = false;
   std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
-    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
-                                   Bitmap({1, 2, 3}, 4),
-                                   Bitmap({1, 2, 3, 4}, 4)));
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 5) + 1,
+                                   Bitmap({1, 2, 3, 4}, 5),
+                                   Bitmap({1, 2, 3, 4}, 5)));
   }
 
   const ReputationCandidate candidate = ComputeCandidate(
-      1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64);
+      1, 5, 1, evidence, {30, 30, 30, 30, 30}, config, "old-root", 0, 64);
 
-  EXPECT_EQ(candidate.validators[3].inclusions, 0);
-  EXPECT_LT(candidate.validators[3].vote_score, 30);
-  EXPECT_LT(candidate.validators[3].next_weight, 30);
+  EXPECT_GT(candidate.validators[4].opportunities, 0);
+  EXPECT_EQ(candidate.validators[4].inclusions, 0);
+  EXPECT_LT(candidate.validators[4].vote_score, 30);
+  EXPECT_LT(candidate.validators[4].next_weight, 30);
   EXPECT_EQ(candidate.validators[0].next_weight, 30);
 }
 
@@ -532,7 +559,7 @@ TEST(ReputationAlgorithmTest,
 }
 
 TEST(ReputationAlgorithmTest,
-     BroadAvailableSignerBitmapStillDetectsRepeatedSlowVoter) {
+     BroadAvailableSignerBitmapDoesNotPunishUnselectedTimelyVoter) {
   ReputationConfig config = TestConfig();
   std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 8; ++view) {
@@ -544,9 +571,71 @@ TEST(ReputationAlgorithmTest,
       1, 5, 1, evidence, {30, 30, 30, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_GT(candidate.validators[4].opportunities, 0);
+  EXPECT_EQ(candidate.validators[4].inclusions, 8);
+  EXPECT_GE(candidate.validators[4].vote_score, 67);
+  EXPECT_EQ(candidate.validators[4].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest,
+     QuorumAvailableBitmapDetectsRepeatedUnavailableSlowVoter) {
+  ReputationConfig config = TestConfig();
+  config.leader_recovery_enabled = false;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 5),
+                                   Bitmap({1, 2, 3, 4}, 5)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 5, 1, evidence, {30, 30, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_GT(candidate.validators[4].opportunities, 0);
   EXPECT_EQ(candidate.validators[4].inclusions, 0);
   EXPECT_LT(candidate.validators[4].next_weight, 30);
 }
+
+TEST(ReputationAlgorithmTest,
+     SparseTimelyAvailabilityGetsOnlyPartialRecovery) {
+  ReputationConfig config = TestConfig();
+  config.leader_recovery_enabled = false;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 7; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 5),
+                                   Bitmap({1, 2, 3, 4}, 5)));
+  }
+  evidence.push_back(CertifiedQc(8, 1, Bitmap({1, 2, 3, 4, 5}, 5),
+                                 Bitmap({1, 2, 3, 4, 5}, 5)));
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 5, 1, evidence, {30, 30, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_GT(candidate.validators[4].opportunities, 1);
+  EXPECT_EQ(candidate.validators[4].inclusions, 1);
+  EXPECT_LT(candidate.validators[4].recovery_credit,
+            candidate.validators[4].decay_applied);
+  EXPECT_LT(candidate.validators[4].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest,
+     LowParticipationCarryoverContinuesDecayWithoutFreshOpportunities) {
+  ReputationConfig config = TestConfig();
+  config.leader_recovery_enabled = false;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 4, Bitmap({4, 5, 6, 7}, 20),
+                                   Bitmap({4, 5, 6, 7}, 20)));
+  }
+  std::vector<int64_t> weights(20, 100);
+  weights[0] = 75;
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, weights, config, "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[0].opportunities, 0);
+  EXPECT_LT(candidate.validators[0].next_weight, weights[0]);
+  EXPECT_EQ(candidate.validators[19].next_weight, 100);
+}
+
 
 TEST(ReputationAlgorithmTest,
      PeerTrustCleanCliqueSeparatesLeadersFromReviewers) {

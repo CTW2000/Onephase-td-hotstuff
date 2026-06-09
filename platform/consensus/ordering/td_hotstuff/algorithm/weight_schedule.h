@@ -24,6 +24,8 @@ class WeightSchedule {
   const std::vector<int64_t>& WeightsForView(int view) const;
   int64_t WeightForSigner(int signer, int view) const;
   int64_t QuorumWeightForView(int view) const;
+  int64_t WeightForSignerInVersion(int signer, uint64_t version) const;
+  int64_t QuorumWeightForVersion(uint64_t version) const;
 
   bool ScheduleUpdate(int activation_view,
                       const std::vector<int64_t>& next_weights,
@@ -41,6 +43,7 @@ class WeightSchedule {
   };
 
   const Record& RecordForView(int view) const;
+  const Record* RecordForVersion(uint64_t version) const;
 
   int total_replicas_;
   std::vector<Record> records_;

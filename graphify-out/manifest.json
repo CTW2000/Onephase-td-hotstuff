@@ -2810,18 +2810,18 @@
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp": {
-    "mtime": 1780912518.3862276,
-    "ast_hash": "a4520f890962d5100938265ed8527bec",
+    "mtime": 1780974418.33786,
+    "ast_hash": "4f9766bbadef16217df0f621d21c64c2",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.h": {
-    "mtime": 1780907535.2938867,
-    "ast_hash": "8410363e9ceabffc83eb0c2c3c768fa0",
+    "mtime": 1780971275.032428,
+    "ast_hash": "8c7d80b8e3e4379883e3acace1d9879d",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter_test.cpp": {
-    "mtime": 1780907680.3699272,
-    "ast_hash": "3070533d2b3796c7a4d034c1d6262201",
+    "mtime": 1780922083.854521,
+    "ast_hash": "8fc746b3d984e412c3ec53aa3e6929ed",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/async_consensus_verifier.cpp": {
@@ -2880,13 +2880,13 @@
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp": {
-    "mtime": 1780914987.0451207,
-    "ast_hash": "34424e5101121d86c017155df0d63442",
+    "mtime": 1780970390.1855671,
+    "ast_hash": "46825669fbea97f0ab27b2d56e2c58a5",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.h": {
-    "mtime": 1780912754.2059855,
-    "ast_hash": "0496bc0ce2492152f7f33253b41ccf0b",
+    "mtime": 1780970316.625485,
+    "ast_hash": "56acbef718fbf43a18a29bda7a6d0705",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_digest.cpp": {
@@ -2920,13 +2920,13 @@
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp": {
-    "mtime": 1780651420.5586617,
-    "ast_hash": "1ff3442d116d25e066297f9e162944c9",
+    "mtime": 1780970944.2653246,
+    "ast_hash": "56a3fd4b609d85922e6040899af5169a",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h": {
-    "mtime": 1780651420.5586617,
-    "ast_hash": "e98e9f7d980324acfb9a586100967ea2",
+    "mtime": 1780970226.3613675,
+    "ast_hash": "32677e274e3359ded781cfa93287eb9a",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/framework/consensus.cpp": {
@@ -3005,8 +3005,8 @@
     "semantic_hash": ""
   },
   "platform/consensus/reputation/reputation_algorithm.cpp": {
-    "mtime": 1780917571.3090777,
-    "ast_hash": "00f56a05611079f108032fa81c4dcbd4",
+    "mtime": 1780974418.33786,
+    "ast_hash": "8574555424abd2b6914800e0cd2d2a45",
     "semantic_hash": ""
   },
   "platform/consensus/reputation/reputation_algorithm.h": {
@@ -3015,8 +3015,8 @@
     "semantic_hash": ""
   },
   "platform/consensus/reputation/reputation_algorithm_test.cpp": {
-    "mtime": 1780890932.6013777,
-    "ast_hash": "2d8c25091c0d8ff3d54f2e12fed13ebf",
+    "mtime": 1780974616.437953,
+    "ast_hash": "d02b6c1c48a501aa6afe89db483d9aa2",
     "semantic_hash": ""
   },
   "platform/consensus/reputation/reputation_roots.cpp": {
@@ -3030,8 +3030,8 @@
     "semantic_hash": ""
   },
   "platform/consensus/reputation/reputation_types.h": {
-    "mtime": 1780912458.362269,
-    "ast_hash": "82bb224a630d77b0f4fbed7a8bd9bc18",
+    "mtime": 1780974418.33786,
+    "ast_hash": "c6d4c54380fdb747c7ecc88564d8daec",
     "semantic_hash": ""
   },
   "platform/consensus/reputation/reputation_utils.cpp": {
@@ -4955,58 +4955,58 @@
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp": {
-    "mtime": 1780912732.1780128,
-    "ast_hash": "8d2e0e6afa32b7ef73738e5ece2d0eea",
+    "mtime": 1780970226.3613675,
+    "ast_hash": "d330fb337261ab48e9c23c0191d3aa2b",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.h": {
-    "mtime": 1780912699.5260515,
-    "ast_hash": "14b7f0cde57bb3ed9cce410ef9b6d9de",
+    "mtime": 1780970226.3613675,
+    "ast_hash": "3fd6bc779f0a3e5a100bca1e56a350a3",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp": {
-    "mtime": 1780913233.9932475,
-    "ast_hash": "e2a7f99a219cff7f2cc905889f75c1d6",
+    "mtime": 1780970893.8703268,
+    "ast_hash": "95a9aadea1d4bce70606d04d2a6cdb62",
     "semantic_hash": ""
   },
   "platform/consensus/reputation/reputation_plugin_runtime.cpp": {
-    "mtime": 1780917835.986594,
-    "ast_hash": "4b92873ceb0d5b540ac32fac709caaa9",
+    "mtime": 1780971275.032428,
+    "ast_hash": "6f169a9ff1e41661a4f35cb812ed8da8",
     "semantic_hash": ""
   },
   "platform/consensus/reputation/reputation_plugin_runtime.h": {
-    "mtime": 1780907535.2938867,
-    "ast_hash": "dee7d4ea25c5ab852343330e168f0ded",
+    "mtime": 1780971275.032428,
+    "ast_hash": "98286d12c37ccb10f9969836b773c361",
     "semantic_hash": ""
   },
   "platform/consensus/reputation/reputation_plugin_runtime_test.cpp": {
-    "mtime": 1780907027.5661347,
-    "ast_hash": "4c04b1c195d1ddfb5731b61019cca2da",
+    "mtime": 1780971296.8721836,
+    "ast_hash": "e48d7224b7dd83f708c5df475329c8dc",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.cpp": {
-    "mtime": 1780912614.7341428,
-    "ast_hash": "6d8617624a302aa472047b6c3f395abc",
+    "mtime": 1780972954.1547956,
+    "ast_hash": "7e0b47492567a9ef04dffc4012f61d44",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h": {
-    "mtime": 1780912582.7701733,
-    "ast_hash": "7e92b712f1af80548a8e7e0f61086c9c",
+    "mtime": 1780972885.277675,
+    "ast_hash": "ff7fc1c56ee0418db0b31e8c650ec9a4",
     "semantic_hash": ""
   },
   "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule_test.cpp": {
-    "mtime": 1780913192.3493197,
-    "ast_hash": "63b504c49065dad946001d2cc6d860c7",
-    "semantic_hash": ""
-  },
-  "scripts/deploy/experiment_results/slow_vote_n20/TD-Hotstuff_slowvote0.txt": {
-    "mtime": 1780917971.069352,
-    "ast_hash": "6cc382d8c2387efde0397af5d8407ab0",
+    "mtime": 1780970893.8663268,
+    "ast_hash": "baab4487899a1f8973e670a3b79a7a1b",
     "semantic_hash": ""
   },
   "scripts/deploy/experiment_results/slow_vote_n20/TD-Hotstuff_slowvote3.txt": {
-    "mtime": 1780915269.5522394,
-    "ast_hash": "52e409d7bbcb509eb78b5522bfebec2f",
+    "mtime": 1780928981.8640194,
+    "ast_hash": "8e765a84e310bb33ce8d29f3d2c6fae9",
+    "semantic_hash": ""
+  },
+  "scripts/deploy/experiment_results/slow_vote_n20/TD-Hotstuff_slowvote0.txt": {
+    "mtime": 1780974964.0715911,
+    "ast_hash": "053c6feabfc79f788ad77d88ace7890e",
     "semantic_hash": ""
   }
 }

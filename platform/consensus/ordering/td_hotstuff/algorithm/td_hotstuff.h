@@ -85,6 +85,9 @@ class HotStuff : public common::ProtocolBase {
   void BroadcastWeightUpdateCert(const WeightUpdateCert& cert);
   void DrainCompletedWeightCandidates();
   void ActivateReadyWeightUpdates();
+  void ActivateReadyWeightUpdates(int view);
+  void RefreshPendingWeightActivationView();
+  void MaybeActivateReadyWeightUpdatesAfterViewAdvance();
   bool ApplyTimeoutCertLocked(const TimeoutCert& cert);
   bool IsSilentLeaderForExperiment() const;
   std::vector<std::unique_ptr<Transaction>> TakeTransactionsForView(
@@ -131,6 +134,9 @@ class HotStuff : public common::ProtocolBase {
   std::unique_ptr<AsyncConsensusVerifier> async_verifier_;
   std::unique_ptr<TdHotstuffReputationAdapter> reputation_adapter_;
   std::unique_ptr<WeightUpdateController> weight_update_controller_;
+  bool weight_candidate_inflight_ = false;
+  uint64_t weight_candidate_inflight_version_ = 0;
+  std::atomic<int> next_pending_weight_activation_view_{0};
   std::unique_ptr<TimeoutManager> timeout_manager_;
   std::set<int> timeout_echoed_views_;
   std::thread timeout_thread_;

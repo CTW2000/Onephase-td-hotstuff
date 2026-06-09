@@ -19,6 +19,7 @@ namespace reputation {
 namespace {
 
 constexpr const char* kAlgorithmBayesV4 = "bayes_v4";
+constexpr int64_t kCarryoverDecayWeightGap = 10;
 
 struct CoreEvidenceEvent {
   int view_or_round = 0;
@@ -28,6 +29,32 @@ struct CoreEvidenceEvent {
   std::string available_signer_bitmap;
   OutcomeClass outcome_class = OutcomeClass::kNone;
 };
+
+std::vector<int64_t> BuildLeaderSelectionWeights(
+    const std::vector<ValidatorReputation>& validators,
+    const ReputationConfig& config) {
+  std::vector<int64_t> leader_weights;
+  leader_weights.reserve(validators.size());
+  if (validators.empty()) {
+    return leader_weights;
+  }
+  int64_t min_weight = validators.front().next_weight;
+  int64_t max_weight = validators.front().next_weight;
+  bool all_eligible = true;
+  for (const ValidatorReputation& validator : validators) {
+    leader_weights.push_back(validator.next_weight);
+    min_weight = std::min<int64_t>(min_weight, validator.next_weight);
+    max_weight = std::max<int64_t>(max_weight, validator.next_weight);
+    if (validator.next_weight < config.leader_eligible_min_weight) {
+      all_eligible = false;
+    }
+  }
+  if (all_eligible && config.leader_weight_deadband > 0 &&
+      max_weight - min_weight <= config.leader_weight_deadband) {
+    std::fill(leader_weights.begin(), leader_weights.end(), config.max_weight);
+  }
+  return leader_weights;
+}
 
 std::string StrongFaultTypeName(StrongFaultType type) {
   switch (type) {
@@ -99,6 +126,29 @@ bool UseCoreOnlyFastPath(const ReputationWindowInput& input,
          !HasStrongFaultEvidence(input);
 }
 
+uint64_t BroadAvailableSignerThreshold(int total_replicas,
+                                       const ReputationConfig& config) {
+  if (total_replicas <= 0) {
+    return 0;
+  }
+  const int quorum_threshold = (total_replicas * 2) / 3 + 1;
+  int threshold = quorum_threshold;
+  if (config.leader_recovery_enabled || config.peertrust_enabled ||
+      config.sybil_graph_enabled) {
+    const int broad_coverage_threshold = (total_replicas * 4 + 4) / 5;
+    threshold = std::max(threshold, broad_coverage_threshold);
+  }
+  return static_cast<uint64_t>(std::min(total_replicas, threshold));
+}
+
+bool HasBroadAvailableSignerCoverage(const std::vector<int>& available_signers,
+                                     int total_replicas,
+                                     const ReputationConfig& config) {
+  const uint64_t threshold =
+      BroadAvailableSignerThreshold(total_replicas, config);
+  return threshold > 0 && available_signers.size() >= threshold;
+}
+
 void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_events,
                                const std::vector<int64_t>& weights,
                                const ReputationConfig& config,
@@ -109,6 +159,8 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
   const int total_replicas = candidate->total_replicas;
   uint64_t legacy_selected_signer_slots = 0;
   uint64_t legacy_certificate_event_count = 0;
+  uint64_t broad_available_signer_slots = 0;
+  uint64_t broad_available_event_count = 0;
   std::vector<uint64_t> signer_opportunity_count(
       std::max(total_replicas, 0), 0);
   std::set<std::pair<int, std::string>> seen_certificates;
@@ -148,18 +200,26 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
       available_signers = signers;
     }
     if (has_available_signer_evidence) {
+      const bool broad_available_signer_evidence =
+          HasBroadAvailableSignerCoverage(available_signers, total_replicas,
+                                          config);
+      if (broad_available_signer_evidence) {
+        broad_available_signer_slots += available_signers.size();
+        ++broad_available_event_count;
+      }
       for (int signer : available_signers) {
         if (signer >= 1 && signer <= total_replicas) {
           ++signer_opportunity_count[signer - 1];
+          ++candidate->validators[signer - 1].inclusions;
         }
       }
     } else {
       legacy_selected_signer_slots += signers.size();
       ++legacy_certificate_event_count;
-    }
-    for (int signer : signers) {
-      if (signer >= 1 && signer <= total_replicas) {
-        ++candidate->validators[signer - 1].inclusions;
+      for (int signer : signers) {
+        if (signer >= 1 && signer <= total_replicas) {
+          ++candidate->validators[signer - 1].inclusions;
+        }
       }
     }
     if (leader >= 1 && leader <= total_replicas) {
@@ -175,13 +235,19 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
   const uint64_t fair_opportunities = FairExpectedSignerOpportunities(
       legacy_selected_signer_slots, total_replicas,
       legacy_certificate_event_count);
+  const uint64_t broad_available_fair_opportunities =
+      FairExpectedSignerOpportunities(broad_available_signer_slots,
+                                      total_replicas,
+                                      broad_available_event_count);
   for (ValidatorReputation& validator : candidate->validators) {
     const int idx = validator.validator_id - 1;
     const uint64_t direct_opportunities =
         idx >= 0 && idx < static_cast<int>(signer_opportunity_count.size())
             ? signer_opportunity_count[idx]
             : 0;
-    validator.opportunities = direct_opportunities + fair_opportunities;
+    validator.opportunities =
+        std::max(direct_opportunities, broad_available_fair_opportunities) +
+        fair_opportunities;
   }
 
   int64_t total_current_weight = 0;
@@ -200,11 +266,13 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
     validator.leader_score = LeaderCertifiedScore(
         validator.leader_certified_count, validator.leader_opportunity_count);
     int recovery_score = validator.vote_score;
-    if (validator.inclusions > 0) {
-      recovery_score = std::max(recovery_score, 67);
-    }
+    const bool carryover_decay =
+        validator.opportunities == 0 &&
+        validator.current_weight + kCarryoverDecayWeightGap <
+            mean_current_weight;
     const bool validator_has_enough_decay_evidence =
-        validator.opportunities >= config.min_decay_opportunities;
+        validator.opportunities >= config.min_decay_opportunities ||
+        carryover_decay;
     const bool near_fair_vote =
         HasNearFairInclusion(validator.inclusions, validator.opportunities);
     const int64_t available_decay =
@@ -214,9 +282,12 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
             ? static_cast<int>(
                   std::min<int64_t>(available_decay, config.decay_per_epoch))
             : 0;
-    validator.recovery_credit = std::min(
-        validator.decay_applied,
-        RecoveryCreditForScore(recovery_score, config.max_recovery_per_epoch));
+    validator.recovery_credit =
+        carryover_decay
+            ? 0
+            : std::min(validator.decay_applied,
+                       RecoveryCreditForScore(
+                           recovery_score, config.max_recovery_per_epoch));
     const bool below_mean_weight = validator.current_weight < mean_current_weight;
     const bool earns_bonus =
         validator_has_enough_decay_evidence && below_mean_weight &&
@@ -309,9 +380,7 @@ ReputationCandidate ComputeReputationCandidate(
 
   if (UseCoreOnlyFastPath(input, config)) {
     ComputeCoreOnlyReputation(ordered_events, weights, config, &candidate);
-    for (const ValidatorReputation& validator : candidate.validators) {
-      candidate.leader_weights.push_back(validator.next_weight);
-    }
+    candidate.leader_weights = BuildLeaderSelectionWeights(candidate.validators, config);
     candidate.leader_selection_version = 1;
     candidate.leader_eligible_min_weight = config.leader_eligible_min_weight;
     RecomputeReputationCandidateRoots(&candidate);
@@ -352,6 +421,8 @@ ReputationCandidate ComputeReputationCandidate(
 
   uint64_t legacy_selected_signer_slots = 0;
   uint64_t legacy_certificate_event_count = 0;
+  uint64_t broad_available_signer_slots = 0;
+  uint64_t broad_available_event_count = 0;
   uint64_t certificate_event_count = 0;
   std::vector<uint64_t> signer_opportunity_count(
       std::max(total_replicas, 0), 0);
@@ -395,18 +466,26 @@ ReputationCandidate ComputeReputationCandidate(
     }
     ++certificate_event_count;
     if (has_available_signer_evidence) {
+      const bool broad_available_signer_evidence =
+          HasBroadAvailableSignerCoverage(available_signers, total_replicas,
+                                          config);
+      if (broad_available_signer_evidence) {
+        broad_available_signer_slots += available_signers.size();
+        ++broad_available_event_count;
+      }
       for (int signer : available_signers) {
         if (signer >= 1 && signer <= total_replicas) {
           ++signer_opportunity_count[signer - 1];
+          ++candidate.validators[signer - 1].inclusions;
         }
       }
     } else {
       legacy_selected_signer_slots += signers.size();
       ++legacy_certificate_event_count;
-    }
-    for (int signer : signers) {
-      if (signer >= 1 && signer <= total_replicas) {
-        ++candidate.validators[signer - 1].inclusions;
+      for (int signer : signers) {
+        if (signer >= 1 && signer <= total_replicas) {
+          ++candidate.validators[signer - 1].inclusions;
+        }
       }
     }
     if (leader >= 1 && leader <= total_replicas) {
@@ -462,13 +541,19 @@ ReputationCandidate ComputeReputationCandidate(
   const uint64_t fair_opportunities = FairExpectedSignerOpportunities(
       legacy_selected_signer_slots, total_replicas,
       legacy_certificate_event_count);
+  const uint64_t broad_available_fair_opportunities =
+      FairExpectedSignerOpportunities(broad_available_signer_slots,
+                                      total_replicas,
+                                      broad_available_event_count);
   for (ValidatorReputation& validator : candidate.validators) {
     const int idx = validator.validator_id - 1;
     const uint64_t direct_opportunities =
         idx >= 0 && idx < static_cast<int>(signer_opportunity_count.size())
             ? signer_opportunity_count[idx]
             : 0;
-    validator.opportunities = direct_opportunities + fair_opportunities;
+    validator.opportunities =
+        std::max(direct_opportunities, broad_available_fair_opportunities) +
+        fair_opportunities;
   }
 
   int64_t total_current_weight = 0;
@@ -881,9 +966,6 @@ ReputationCandidate ComputeReputationCandidate(
     }
 
     int recovery_score = validator.vote_score;
-    if (validator.inclusions > 0) {
-      recovery_score = std::max(recovery_score, 67);
-    }
     const bool has_strong_leader_failure_signal =
         leader_opportunities > 0 && validator.leader_certified_count == 0 &&
         validator.leader_score < 50;
@@ -920,8 +1002,13 @@ ReputationCandidate ComputeReputationCandidate(
       recovery_score = std::min(recovery_score, debt_gate_score);
     }
 
+    const bool carryover_decay =
+        validator.opportunities == 0 &&
+        validator.current_weight + kCarryoverDecayWeightGap <
+            mean_current_weight;
     const bool validator_has_enough_decay_evidence =
-        validator.opportunities >= config.min_decay_opportunities;
+        validator.opportunities >= config.min_decay_opportunities ||
+        carryover_decay;
     const bool near_fair_vote =
         HasNearFairInclusion(validator.inclusions, validator.opportunities);
     const int64_t available_decay =
@@ -931,9 +1018,12 @@ ReputationCandidate ComputeReputationCandidate(
             ? static_cast<int>(
                   std::min<int64_t>(available_decay, config.decay_per_epoch))
             : 0;
-    validator.recovery_credit = std::min(
-        validator.decay_applied,
-        RecoveryCreditForScore(recovery_score, config.max_recovery_per_epoch));
+    validator.recovery_credit =
+        carryover_decay
+            ? 0
+            : std::min(validator.decay_applied,
+                       RecoveryCreditForScore(
+                           recovery_score, config.max_recovery_per_epoch));
     const bool below_mean_weight =
         validator.current_weight < mean_current_weight;
     const bool earns_bonus =
@@ -1039,11 +1129,7 @@ ReputationCandidate ComputeReputationCandidate(
     }
   }
 
-  candidate.leader_weights.clear();
-  candidate.leader_weights.reserve(candidate.validators.size());
-  for (const ValidatorReputation& validator : candidate.validators) {
-    candidate.leader_weights.push_back(validator.next_weight);
-  }
+  candidate.leader_weights = BuildLeaderSelectionWeights(candidate.validators, config);
   candidate.leader_selection_version = 1;
   candidate.leader_eligible_min_weight = config.leader_eligible_min_weight;
 
