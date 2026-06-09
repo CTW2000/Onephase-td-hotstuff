@@ -272,7 +272,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hs_kv_server_performance",
-      "community": 711,
+      "community": 73,
       "norm_label": "kv_server_performance.cpp"
     },
     {
@@ -282,7 +282,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "hs_kv_server_performance_showusage",
-      "community": 711,
+      "community": 73,
       "norm_label": "showusage()"
     },
     {
@@ -292,7 +292,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "hs_kv_server_performance_getrandomkey",
-      "community": 711,
+      "community": 73,
       "norm_label": "getrandomkey()"
     },
     {
@@ -302,7 +302,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "benchmark_protocols_hs_kv_server_performance_cpp_string",
-      "community": 711,
+      "community": 73,
       "norm_label": "string"
     },
     {
@@ -312,7 +312,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "hs_kv_server_performance_main",
-      "community": 711,
+      "community": 73,
       "norm_label": "main()"
     },
     {
@@ -542,7 +542,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "slot_hs1_kv_server_performance",
-      "community": 73,
+      "community": 713,
       "norm_label": "kv_server_performance.cpp"
     },
     {
@@ -552,7 +552,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "slot_hs1_kv_server_performance_showusage",
-      "community": 73,
+      "community": 713,
       "norm_label": "showusage()"
     },
     {
@@ -562,7 +562,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "slot_hs1_kv_server_performance_getrandomkey",
-      "community": 73,
+      "community": 713,
       "norm_label": "getrandomkey()"
     },
     {
@@ -572,7 +572,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "benchmark_protocols_slot_hs1_kv_server_performance_cpp_string",
-      "community": 73,
+      "community": 713,
       "norm_label": "string"
     },
     {
@@ -582,7 +582,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "slot_hs1_kv_server_performance_main",
-      "community": 73,
+      "community": 713,
       "norm_label": "main()"
     },
     {
@@ -882,7 +882,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "storage_kv_storage_test_kvstoragetest_kvstoragetest",
-      "community": 134,
+      "community": 164,
       "norm_label": ".kvstoragetest()"
     },
     {
@@ -892,7 +892,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "storage_kv_storage_test_kvstoragetest_reset",
-      "community": 134,
+      "community": 164,
       "norm_label": ".reset()"
     },
     {
@@ -1042,7 +1042,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "storage_leveldb_newresleveldb",
-      "community": 211,
+      "community": 133,
       "norm_label": "newresleveldb()"
     },
     {
@@ -1052,7 +1052,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "chain_storage_leveldb_cpp_unique_ptr",
-      "community": 211,
+      "community": 133,
       "norm_label": "unique_ptr"
     },
     {
@@ -1062,7 +1062,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "chain_storage_leveldb_cpp_storage",
-      "community": 211,
+      "community": 133,
       "norm_label": "storage"
     },
     {
@@ -1082,7 +1082,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "chain_storage_leveldb_cpp_optional",
-      "community": 211,
+      "community": 133,
       "norm_label": "optional"
     },
     {
@@ -1092,7 +1092,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "leveldbinfo",
-      "community": 211,
+      "community": 133,
       "norm_label": "leveldbinfo"
     },
     {
@@ -1702,7 +1702,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "storage_rocksdb_newresrocksdb",
-      "community": 134,
+      "community": 211,
       "norm_label": "newresrocksdb()"
     },
     {
@@ -1712,7 +1712,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "chain_storage_rocksdb_cpp_unique_ptr",
-      "community": 134,
+      "community": 211,
       "norm_label": "unique_ptr"
     },
     {
@@ -1722,7 +1722,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "chain_storage_rocksdb_cpp_storage",
-      "community": 134,
+      "community": 211,
       "norm_label": "storage"
     },
     {
@@ -1742,7 +1742,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "chain_storage_rocksdb_cpp_optional",
-      "community": 134,
+      "community": 211,
       "norm_label": "optional"
     },
     {
@@ -1752,7 +1752,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "rocksdbinfo",
-      "community": 134,
+      "community": 211,
       "norm_label": "rocksdbinfo"
     },
     {
@@ -3212,7 +3212,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "test_json_test",
-      "community": 334,
+      "community": 212,
       "norm_label": "json_test.cpp"
     },
     {
@@ -3222,7 +3222,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "test_json_test_test",
-      "community": 334,
+      "community": 212,
       "norm_label": "test()"
     },
     {
@@ -3232,7 +3232,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "common_test_json_test_cpp_signatureverifytest",
-      "community": 334,
+      "community": 212,
       "norm_label": "signatureverifytest"
     },
     {
@@ -3242,7 +3242,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "parsefromjson",
-      "community": 334,
+      "community": 212,
       "norm_label": "parsefromjson"
     },
     {
@@ -7296,7 +7296,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_transporterror",
-      "community": 174,
+      "community": 358,
       "norm_label": "transporterror"
     },
     {
@@ -7306,7 +7306,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_transporterror_status_code",
-      "community": 174,
+      "community": 358,
       "norm_label": ".status_code()"
     },
     {
@@ -7316,7 +7316,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_transporterror_error",
-      "community": 174,
+      "community": 358,
       "norm_label": ".error()"
     },
     {
@@ -7326,7 +7326,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_transporterror_info",
-      "community": 174,
+      "community": 358,
       "norm_label": ".info()"
     },
     {
@@ -7336,7 +7336,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_transporterror_url",
-      "community": 174,
+      "community": 358,
       "norm_label": ".url()"
     },
     {
@@ -7346,7 +7346,7 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_badrequest",
-      "community": 2,
+      "community": 358,
       "norm_label": "badrequest"
     },
     {
@@ -7356,7 +7356,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_notfounderror",
-      "community": 174,
+      "community": 358,
       "norm_label": "notfounderror"
     },
     {
@@ -7366,7 +7366,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_serviceunavailable",
-      "community": 174,
+      "community": 358,
       "norm_label": "serviceunavailable"
     },
     {
@@ -7376,7 +7376,7 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_gatewaytimeout",
-      "community": 174,
+      "community": 358,
       "norm_label": "gatewaytimeout"
     },
     {
@@ -7386,7 +7386,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_timeouterror",
-      "community": 708,
+      "community": 174,
       "norm_label": "timeouterror"
     },
     {
@@ -7396,7 +7396,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_timeouterror_connection_errors",
-      "community": 708,
+      "community": 174,
       "norm_label": ".connection_errors()"
     },
     {
@@ -7466,7 +7466,7 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_keypairmismatchexception",
-      "community": 2,
+      "community": 18,
       "norm_label": "keypairmismatchexception"
     },
     {
@@ -7656,7 +7656,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_rationale_32",
-      "community": 174,
+      "community": 358,
       "norm_label": "base exception for transport related errors.      this is mainly for cases where"
     },
     {
@@ -7666,7 +7666,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_rationale_57",
-      "community": 2,
+      "community": 358,
       "norm_label": "exception for http 400 errors."
     },
     {
@@ -7676,7 +7676,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_rationale_61",
-      "community": 174,
+      "community": 358,
       "norm_label": "exception for http 404 errors."
     },
     {
@@ -7686,7 +7686,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_rationale_65",
-      "community": 174,
+      "community": 358,
       "norm_label": "exception for http 503 errors."
     },
     {
@@ -7696,7 +7696,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_rationale_69",
-      "community": 174,
+      "community": 358,
       "norm_label": "exception for http 503 errors."
     },
     {
@@ -7706,7 +7706,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_rationale_73",
-      "community": 708,
+      "community": 174,
       "norm_label": "raised if the request algorithm times out."
     },
     {
@@ -7716,7 +7716,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_rationale_77",
-      "community": 708,
+      "community": 174,
       "norm_label": "returns connection errors occurred before timeout expired."
     },
     {
@@ -7786,7 +7786,7 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "resdb_driver_exceptions_rationale_114",
-      "community": 2,
+      "community": 18,
       "norm_label": "raised if the private key(s) provided for signing don't match any of the     cur"
     },
     {
@@ -8176,7 +8176,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "resdb_driver_pool_pool",
-      "community": 1,
+      "community": 174,
       "norm_label": "pool"
     },
     {
@@ -8246,7 +8246,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "resdb_driver_pool_rationale_63",
-      "community": 1,
+      "community": 174,
       "norm_label": "! pool of connections."
     },
     {
@@ -8286,7 +8286,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "resdb_driver_transaction_input",
-      "community": 2,
+      "community": 18,
       "norm_label": "input"
     },
     {
@@ -8296,7 +8296,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "object",
-      "community": 200,
+      "community": 2,
       "norm_label": "object"
     },
     {
@@ -8306,7 +8306,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "resdb_driver_transaction_input_init",
-      "community": 2,
+      "community": 18,
       "norm_label": ".__init__()"
     },
     {
@@ -8316,7 +8316,7 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "resdb_driver_transaction_input_eq",
-      "community": 2,
+      "community": 18,
       "norm_label": ".__eq__()"
     },
     {
@@ -8376,7 +8376,7 @@
       "source_location": "L212",
       "_origin": "ast",
       "id": "resdb_driver_transaction_transactionlink",
-      "community": 2,
+      "community": 405,
       "norm_label": "transactionlink"
     },
     {
@@ -8386,7 +8386,7 @@
       "source_location": "L220",
       "_origin": "ast",
       "id": "resdb_driver_transaction_transactionlink_init",
-      "community": 2,
+      "community": 405,
       "norm_label": ".__init__()"
     },
     {
@@ -8396,7 +8396,7 @@
       "source_location": "L236",
       "_origin": "ast",
       "id": "resdb_driver_transaction_transactionlink_bool",
-      "community": 2,
+      "community": 405,
       "norm_label": ".__bool__()"
     },
     {
@@ -8406,7 +8406,7 @@
       "source_location": "L239",
       "_origin": "ast",
       "id": "resdb_driver_transaction_transactionlink_eq",
-      "community": 7,
+      "community": 405,
       "norm_label": ".__eq__()"
     },
     {
@@ -8416,7 +8416,7 @@
       "source_location": "L243",
       "_origin": "ast",
       "id": "resdb_driver_transaction_transactionlink_hash",
-      "community": 2,
+      "community": 405,
       "norm_label": ".__hash__()"
     },
     {
@@ -8426,7 +8426,7 @@
       "source_location": "L247",
       "_origin": "ast",
       "id": "resdb_driver_transaction_transactionlink_from_dict",
-      "community": 2,
+      "community": 405,
       "norm_label": ".from_dict()"
     },
     {
@@ -8436,7 +8436,7 @@
       "source_location": "L259",
       "_origin": "ast",
       "id": "resdb_driver_transaction_transactionlink_to_dict",
-      "community": 2,
+      "community": 405,
       "norm_label": ".to_dict()"
     },
     {
@@ -8446,7 +8446,7 @@
       "source_location": "L271",
       "_origin": "ast",
       "id": "resdb_driver_transaction_transactionlink_to_uri",
-      "community": 7,
+      "community": 405,
       "norm_label": ".to_uri()"
     },
     {
@@ -8616,7 +8616,7 @@
       "source_location": "L710",
       "_origin": "ast",
       "id": "resdb_driver_transaction_transaction_to_inputs",
-      "community": 2,
+      "community": 405,
       "norm_label": ".to_inputs()"
     },
     {
@@ -8846,7 +8846,7 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "resdb_driver_transaction_rationale_71",
-      "community": 2,
+      "community": 18,
       "norm_label": "! a input is used to spend assets locked by an output.     wraps around a crypto"
     },
     {
@@ -8856,7 +8856,7 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "resdb_driver_transaction_rationale_84",
-      "community": 2,
+      "community": 18,
       "norm_label": "! create an instance of an :class:`~.input`.         @param fulfillment (:class:"
     },
     {
@@ -8906,7 +8906,7 @@
       "source_location": "L213",
       "_origin": "ast",
       "id": "resdb_driver_transaction_rationale_213",
-      "community": 2,
+      "community": 405,
       "norm_label": "! an object for unidirectional linking to a transaction's output.     attributes"
     },
     {
@@ -8916,7 +8916,7 @@
       "source_location": "L221",
       "_origin": "ast",
       "id": "resdb_driver_transaction_rationale_221",
-      "community": 2,
+      "community": 405,
       "norm_label": "! create an instance of a :class:`~.transactionlink`.         note:"
     },
     {
@@ -8926,7 +8926,7 @@
       "source_location": "L248",
       "_origin": "ast",
       "id": "resdb_driver_transaction_rationale_248",
-      "community": 2,
+      "community": 405,
       "norm_label": "! transforms a python dictionary to a transactionlink object.              @para"
     },
     {
@@ -8936,7 +8936,7 @@
       "source_location": "L260",
       "_origin": "ast",
       "id": "resdb_driver_transaction_rationale_260",
-      "community": 2,
+      "community": 405,
       "norm_label": "! transforms the object to a python dictionary.             @return the link as"
     },
     {
@@ -9066,7 +9066,7 @@
       "source_location": "L711",
       "_origin": "ast",
       "id": "resdb_driver_transaction_rationale_711",
-      "community": 2,
+      "community": 405,
       "norm_label": "! converts a transaction's outputs to spendable inputs.         note:"
     },
     {
@@ -9446,7 +9446,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "resdb_driver_transport",
-      "community": 1,
+      "community": 174,
       "norm_label": "transport.py"
     },
     {
@@ -9466,7 +9466,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "resdb_driver_transport_transport_init",
-      "community": 1,
+      "community": 174,
       "norm_label": ".__init__()"
     },
     {
@@ -9476,7 +9476,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "resdb_driver_transport_transport_forward_request",
-      "community": 708,
+      "community": 174,
       "norm_label": ".forward_request()"
     },
     {
@@ -9486,7 +9486,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "ecosystem_graphql_resdb_driver_transport_py_json",
-      "community": 708,
+      "community": 174,
       "norm_label": "json"
     },
     {
@@ -9496,7 +9496,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "resdb_driver_transport_rationale_36",
-      "community": 1,
+      "community": 174,
       "norm_label": "! initializes an instance of             :class:`~resdb_driver.transport.transpo"
     },
     {
@@ -9506,7 +9506,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "resdb_driver_transport_rationale_59",
-      "community": 708,
+      "community": 174,
       "norm_label": "! makes http requests to the configured nodes.            retries connection err"
     },
     {
@@ -9546,7 +9546,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "resdb_driver_utils_createoperation",
-      "community": 18,
+      "community": 242,
       "norm_label": "createoperation"
     },
     {
@@ -9636,7 +9636,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "resdb_driver_utils_rationale_59",
-      "community": 18,
+      "community": 242,
       "norm_label": "! class representing the ``'create'`` transaction operation."
     },
     {
@@ -9956,7 +9956,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "test",
-      "community": 334,
+      "community": 212,
       "norm_label": "test"
     },
     {
@@ -10776,7 +10776,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_resdberror",
-      "community": 356,
+      "community": 8,
       "norm_label": "resdberror"
     },
     {
@@ -10786,7 +10786,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_configurationerror",
-      "community": 356,
+      "community": 8,
       "norm_label": "configurationerror"
     },
     {
@@ -10796,7 +10796,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_databasedoesnotexist",
-      "community": 356,
+      "community": 8,
       "norm_label": "databasedoesnotexist"
     },
     {
@@ -10806,7 +10806,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_startuperror",
-      "community": 356,
+      "community": 8,
       "norm_label": "startuperror"
     },
     {
@@ -10816,7 +10816,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_cyclicblockchainerror",
-      "community": 356,
+      "community": 8,
       "norm_label": "cyclicblockchainerror"
     },
     {
@@ -10826,7 +10826,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_keypairmismatchexception",
-      "community": 356,
+      "community": 8,
       "norm_label": "keypairmismatchexception"
     },
     {
@@ -10836,7 +10836,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_operationerror",
-      "community": 356,
+      "community": 8,
       "norm_label": "operationerror"
     },
     {
@@ -11016,7 +11016,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_rationale_23",
-      "community": 356,
+      "community": 8,
       "norm_label": "base class for resdb exceptions."
     },
     {
@@ -11026,7 +11026,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_rationale_27",
-      "community": 356,
+      "community": 8,
       "norm_label": "raised when there is a problem with server configuration"
     },
     {
@@ -11036,7 +11036,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_rationale_31",
-      "community": 356,
+      "community": 8,
       "norm_label": "raised when trying to delete the database but the db is not there"
     },
     {
@@ -11046,7 +11046,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_rationale_35",
-      "community": 356,
+      "community": 8,
       "norm_label": "raised when there is an error starting up the system"
     },
     {
@@ -11056,7 +11056,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_rationale_39",
-      "community": 356,
+      "community": 8,
       "norm_label": "raised when there is a cycle in the blockchain"
     },
     {
@@ -11066,7 +11066,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_rationale_43",
-      "community": 356,
+      "community": 8,
       "norm_label": "raised if the private key(s) provided for signing don't match any of the     cur"
     },
     {
@@ -11076,7 +11076,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "resdb_validator_exceptions_rationale_49",
-      "community": 356,
+      "community": 8,
       "norm_label": "raised when an operation cannot go through"
     },
     {
@@ -11386,7 +11386,7 @@
       "source_location": "L220",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_is_committed",
-      "community": 713,
+      "community": 21,
       "norm_label": ".is_committed()"
     },
     {
@@ -11396,7 +11396,7 @@
       "source_location": "L224",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_transaction",
-      "community": 713,
+      "community": 21,
       "norm_label": ".get_transaction()"
     },
     {
@@ -11406,7 +11406,7 @@
       "source_location": "L244",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_transactions",
-      "community": 21,
+      "community": 708,
       "norm_label": ".get_transactions()"
     },
     {
@@ -11416,7 +11416,7 @@
       "source_location": "L247",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_transactions_filtered",
-      "community": 713,
+      "community": 21,
       "norm_label": ".get_transactions_filtered()"
     },
     {
@@ -11456,7 +11456,7 @@
       "source_location": "L308",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_latest_block",
-      "community": 21,
+      "community": 708,
       "norm_label": ".get_latest_block()"
     },
     {
@@ -11466,7 +11466,7 @@
       "source_location": "L313",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_block",
-      "community": 21,
+      "community": 708,
       "norm_label": ".get_block()"
     },
     {
@@ -11526,7 +11526,7 @@
       "source_location": "L408",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_metadata",
-      "community": 713,
+      "community": 21,
       "norm_label": ".get_metadata()"
     },
     {
@@ -11616,7 +11616,7 @@
       "source_location": "L451",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_store_abci_chain",
-      "community": 21,
+      "community": 708,
       "norm_label": ".store_abci_chain()"
     },
     {
@@ -11636,7 +11636,7 @@
       "source_location": "L458",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_latest_abci_chain",
-      "community": 21,
+      "community": 708,
       "norm_label": ".get_latest_abci_chain()"
     },
     {
@@ -11646,7 +11646,7 @@
       "source_location": "L461",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_migrate_abci_chain",
-      "community": 21,
+      "community": 708,
       "norm_label": ".migrate_abci_chain()"
     },
     {
@@ -11776,7 +11776,7 @@
       "source_location": "L248",
       "_origin": "ast",
       "id": "resdb_validator_lib_rationale_248",
-      "community": 713,
+      "community": 21,
       "norm_label": "get a list of transactions filtered on some criteria"
     },
     {
@@ -11796,7 +11796,7 @@
       "source_location": "L309",
       "_origin": "ast",
       "id": "resdb_validator_lib_rationale_309",
-      "community": 21,
+      "community": 708,
       "norm_label": "get the block with largest height."
     },
     {
@@ -11806,7 +11806,7 @@
       "source_location": "L314",
       "_origin": "ast",
       "id": "resdb_validator_lib_rationale_314",
-      "community": 21,
+      "community": 708,
       "norm_label": "get the block with the specified `block_id`.          returns the block correspo"
     },
     {
@@ -11856,7 +11856,7 @@
       "source_location": "L409",
       "_origin": "ast",
       "id": "resdb_validator_lib_rationale_409",
-      "community": 713,
+      "community": 21,
       "norm_label": "return a list of metadata that match the transaction ids (txn_ids)          args"
     },
     {
@@ -11876,7 +11876,7 @@
       "source_location": "L462",
       "_origin": "ast",
       "id": "resdb_validator_lib_rationale_462",
-      "community": 21,
+      "community": 708,
       "norm_label": "generate and record a new abci chain id. new blocks are not         accepted unt"
     },
     {
@@ -11916,7 +11916,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "resdb_validator_memoize",
-      "community": 91,
+      "community": 233,
       "norm_label": "memoize.py"
     },
     {
@@ -11926,7 +11926,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "resdb_validator_memoize_hdict",
-      "community": 91,
+      "community": 233,
       "norm_label": "hdict"
     },
     {
@@ -11936,7 +11936,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "dict",
-      "community": 91,
+      "community": 233,
       "norm_label": "dict"
     },
     {
@@ -11946,7 +11946,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "resdb_validator_memoize_hdict_hash",
-      "community": 91,
+      "community": 233,
       "norm_label": ".__hash__()"
     },
     {
@@ -11956,7 +11956,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "resdb_validator_memoize_from_dict",
-      "community": 91,
+      "community": 233,
       "norm_label": "from_dict()"
     },
     {
@@ -11966,7 +11966,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "resdb_validator_memoize_memoize_from_dict",
-      "community": 91,
+      "community": 233,
       "norm_label": "memoize_from_dict()"
     },
     {
@@ -12016,7 +12016,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "resdb_validator_memoize_to_dict",
-      "community": 91,
+      "community": 233,
       "norm_label": "to_dict()"
     },
     {
@@ -12026,7 +12026,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "resdb_validator_memoize_memoize_to_dict",
-      "community": 91,
+      "community": 233,
       "norm_label": "memoize_to_dict()"
     },
     {
@@ -12266,7 +12266,7 @@
       "source_location": "L258",
       "_origin": "ast",
       "id": "resdb_validator_transaction_transactionlink_eq",
-      "community": 616,
+      "community": 192,
       "norm_label": ".__eq__()"
     },
     {
@@ -12316,7 +12316,7 @@
       "source_location": "L301",
       "_origin": "ast",
       "id": "resdb_validator_transaction_output",
-      "community": 200,
+      "community": 54,
       "norm_label": "output"
     },
     {
@@ -12326,7 +12326,7 @@
       "source_location": "L315",
       "_origin": "ast",
       "id": "resdb_validator_transaction_output_init",
-      "community": 200,
+      "community": 54,
       "norm_label": ".__init__()"
     },
     {
@@ -12336,7 +12336,7 @@
       "source_location": "L342",
       "_origin": "ast",
       "id": "resdb_validator_transaction_output_eq",
-      "community": 200,
+      "community": 54,
       "norm_label": ".__eq__()"
     },
     {
@@ -12366,7 +12366,7 @@
       "source_location": "L424",
       "_origin": "ast",
       "id": "resdb_validator_transaction_output_gen_condition",
-      "community": 200,
+      "community": 54,
       "norm_label": "._gen_condition()"
     },
     {
@@ -12646,7 +12646,7 @@
       "source_location": "L1143",
       "_origin": "ast",
       "id": "resdb_validator_transaction_transaction_get_asset_id",
-      "community": 616,
+      "community": 192,
       "norm_label": ".get_asset_id()"
     },
     {
@@ -12666,7 +12666,7 @@
       "source_location": "L1205",
       "_origin": "ast",
       "id": "resdb_validator_transaction_transaction_from_dict",
-      "community": 54,
+      "community": 616,
       "norm_label": ".from_dict()"
     },
     {
@@ -12676,7 +12676,7 @@
       "source_location": "L1228",
       "_origin": "ast",
       "id": "resdb_validator_transaction_transaction_from_db",
-      "community": 54,
+      "community": 616,
       "norm_label": ".from_db()"
     },
     {
@@ -12696,7 +12696,7 @@
       "source_location": "L1283",
       "_origin": "ast",
       "id": "resdb_validator_transaction_transaction_resolve_class",
-      "community": 54,
+      "community": 616,
       "norm_label": ".resolve_class()"
     },
     {
@@ -12706,7 +12706,7 @@
       "source_location": "L1290",
       "_origin": "ast",
       "id": "resdb_validator_transaction_transaction_validate_schema",
-      "community": 54,
+      "community": 616,
       "norm_label": ".validate_schema()"
     },
     {
@@ -12716,7 +12716,7 @@
       "source_location": "L1293",
       "_origin": "ast",
       "id": "resdb_validator_transaction_transaction_validate_transfer_inputs",
-      "community": 616,
+      "community": 192,
       "norm_label": ".validate_transfer_inputs()"
     },
     {
@@ -12826,7 +12826,7 @@
       "source_location": "L302",
       "_origin": "ast",
       "id": "resdb_validator_transaction_rationale_302",
-      "community": 200,
+      "community": 54,
       "norm_label": "an output is used to lock an asset.      wraps around a crypto-condition conditi"
     },
     {
@@ -12836,7 +12836,7 @@
       "source_location": "L316",
       "_origin": "ast",
       "id": "resdb_validator_transaction_rationale_316",
-      "community": 200,
+      "community": 54,
       "norm_label": "create an instance of a :class:`~.output`.              args:                 fu"
     },
     {
@@ -12866,7 +12866,7 @@
       "source_location": "L425",
       "_origin": "ast",
       "id": "resdb_validator_transaction_rationale_425",
-      "community": 200,
+      "community": 54,
       "norm_label": "generates thresholdsha256 conditions from a list of new owners.              not"
     },
     {
@@ -13066,7 +13066,7 @@
       "source_location": "L1144",
       "_origin": "ast",
       "id": "resdb_validator_transaction_rationale_1144",
-      "community": 616,
+      "community": 192,
       "norm_label": "get the asset id from a list of :class:`~.transactions`.          this is useful"
     },
     {
@@ -13086,7 +13086,7 @@
       "source_location": "L1206",
       "_origin": "ast",
       "id": "resdb_validator_transaction_rationale_1206",
-      "community": 54,
+      "community": 616,
       "norm_label": "transforms a python dictionary to a transaction object.              args:"
     },
     {
@@ -13096,7 +13096,7 @@
       "source_location": "L1229",
       "_origin": "ast",
       "id": "resdb_validator_transaction_rationale_1229",
-      "community": 54,
+      "community": 616,
       "norm_label": "helper method that reconstructs a transaction dict that was returned         fro"
     },
     {
@@ -13106,7 +13106,7 @@
       "source_location": "L1284",
       "_origin": "ast",
       "id": "resdb_validator_transaction_rationale_1284",
-      "community": 54,
+      "community": 616,
       "norm_label": "for the given `tx` based on the `operation` key return its implementation class"
     },
     {
@@ -17614,7 +17614,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "components_toggle_togglestate",
-      "community": 65,
+      "community": 214,
       "norm_label": "togglestate()"
     },
     {
@@ -17734,7 +17734,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "pbft_graph_fullscreenbutton",
-      "community": 214,
+      "community": 37,
       "norm_label": "fullscreenbutton.tsx"
     },
     {
@@ -17744,7 +17744,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "pbft_graph_fullscreenbutton_fullscreenbutton",
-      "community": 214,
+      "community": 37,
       "norm_label": "fullscreenbutton()"
     },
     {
@@ -17754,7 +17754,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "pbft_graph_pbftvisualization",
-      "community": 214,
+      "community": 37,
       "norm_label": "pbftvisualization.tsx"
     },
     {
@@ -17764,7 +17764,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "pbft_graph_pbftvisualization_message",
-      "community": 214,
+      "community": 37,
       "norm_label": "message"
     },
     {
@@ -17774,7 +17774,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "pbft_graph_pbftvisualization_pbftvisualization",
-      "community": 214,
+      "community": 37,
       "norm_label": "pbftvisualization()"
     },
     {
@@ -17924,7 +17924,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ui_button",
-      "community": 214,
+      "community": 37,
       "norm_label": "button.tsx"
     },
     {
@@ -17934,7 +17934,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "ui_button_buttonvariants",
-      "community": 214,
+      "community": 37,
       "norm_label": "buttonvariants"
     },
     {
@@ -17944,7 +17944,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "ui_button_buttonprops",
-      "community": 214,
+      "community": 37,
       "norm_label": "buttonprops"
     },
     {
@@ -17954,7 +17954,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "ui_button_button",
-      "community": 214,
+      "community": 37,
       "norm_label": "button"
     },
     {
@@ -18184,7 +18184,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ui_input",
-      "community": 26,
+      "community": 140,
       "norm_label": "input.tsx"
     },
     {
@@ -18194,7 +18194,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "ui_input_input",
-      "community": 26,
+      "community": 140,
       "norm_label": "input"
     },
     {
@@ -18204,7 +18204,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ui_loader",
-      "community": 26,
+      "community": 140,
       "norm_label": "loader.tsx"
     },
     {
@@ -18214,7 +18214,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "ui_loader_loaderprops",
-      "community": 26,
+      "community": 140,
       "norm_label": "loaderprops"
     },
     {
@@ -18224,7 +18224,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "ui_loader_loader",
-      "community": 26,
+      "community": 140,
       "norm_label": "loader()"
     },
     {
@@ -33846,7 +33846,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "network_network_utils_test",
-      "community": 24,
+      "community": 714,
       "norm_label": "network_utils_test.cpp"
     },
     {
@@ -33856,7 +33856,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "network_network_utils_test_test",
-      "community": 24,
+      "community": 714,
       "norm_label": "test()"
     },
     {
@@ -33866,7 +33866,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "networkutilstest",
-      "community": 24,
+      "community": 714,
       "norm_label": "networkutilstest"
     },
     {
@@ -33876,7 +33876,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "getdnsname",
-      "community": 24,
+      "community": 714,
       "norm_label": "getdnsname"
     },
     {
@@ -33886,7 +33886,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "gettcpurl",
-      "community": 24,
+      "community": 714,
       "norm_label": "gettcpurl"
     },
     {
@@ -34146,7 +34146,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "network_tcp_socket_test",
-      "community": 715,
+      "community": 24,
       "norm_label": "tcp_socket_test.cpp"
     },
     {
@@ -34156,7 +34156,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "network_tcp_socket_test_test",
-      "community": 715,
+      "community": 24,
       "norm_label": "test()"
     },
     {
@@ -34166,7 +34166,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "platform_common_network_tcp_socket_test_cpp_tcpsocket",
-      "community": 715,
+      "community": 24,
       "norm_label": "tcpsocket"
     },
     {
@@ -34176,7 +34176,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "sendandrecv",
-      "community": 715,
+      "community": 24,
       "norm_label": "sendandrecv"
     },
     {
@@ -34186,7 +34186,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "sendafterclose",
-      "community": 715,
+      "community": 24,
       "norm_label": "sendafterclose"
     },
     {
@@ -36326,7 +36326,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "execution_geo_transaction_executor_test",
-      "community": 714,
+      "community": 31,
       "norm_label": "geo_transaction_executor_test.cpp"
     },
     {
@@ -36336,7 +36336,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "execution_geo_transaction_executor_test_test",
-      "community": 714,
+      "community": 31,
       "norm_label": "test()"
     },
     {
@@ -36346,7 +36346,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "localexecutortest",
-      "community": 714,
+      "community": 31,
       "norm_label": "localexecutortest"
     },
     {
@@ -36356,7 +36356,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "pushtoqueue",
-      "community": 714,
+      "community": 31,
       "norm_label": "pushtoqueue"
     },
     {
@@ -36366,7 +36366,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "primarynodebroadcast",
-      "community": 714,
+      "community": 31,
       "norm_label": "primarynodebroadcast"
     },
     {
@@ -37416,7 +37416,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "framework_consensus_init",
-      "community": 157,
+      "community": 202,
       "norm_label": "init()"
     },
     {
@@ -37706,7 +37706,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "framework_performance_manager_performancemanager",
-      "community": 405,
+      "community": 76,
       "norm_label": "performancemanager()"
     },
     {
@@ -37716,7 +37716,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "platform_consensus_ordering_common_framework_performance_manager_cpp_resdbconfig",
-      "community": 405,
+      "community": 76,
       "norm_label": "resdbconfig"
     },
     {
@@ -37726,7 +37726,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "platform_consensus_ordering_common_framework_performance_manager_cpp_replicacommunicator",
-      "community": 405,
+      "community": 76,
       "norm_label": "replicacommunicator"
     },
     {
@@ -37736,7 +37736,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "platform_consensus_ordering_common_framework_performance_manager_cpp_signatureverifier",
-      "community": 405,
+      "community": 76,
       "norm_label": "signatureverifier"
     },
     {
@@ -41716,7 +41716,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_checkpoint_manager_h_pbft_checkpoint_manager",
-      "community": 718,
+      "community": 35,
       "norm_label": "checkpoint_manager.h"
     },
     {
@@ -41726,7 +41726,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "pbft_checkpoint_manager_resdb",
-      "community": 718,
+      "community": 35,
       "norm_label": "resdb()"
     },
     {
@@ -41736,7 +41736,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_checkpoint_manager_h_namespace",
-      "community": 718,
+      "community": 35,
       "norm_label": "namespace"
     },
     {
@@ -42286,7 +42286,7 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "pbft_commitment_test_commitmenttest_addproposemsg",
-      "community": 69,
+      "community": 356,
       "norm_label": ".addproposemsg()"
     },
     {
@@ -42296,7 +42296,7 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "pbft_commitment_test_commitmenttest_addpreparemsg",
-      "community": 69,
+      "community": 356,
       "norm_label": ".addpreparemsg()"
     },
     {
@@ -42306,7 +42306,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "pbft_commitment_test_commitmenttest_addcommitmsg",
-      "community": 69,
+      "community": 356,
       "norm_label": ".addcommitmsg()"
     },
     {
@@ -42486,7 +42486,7 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "pbft_commitment_test_test_f",
-      "community": 69,
+      "community": 356,
       "norm_label": "test_f()"
     },
     {
@@ -42496,7 +42496,7 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "notcontesxt",
-      "community": 69,
+      "community": 356,
       "norm_label": "notcontesxt"
     },
     {
@@ -42506,7 +42506,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "nosignature",
-      "community": 69,
+      "community": 356,
       "norm_label": "nosignature"
     },
     {
@@ -42516,7 +42516,7 @@
       "source_location": "L150",
       "_origin": "ast",
       "id": "noprimary",
-      "community": 69,
+      "community": 356,
       "norm_label": "noprimary"
     },
     {
@@ -42526,7 +42526,7 @@
       "source_location": "L155",
       "_origin": "ast",
       "id": "newrequest",
-      "community": 69,
+      "community": 356,
       "norm_label": "newrequest"
     },
     {
@@ -42536,7 +42536,7 @@
       "source_location": "L177",
       "_origin": "ast",
       "id": "seqconsumeall",
-      "community": 69,
+      "community": 356,
       "norm_label": "seqconsumeall"
     },
     {
@@ -42546,7 +42546,7 @@
       "source_location": "L209",
       "_origin": "ast",
       "id": "proposemsgwithoutsignature",
-      "community": 69,
+      "community": 356,
       "norm_label": "proposemsgwithoutsignature"
     },
     {
@@ -42556,7 +42556,7 @@
       "source_location": "L218",
       "_origin": "ast",
       "id": "proposemsg",
-      "community": 69,
+      "community": 356,
       "norm_label": "proposemsg"
     },
     {
@@ -42566,7 +42566,7 @@
       "source_location": "L229",
       "_origin": "ast",
       "id": "proposemsgonlybconce",
-      "community": 69,
+      "community": 356,
       "norm_label": "proposemsgonlybconce"
     },
     {
@@ -42576,7 +42576,7 @@
       "source_location": "L241",
       "_origin": "ast",
       "id": "processpreparemsg",
-      "community": 69,
+      "community": 356,
       "norm_label": "processpreparemsg"
     },
     {
@@ -42586,7 +42586,7 @@
       "source_location": "L251",
       "_origin": "ast",
       "id": "processpreparemsgnotenough",
-      "community": 69,
+      "community": 356,
       "norm_label": "processpreparemsgnotenough"
     },
     {
@@ -42596,7 +42596,7 @@
       "source_location": "L259",
       "_origin": "ast",
       "id": "processpreparemsgnoproposemsg",
-      "community": 69,
+      "community": 356,
       "norm_label": "processpreparemsgnoproposemsg"
     },
     {
@@ -42606,7 +42606,7 @@
       "source_location": "L267",
       "_origin": "ast",
       "id": "processpreparemsgproposemsgdelay",
-      "community": 69,
+      "community": 356,
       "norm_label": "processpreparemsgproposemsgdelay"
     },
     {
@@ -42616,7 +42616,7 @@
       "source_location": "L277",
       "_origin": "ast",
       "id": "processcommitmsg",
-      "community": 69,
+      "community": 356,
       "norm_label": "processcommitmsg"
     },
     {
@@ -42626,7 +42626,7 @@
       "source_location": "L292",
       "_origin": "ast",
       "id": "processcommitmsgproposedelay",
-      "community": 69,
+      "community": 356,
       "norm_label": "processcommitmsgproposedelay"
     },
     {
@@ -42636,7 +42636,7 @@
       "source_location": "L308",
       "_origin": "ast",
       "id": "processcommitmsgwithduplicated",
-      "community": 69,
+      "community": 356,
       "norm_label": "processcommitmsgwithduplicated"
     },
     {
@@ -42646,7 +42646,7 @@
       "source_location": "L326",
       "_origin": "ast",
       "id": "processcommitmsgwithresponse",
-      "community": 69,
+      "community": 356,
       "norm_label": "processcommitmsgwithresponse"
     },
     {
@@ -43696,7 +43696,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "pbft_performance_manager_performancemanager",
-      "community": 716,
+      "community": 23,
       "norm_label": "performancemanager()"
     },
     {
@@ -43706,7 +43706,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_performance_manager_cpp_resdbconfig",
-      "community": 716,
+      "community": 23,
       "norm_label": "resdbconfig"
     },
     {
@@ -43716,7 +43716,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_performance_manager_cpp_replicacommunicator",
-      "community": 716,
+      "community": 23,
       "norm_label": "replicacommunicator"
     },
     {
@@ -43726,7 +43726,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_performance_manager_cpp_systeminfo",
-      "community": 716,
+      "community": 23,
       "norm_label": "systeminfo"
     },
     {
@@ -43736,7 +43736,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_performance_manager_cpp_signatureverifier",
-      "community": 716,
+      "community": 23,
       "norm_label": "signatureverifier"
     },
     {
@@ -45526,7 +45526,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "pbft_viewchange_manager_viewchangemanager",
-      "community": 17,
+      "community": 711,
       "norm_label": "viewchangemanager()"
     },
     {
@@ -45536,7 +45536,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_viewchange_manager_cpp_resdbconfig",
-      "community": 17,
+      "community": 711,
       "norm_label": "resdbconfig"
     },
     {
@@ -45546,7 +45546,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_viewchange_manager_cpp_checkpointmanager",
-      "community": 17,
+      "community": 711,
       "norm_label": "checkpointmanager"
     },
     {
@@ -45556,7 +45556,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_viewchange_manager_cpp_messagemanager",
-      "community": 17,
+      "community": 711,
       "norm_label": "messagemanager"
     },
     {
@@ -45566,7 +45566,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_viewchange_manager_cpp_systeminfo",
-      "community": 17,
+      "community": 711,
       "norm_label": "systeminfo"
     },
     {
@@ -45576,7 +45576,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_viewchange_manager_cpp_replicacommunicator",
-      "community": 17,
+      "community": 711,
       "norm_label": "replicacommunicator"
     },
     {
@@ -45586,7 +45586,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_viewchange_manager_cpp_signatureverifier",
-      "community": 17,
+      "community": 711,
       "norm_label": "signatureverifier"
     },
     {
@@ -45836,7 +45836,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_viewchange_manager_h_pbft_viewchange_manager",
-      "community": 719,
+      "community": 35,
       "norm_label": "viewchange_manager.h"
     },
     {
@@ -45846,7 +45846,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "pbft_viewchange_manager_resdb",
-      "community": 719,
+      "community": 35,
       "norm_label": "resdb()"
     },
     {
@@ -45856,7 +45856,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_viewchange_manager_h_namespace",
-      "community": 719,
+      "community": 35,
       "norm_label": "namespace"
     },
     {
@@ -48883,7 +48883,7 @@
       "label": "ScheduleUpdate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.cpp",
-      "source_location": "L98",
+      "source_location": "L86",
       "_origin": "ast",
       "id": "algorithm_leader_selection_schedule_scheduleupdate",
       "community": 85,
@@ -48893,7 +48893,7 @@
       "label": "ActivateUpTo()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.cpp",
-      "source_location": "L143",
+      "source_location": "L131",
       "_origin": "ast",
       "id": "algorithm_leader_selection_schedule_activateupto",
       "community": 85,
@@ -48903,7 +48903,7 @@
       "label": "ActiveLeaderVersion()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.cpp",
-      "source_location": "L161",
+      "source_location": "L149",
       "_origin": "ast",
       "id": "algorithm_leader_selection_schedule_activeleaderversion",
       "community": 85,
@@ -48913,7 +48913,7 @@
       "label": "ActiveEligibleMinWeight()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.cpp",
-      "source_location": "L176",
+      "source_location": "L164",
       "_origin": "ast",
       "id": "algorithm_leader_selection_schedule_activeeligibleminweight",
       "community": 85,
@@ -48923,7 +48923,7 @@
       "label": "BuildRecord()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.cpp",
-      "source_location": "L194",
+      "source_location": "L185",
       "_origin": "ast",
       "id": "algorithm_leader_selection_schedule_buildrecord",
       "community": 85,
@@ -48933,9 +48933,9 @@
       "label": "Record",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.cpp",
-      "source_location": "L194",
+      "source_location": "L185",
       "_origin": "ast",
-      "id": "record",
+      "id": "platform_consensus_ordering_td_hotstuff_algorithm_leader_selection_schedule_cpp_record",
       "community": 85,
       "norm_label": "record"
     },
@@ -48943,7 +48943,7 @@
       "label": "BuildSmoothWeightedRoundRobin()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.cpp",
-      "source_location": "L214",
+      "source_location": "L205",
       "_origin": "ast",
       "id": "algorithm_leader_selection_schedule_buildsmoothweightedroundrobin",
       "community": 85,
@@ -48953,7 +48953,7 @@
       "label": "IsExactRoundRobinProfile()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.cpp",
-      "source_location": "L264",
+      "source_location": "L255",
       "_origin": "ast",
       "id": "algorithm_leader_selection_schedule_isexactroundrobinprofile",
       "community": 85,
@@ -49063,7 +49063,7 @@
       "label": "EqualEnabledWeightsMatchRoundRobin",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule_test.cpp",
-      "source_location": "L32",
+      "source_location": "L36",
       "_origin": "ast",
       "id": "equalenabledweightsmatchroundrobin",
       "community": 259,
@@ -49073,7 +49073,7 @@
       "label": "WeightedSelectionIsDeterministicAndEligible",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule_test.cpp",
-      "source_location": "L43",
+      "source_location": "L47",
       "_origin": "ast",
       "id": "weightedselectionisdeterministicandeligible",
       "community": 259,
@@ -49083,7 +49083,7 @@
       "label": "AllBelowThresholdFallsBackToPositiveWeights",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule_test.cpp",
-      "source_location": "L59",
+      "source_location": "L63",
       "_origin": "ast",
       "id": "allbelowthresholdfallsbacktopositiveweights",
       "community": 259,
@@ -49093,7 +49093,7 @@
       "label": "ActivationBoundaryPreservesOldViews",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule_test.cpp",
-      "source_location": "L73",
+      "source_location": "L77",
       "_origin": "ast",
       "id": "activationboundarypreservesoldviews",
       "community": 259,
@@ -49116,7 +49116,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "algorithm_proposal_manager_normalizereplicaweights",
-      "community": 289,
+      "community": 34,
       "norm_label": "normalizereplicaweights()"
     },
     {
@@ -49126,7 +49126,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_proposal_manager_cpp_vector",
-      "community": 289,
+      "community": 34,
       "norm_label": "vector"
     },
     {
@@ -49136,7 +49136,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "algorithm_proposal_manager_calculatequorumweight",
-      "community": 289,
+      "community": 34,
       "norm_label": "calculatequorumweight()"
     },
     {
@@ -49146,7 +49146,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "algorithm_proposal_manager_buildsignerbitmap",
-      "community": 304,
+      "community": 93,
       "norm_label": "buildsignerbitmap()"
     },
     {
@@ -49186,7 +49186,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "algorithm_proposal_manager_defaultleaderforview",
-      "community": 358,
+      "community": 186,
       "norm_label": "defaultleaderforview()"
     },
     {
@@ -49966,7 +49966,7 @@
       "source_location": "L215",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_isleader",
-      "community": 131,
+      "community": 351,
       "norm_label": "isleader()"
     },
     {
@@ -49986,7 +49986,7 @@
       "source_location": "L222",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_marktimeoutprogresslocked",
-      "community": 131,
+      "community": 351,
       "norm_label": "marktimeoutprogresslocked()"
     },
     {
@@ -49996,7 +49996,7 @@
       "source_location": "L228",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_ready",
-      "community": 131,
+      "community": 351,
       "norm_label": "ready()"
     },
     {
@@ -50013,7 +50013,7 @@
       "label": "AsyncTimeout()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L239",
+      "source_location": "L240",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_asynctimeout",
       "community": 351,
@@ -50023,17 +50023,17 @@
       "label": "AsyncSend()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L365",
+      "source_location": "L366",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_asyncsend",
-      "community": 131,
+      "community": 351,
       "norm_label": "asyncsend()"
     },
     {
       "label": "AsyncCommit()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L418",
+      "source_location": "L419",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_asynccommit",
       "community": 131,
@@ -50043,7 +50043,7 @@
       "label": "AsyncVerifiedEvents()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L434",
+      "source_location": "L435",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_asyncverifiedevents",
       "community": 351,
@@ -50053,7 +50053,7 @@
       "label": "AsyncWeightUpdates()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L452",
+      "source_location": "L453",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_asyncweightupdates",
       "community": 360,
@@ -50063,7 +50063,7 @@
       "label": "ProcessVerifiedConsensusEvent()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L465",
+      "source_location": "L466",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_processverifiedconsensusevent",
       "community": 351,
@@ -50073,7 +50073,7 @@
       "label": "VerifiedConsensusEvent",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L465",
+      "source_location": "L466",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_verifiedconsensusevent",
       "community": 351,
@@ -50083,7 +50083,7 @@
       "label": "ReceiveTransaction()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L481",
+      "source_location": "L482",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivetransaction",
       "community": 131,
@@ -50093,7 +50093,7 @@
       "label": "unique_ptr",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L481",
+      "source_location": "L482",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_unique_ptr",
       "community": 123,
@@ -50103,7 +50103,7 @@
       "label": "ReceiveTransactionForView()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L485",
+      "source_location": "L486",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivetransactionforview",
       "community": 131,
@@ -50113,7 +50113,7 @@
       "label": "TakeTransactionsForView()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L509",
+      "source_location": "L510",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_taketransactionsforview",
       "community": 131,
@@ -50123,7 +50123,7 @@
       "label": "MarkTransactionCommitted()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L542",
+      "source_location": "L543",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_marktransactioncommitted",
       "community": 131,
@@ -50133,7 +50133,7 @@
       "label": "CurrentView()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L549",
+      "source_location": "L550",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_currentview",
       "community": 351,
@@ -50143,7 +50143,7 @@
       "label": "CurrentLeader()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L554",
+      "source_location": "L555",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_currentleader",
       "community": 123,
@@ -50153,7 +50153,7 @@
       "label": "WeightForSigner()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L562",
+      "source_location": "L563",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_weightforsigner",
       "community": 123,
@@ -50163,7 +50163,7 @@
       "label": "CertificateWeight()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L572",
+      "source_location": "L573",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_certificateweight",
       "community": 123,
@@ -50173,7 +50173,7 @@
       "label": "map",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L572",
+      "source_location": "L573",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_map",
       "community": 123,
@@ -50183,7 +50183,7 @@
       "label": "Certificate",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L572",
+      "source_location": "L573",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_certificate",
       "community": 123,
@@ -50193,7 +50193,7 @@
       "label": "CertificateSigners()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L581",
+      "source_location": "L582",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_certificatesigners",
       "community": 123,
@@ -50203,7 +50203,7 @@
       "label": "MaybeMakeQcEvidenceSnapshotLocked()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L603",
+      "source_location": "L604",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_maybemakeqcevidencesnapshotlocked",
       "community": 123,
@@ -50213,7 +50213,7 @@
       "label": "QC",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L603",
+      "source_location": "L604",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_qc",
       "community": 123,
@@ -50223,7 +50223,7 @@
       "label": "TdHotstuffQcEvidenceSnapshot",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L603",
+      "source_location": "L604",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_tdhotstuffqcevidencesnapshot",
       "community": 123,
@@ -50233,7 +50233,7 @@
       "label": "MaybeFormQcLocked()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L625",
+      "source_location": "L626",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_maybeformqclocked",
       "community": 123,
@@ -50243,7 +50243,7 @@
       "label": "ReceiveCertificate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L708",
+      "source_location": "L709",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivecertificate",
       "community": 123,
@@ -50253,7 +50253,7 @@
       "label": "ProcessVerifiedCertificate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L724",
+      "source_location": "L725",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_processverifiedcertificate",
       "community": 123,
@@ -50263,7 +50263,7 @@
       "label": "ReceiveTimeoutVote()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L758",
+      "source_location": "L752",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivetimeoutvote",
       "community": 351,
@@ -50273,7 +50273,7 @@
       "label": "TimeoutVote",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L758",
+      "source_location": "L752",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_timeoutvote",
       "community": 351,
@@ -50283,7 +50283,7 @@
       "label": "ReceiveTimeoutCert()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L811",
+      "source_location": "L805",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivetimeoutcert",
       "community": 351,
@@ -50293,7 +50293,7 @@
       "label": "TimeoutCert",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L811",
+      "source_location": "L805",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_timeoutcert",
       "community": 351,
@@ -50303,7 +50303,7 @@
       "label": "BroadcastTimeoutVote()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L827",
+      "source_location": "L821",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_broadcasttimeoutvote",
       "community": 351,
@@ -50313,7 +50313,7 @@
       "label": "BroadcastTimeoutCert()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L833",
+      "source_location": "L827",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_broadcasttimeoutcert",
       "community": 351,
@@ -50323,7 +50323,7 @@
       "label": "BroadcastCandidateWeightUpdate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L839",
+      "source_location": "L833",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_broadcastcandidateweightupdate",
       "community": 360,
@@ -50333,7 +50333,7 @@
       "label": "CandidateWeightUpdate",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L839",
+      "source_location": "L833",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_candidateweightupdate",
       "community": 360,
@@ -50343,7 +50343,7 @@
       "label": "BroadcastWeightUpdateVote()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L846",
+      "source_location": "L840",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_broadcastweightupdatevote",
       "community": 360,
@@ -50353,7 +50353,7 @@
       "label": "WeightUpdateVote",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L846",
+      "source_location": "L840",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_weightupdatevote",
       "community": 360,
@@ -50363,7 +50363,7 @@
       "label": "BroadcastWeightUpdateCert()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L852",
+      "source_location": "L846",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_broadcastweightupdatecert",
       "community": 360,
@@ -50373,7 +50373,7 @@
       "label": "WeightUpdateCert",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L852",
+      "source_location": "L846",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_weightupdatecert",
       "community": 360,
@@ -50383,7 +50383,7 @@
       "label": "DrainCompletedWeightCandidates()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L858",
+      "source_location": "L852",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_draincompletedweightcandidates",
       "community": 360,
@@ -50393,17 +50393,37 @@
       "label": "ActivateReadyWeightUpdates()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L869",
+      "source_location": "L906",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_activatereadyweightupdates",
       "community": 360,
       "norm_label": "activatereadyweightupdates()"
     },
     {
+      "label": "RefreshPendingWeightActivationView()",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L910",
+      "_origin": "ast",
+      "id": "algorithm_td_hotstuff_refreshpendingweightactivationview",
+      "community": 360,
+      "norm_label": "refreshpendingweightactivationview()"
+    },
+    {
+      "label": "MaybeActivateReadyWeightUpdatesAfterViewAdvance()",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L919",
+      "_origin": "ast",
+      "id": "algorithm_td_hotstuff_maybeactivatereadyweightupdatesafterviewadvance",
+      "community": 351,
+      "norm_label": "maybeactivatereadyweightupdatesafterviewadvance()"
+    },
+    {
       "label": "ReceiveCandidateWeightUpdate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L891",
+      "source_location": "L965",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivecandidateweightupdate",
       "community": 360,
@@ -50413,7 +50433,7 @@
       "label": "ReceiveWeightUpdateVote()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L905",
+      "source_location": "L979",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receiveweightupdatevote",
       "community": 360,
@@ -50423,7 +50443,7 @@
       "label": "ReceiveWeightUpdateCert()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L917",
+      "source_location": "L995",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receiveweightupdatecert",
       "community": 360,
@@ -50433,7 +50453,7 @@
       "label": "ApplyTimeoutCertLocked()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L928",
+      "source_location": "L1008",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_applytimeoutcertlocked",
       "community": 351,
@@ -50443,7 +50463,7 @@
       "label": "ReceiveProposal()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L958",
+      "source_location": "L1038",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receiveproposal",
       "community": 123,
@@ -50453,7 +50473,7 @@
       "label": "Proposal",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L958",
+      "source_location": "L1038",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_proposal",
       "community": 123,
@@ -50463,7 +50483,7 @@
       "label": "CommitProposal()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1042",
+      "source_location": "L1122",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_commitproposal",
       "community": 123,
@@ -50473,7 +50493,7 @@
       "label": "GenerateCertificate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1046",
+      "source_location": "L1126",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_generatecertificate",
       "community": 123,
@@ -51066,7 +51086,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "algorithm_timeout_manager_timeoutmanager",
-      "community": 56,
+      "community": 715,
       "norm_label": "timeoutmanager()"
     },
     {
@@ -51076,7 +51096,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_timeout_manager_cpp_signatureverifier",
-      "community": 56,
+      "community": 715,
       "norm_label": "signatureverifier"
     },
     {
@@ -51086,7 +51106,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_timeout_manager_cpp_shared_ptr",
-      "community": 56,
+      "community": 715,
       "norm_label": "shared_ptr"
     },
     {
@@ -51096,7 +51116,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_timeout_manager_cpp_weightschedule",
-      "community": 56,
+      "community": 715,
       "norm_label": "weightschedule"
     },
     {
@@ -51430,10 +51450,30 @@
       "norm_label": "activeweightversion()"
     },
     {
+      "label": "RecordForVersion()",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
+      "source_location": "L51",
+      "_origin": "ast",
+      "id": "algorithm_weight_schedule_recordforversion",
+      "community": 85,
+      "norm_label": "recordforversion()"
+    },
+    {
+      "label": "Record",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
+      "source_location": "L51",
+      "_origin": "ast",
+      "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_schedule_cpp_record",
+      "community": 85,
+      "norm_label": "record"
+    },
+    {
       "label": "WeightVersionForView()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
-      "source_location": "L48",
+      "source_location": "L61",
       "_origin": "ast",
       "id": "algorithm_weight_schedule_weightversionforview",
       "community": 85,
@@ -51443,7 +51483,7 @@
       "label": "WeightForSigner()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
-      "source_location": "L60",
+      "source_location": "L73",
       "_origin": "ast",
       "id": "algorithm_weight_schedule_weightforsigner",
       "community": 85,
@@ -51453,17 +51493,37 @@
       "label": "QuorumWeightForView()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
-      "source_location": "L68",
+      "source_location": "L81",
       "_origin": "ast",
       "id": "algorithm_weight_schedule_quorumweightforview",
       "community": 85,
       "norm_label": "quorumweightforview()"
     },
     {
+      "label": "WeightForSignerInVersion()",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
+      "source_location": "L85",
+      "_origin": "ast",
+      "id": "algorithm_weight_schedule_weightforsignerinversion",
+      "community": 85,
+      "norm_label": "weightforsignerinversion()"
+    },
+    {
+      "label": "QuorumWeightForVersion()",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
+      "source_location": "L95",
+      "_origin": "ast",
+      "id": "algorithm_weight_schedule_quorumweightforversion",
+      "community": 85,
+      "norm_label": "quorumweightforversion()"
+    },
+    {
       "label": "ScheduleUpdate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
-      "source_location": "L72",
+      "source_location": "L100",
       "_origin": "ast",
       "id": "algorithm_weight_schedule_scheduleupdate",
       "community": 85,
@@ -51473,7 +51533,7 @@
       "label": "string",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
-      "source_location": "L72",
+      "source_location": "L100",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_schedule_cpp_string",
       "community": 85,
@@ -51483,7 +51543,7 @@
       "label": "ActivateUpTo()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
-      "source_location": "L113",
+      "source_location": "L141",
       "_origin": "ast",
       "id": "algorithm_weight_schedule_activateupto",
       "community": 85,
@@ -51693,7 +51753,7 @@
       "label": "HandleCandidate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L129",
+      "source_location": "L131",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_handlecandidate",
       "community": 118,
@@ -51703,7 +51763,7 @@
       "label": "unique_ptr",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L129",
+      "source_location": "L131",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_cpp_unique_ptr",
       "community": 118,
@@ -51713,7 +51773,7 @@
       "label": "HandleVote()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L159",
+      "source_location": "L163",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_handlevote",
       "community": 118,
@@ -51723,7 +51783,7 @@
       "label": "WeightUpdateCert",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L159",
+      "source_location": "L163",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_cpp_weightupdatecert",
       "community": 118,
@@ -51733,7 +51793,7 @@
       "label": "HandleCert()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L177",
+      "source_location": "L185",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_handlecert",
       "community": 118,
@@ -51743,17 +51803,27 @@
       "label": "ActivateReady()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L204",
+      "source_location": "L219",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_activateready",
       "community": 118,
       "norm_label": "activateready()"
     },
     {
+      "label": "EarliestPendingActivationView()",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
+      "source_location": "L253",
+      "_origin": "ast",
+      "id": "algorithm_weight_update_controller_earliestpendingactivationview",
+      "community": 118,
+      "norm_label": "earliestpendingactivationview()"
+    },
+    {
       "label": "KeyForCandidate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L237",
+      "source_location": "L268",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_keyforcandidate",
       "community": 118,
@@ -51763,7 +51833,7 @@
       "label": "CandidateKey",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L237",
+      "source_location": "L268",
       "_origin": "ast",
       "id": "candidatekey",
       "community": 118,
@@ -51773,7 +51843,7 @@
       "label": "ValidateCandidateStructure()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L249",
+      "source_location": "L280",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_validatecandidatestructure",
       "community": 118,
@@ -51783,7 +51853,7 @@
       "label": "VerifyVoteForCandidate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L308",
+      "source_location": "L339",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_verifyvoteforcandidate",
       "community": 118,
@@ -51793,7 +51863,7 @@
       "label": "CandidateWeights()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L322",
+      "source_location": "L353",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_candidateweights",
       "community": 118,
@@ -51803,7 +51873,7 @@
       "label": "CandidateLeaderWeights()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L332",
+      "source_location": "L363",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_candidateleaderweights",
       "community": 118,
@@ -51813,7 +51883,7 @@
       "label": "VoteWeight()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L342",
+      "source_location": "L373",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_voteweight",
       "community": 118,
@@ -51823,17 +51893,27 @@
       "label": "map",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L342",
+      "source_location": "L373",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_cpp_map",
       "community": 118,
       "norm_label": "map"
     },
     {
+      "label": "AbsorbPendingVotesLocked()",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
+      "source_location": "L388",
+      "_origin": "ast",
+      "id": "algorithm_weight_update_controller_absorbpendingvoteslocked",
+      "community": 118,
+      "norm_label": "absorbpendingvoteslocked()"
+    },
+    {
       "label": "MaybeFormCert()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L351",
+      "source_location": "L407",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_maybeformcert",
       "community": 118,
@@ -51843,7 +51923,7 @@
       "label": "VoteBucket",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
-      "source_location": "L351",
+      "source_location": "L407",
       "_origin": "ast",
       "id": "votebucket",
       "community": 118,
@@ -51940,10 +52020,40 @@
       "norm_label": "noopcandidate()"
     },
     {
-      "label": "CandidateMessage()",
+      "label": "CandidateWithWeights()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
       "source_location": "L59",
+      "_origin": "ast",
+      "id": "algorithm_weight_update_controller_test_candidatewithweights",
+      "community": 291,
+      "norm_label": "candidatewithweights()"
+    },
+    {
+      "label": "vector",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L59",
+      "_origin": "ast",
+      "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_vector",
+      "community": 291,
+      "norm_label": "vector"
+    },
+    {
+      "label": "string",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L59",
+      "_origin": "ast",
+      "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_string",
+      "community": 291,
+      "norm_label": "string"
+    },
+    {
+      "label": "CandidateMessage()",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L83",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_test_candidatemessage",
       "community": 291,
@@ -51953,7 +52063,7 @@
       "label": "CandidateWeightUpdate",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
-      "source_location": "L59",
+      "source_location": "L83",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_candidateweightupdate",
       "community": 291,
@@ -51963,7 +52073,7 @@
       "label": "TEST()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
-      "source_location": "L65",
+      "source_location": "L89",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_test_test",
       "community": 291,
@@ -51973,7 +52083,7 @@
       "label": "WeightUpdateControllerTest",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
-      "source_location": "L65",
+      "source_location": "L89",
       "_origin": "ast",
       "id": "weightupdatecontrollertest",
       "community": 291,
@@ -51983,7 +52093,7 @@
       "label": "IgnoresNoOpLocalCandidate",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
-      "source_location": "L65",
+      "source_location": "L89",
       "_origin": "ast",
       "id": "ignoresnooplocalcandidate",
       "community": 291,
@@ -51993,7 +52103,7 @@
       "label": "VotesOnlyForMatchingLocalCandidate",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
-      "source_location": "L76",
+      "source_location": "L100",
       "_origin": "ast",
       "id": "votesonlyformatchinglocalcandidate",
       "community": 291,
@@ -52003,21 +52113,71 @@
       "label": "FormsCertAfterOldWeightQuorumVotes",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
-      "source_location": "L101",
+      "source_location": "L125",
       "_origin": "ast",
       "id": "formscertafteroldweightquorumvotes",
       "community": 291,
       "norm_label": "formscertafteroldweightquorumvotes"
     },
     {
+      "label": "ScheduledWeightsDoNotAffectLookupBeforeActivation",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L157",
+      "_origin": "ast",
+      "id": "scheduledweightsdonotaffectlookupbeforeactivation",
+      "community": 291,
+      "norm_label": "scheduledweightsdonotaffectlookupbeforeactivation"
+    },
+    {
+      "label": "CertQuorumUsesCandidateOldWeightVersion",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L172",
+      "_origin": "ast",
+      "id": "certquorumusescandidateoldweightversion",
+      "community": 291,
+      "norm_label": "certquorumusescandidateoldweightversion"
+    },
+    {
+      "label": "PendingVotesContributeAfterCandidateArrives",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L213",
+      "_origin": "ast",
+      "id": "pendingvotescontributeaftercandidatearrives",
+      "community": 291,
+      "norm_label": "pendingvotescontributeaftercandidatearrives"
+    },
+    {
       "label": "ActivatesCertifiedWeightsAtBoundary",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
-      "source_location": "L130",
+      "source_location": "L242",
       "_origin": "ast",
       "id": "activatescertifiedweightsatboundary",
       "community": 291,
       "norm_label": "activatescertifiedweightsatboundary"
+    },
+    {
+      "label": "InvalidCertDoesNotPoisonLaterValidCert",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L283",
+      "_origin": "ast",
+      "id": "invalidcertdoesnotpoisonlatervalidcert",
+      "community": 291,
+      "norm_label": "invalidcertdoesnotpoisonlatervalidcert"
+    },
+    {
+      "label": "LateCertActivatesAtCertifiedBoundary",
+      "file_type": "code",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L311",
+      "_origin": "ast",
+      "id": "latecertactivatesatcertifiedboundary",
+      "community": 291,
+      "norm_label": "latecertactivatesatcertifiedboundary"
     },
     {
       "label": "consensus.cpp",
@@ -52326,7 +52486,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "framework_performance_manager_benchmarkrouteforview",
-      "community": 358,
+      "community": 186,
       "norm_label": "benchmarkrouteforview()"
     },
     {
@@ -52336,7 +52496,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "framework_performance_manager_benchmarkrouteforobservedprimaries",
-      "community": 358,
+      "community": 186,
       "norm_label": "benchmarkrouteforobservedprimaries()"
     },
     {
@@ -52346,7 +52506,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_vector",
-      "community": 358,
+      "community": 186,
       "norm_label": "vector"
     },
     {
@@ -52396,7 +52556,7 @@
       "source_location": "L144",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_framework_performance_manager_getprimary",
-      "community": 358,
+      "community": 186,
       "norm_label": "getprimary()"
     },
     {
@@ -52446,7 +52606,7 @@
       "source_location": "L211",
       "_origin": "ast",
       "id": "framework_performance_manager_observedprimaryset",
-      "community": 358,
+      "community": 186,
       "norm_label": "observedprimaryset()"
     },
     {
@@ -52456,7 +52616,7 @@
       "source_location": "L224",
       "_origin": "ast",
       "id": "framework_performance_manager_observedroutingprimary",
-      "community": 358,
+      "community": 186,
       "norm_label": "observedroutingprimary()"
     },
     {
@@ -52556,7 +52716,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "framework_performance_manager_test",
-      "community": 358,
+      "community": 186,
       "norm_label": "performance_manager_test.cpp"
     },
     {
@@ -52566,7 +52726,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "framework_performance_manager_test_test",
-      "community": 358,
+      "community": 186,
       "norm_label": "test()"
     },
     {
@@ -52576,7 +52736,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "hotstuffperformancemanagertest",
-      "community": 358,
+      "community": 186,
       "norm_label": "hotstuffperformancemanagertest"
     },
     {
@@ -52586,7 +52746,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "dynamicroutepreferspredictedprimary",
-      "community": 358,
+      "community": 186,
       "norm_label": "dynamicroutepreferspredictedprimary"
     },
     {
@@ -52596,7 +52756,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "dynamicroutefallsbacktoobservedprimarywithoutprediction",
-      "community": 358,
+      "community": 186,
       "norm_label": "dynamicroutefallsbacktoobservedprimarywithoutprediction"
     },
     {
@@ -52606,7 +52766,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "dynamicrouteignoresinvalidpredictionandobservedprimary",
-      "community": 358,
+      "community": 186,
       "norm_label": "dynamicrouteignoresinvalidpredictionandobservedprimary"
     },
     {
@@ -52616,7 +52776,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "observedprimarysetkeepspredictionwhenstillactive",
-      "community": 358,
+      "community": 186,
       "norm_label": "observedprimarysetkeepspredictionwhenstillactive"
     },
     {
@@ -52626,7 +52786,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "observedprimarysetskipsmissingpredictedleader",
-      "community": 358,
+      "community": 186,
       "norm_label": "observedprimarysetskipsmissingpredictedleader"
     },
     {
@@ -52636,7 +52796,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "benchmarkretrytimeoutdoesnotuseconsensustimeoutbydefault",
-      "community": 358,
+      "community": 186,
       "norm_label": "benchmarkretrytimeoutdoesnotuseconsensustimeoutbydefault"
     },
     {
@@ -52646,7 +52806,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "dynamicroutingdefaultsoffforclassiccore",
-      "community": 358,
+      "community": 186,
       "norm_label": "dynamicroutingdefaultsoffforclassiccore"
     },
     {
@@ -54083,7 +54243,7 @@
       "label": "CoreEvidenceEvent",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L24",
+      "source_location": "L25",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_coreevidenceevent",
       "community": 189,
@@ -54093,7 +54253,7 @@
       "label": "view_or_round",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L25",
+      "source_location": "L26",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_coreevidenceevent_view_or_round",
       "community": 189,
@@ -54103,7 +54263,7 @@
       "label": "leader_id",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L26",
+      "source_location": "L27",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_coreevidenceevent_leader_id",
       "community": 189,
@@ -54113,7 +54273,7 @@
       "label": "string",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L27",
+      "source_location": "L28",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_cpp_string",
       "community": 189,
@@ -54123,7 +54283,7 @@
       "label": "artifact_digest",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L27",
+      "source_location": "L28",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_coreevidenceevent_artifact_digest",
       "community": 189,
@@ -54133,7 +54293,7 @@
       "label": "signer_bitmap",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L28",
+      "source_location": "L29",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_coreevidenceevent_signer_bitmap",
       "community": 189,
@@ -54143,7 +54303,7 @@
       "label": "available_signer_bitmap",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L29",
+      "source_location": "L30",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_coreevidenceevent_available_signer_bitmap",
       "community": 189,
@@ -54153,7 +54313,7 @@
       "label": "OutcomeClass",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L30",
+      "source_location": "L31",
       "_origin": "ast",
       "id": "outcomeclass",
       "community": 189,
@@ -54163,7 +54323,7 @@
       "label": "outcome_class",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L30",
+      "source_location": "L31",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_coreevidenceevent_outcome_class",
       "community": 189,
@@ -54173,7 +54333,7 @@
       "label": "StrongFaultTypeName()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L33",
+      "source_location": "L34",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_strongfaulttypename",
       "community": 189,
@@ -54183,17 +54343,27 @@
       "label": "StrongFaultType",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L33",
+      "source_location": "L34",
       "_origin": "ast",
       "id": "strongfaulttype",
       "community": 189,
       "norm_label": "strongfaulttype"
     },
     {
+      "label": "CoreRecoveryCreditForScore()",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
+      "source_location": "L56",
+      "_origin": "ast",
+      "id": "reputation_reputation_algorithm_corerecoverycreditforscore",
+      "community": 70,
+      "norm_label": "corerecoverycreditforscore()"
+    },
+    {
       "label": "SummarizeFaultedValidators()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L55",
+      "source_location": "L74",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_summarizefaultedvalidators",
       "community": 189,
@@ -54203,7 +54373,7 @@
       "label": "vector",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L55",
+      "source_location": "L74",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_cpp_vector",
       "community": 189,
@@ -54213,7 +54383,7 @@
       "label": "StrongFaultRecord",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L55",
+      "source_location": "L74",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_cpp_strongfaultrecord",
       "community": 189,
@@ -54223,7 +54393,7 @@
       "label": "HasStrongFaultEvidence()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L86",
+      "source_location": "L105",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_hasstrongfaultevidence",
       "community": 189,
@@ -54233,7 +54403,7 @@
       "label": "ReputationWindowInput",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L86",
+      "source_location": "L105",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_cpp_reputationwindowinput",
       "community": 189,
@@ -54243,7 +54413,7 @@
       "label": "UseCoreOnlyFastPath()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L96",
+      "source_location": "L115",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_usecoreonlyfastpath",
       "community": 189,
@@ -54253,7 +54423,7 @@
       "label": "ReputationConfig",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L96",
+      "source_location": "L115",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_cpp_reputationconfig",
       "community": 189,
@@ -54263,7 +54433,7 @@
       "label": "BroadAvailableSignerThreshold()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L103",
+      "source_location": "L122",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_broadavailablesignerthreshold",
       "community": 189,
@@ -54273,7 +54443,7 @@
       "label": "HasBroadAvailableSignerCoverage()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L118",
+      "source_location": "L137",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_hasbroadavailablesignercoverage",
       "community": 189,
@@ -54283,7 +54453,7 @@
       "label": "ComputeCoreOnlyReputation()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L126",
+      "source_location": "L145",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_computecoreonlyreputation",
       "community": 70,
@@ -54293,7 +54463,7 @@
       "label": "ReputationCandidate",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L126",
+      "source_location": "L145",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_cpp_reputationcandidate",
       "community": 70,
@@ -54303,7 +54473,7 @@
       "label": "ComputeReputationCandidate()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L285",
+      "source_location": "L313",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_computereputationcandidate",
       "community": 70,
@@ -54750,10 +54920,20 @@
       "norm_label": "bonuscanhelpbelowmeanhonestvalidatorcatchup"
     },
     {
-      "label": "SlowVoterLosesRecoveryWithoutDirectSlash",
+      "label": "PartialHealthyBelowMeanValidatorCanCatchUp",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
       "source_location": "L341",
+      "_origin": "ast",
+      "id": "partialhealthybelowmeanvalidatorcancatchup",
+      "community": 5,
+      "norm_label": "partialhealthybelowmeanvalidatorcancatchup"
+    },
+    {
+      "label": "SlowVoterLosesRecoveryWithoutDirectSlash",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
+      "source_location": "L366",
       "_origin": "ast",
       "id": "slowvoterlosesrecoverywithoutdirectslash",
       "community": 5,
@@ -54763,7 +54943,7 @@
       "label": "SilentLeaderLosesLeaderRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L361",
+      "source_location": "L386",
       "_origin": "ast",
       "id": "silentleaderlosesleaderrecovery",
       "community": 5,
@@ -54773,7 +54953,7 @@
       "label": "NarrowSignerTargetOnlyReducesLeaderRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L381",
+      "source_location": "L406",
       "_origin": "ast",
       "id": "narrowsignertargetonlyreducesleaderrecovery",
       "community": 5,
@@ -54783,7 +54963,7 @@
       "label": "PeerTrustDisabledKeepsAuditNeutral",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L404",
+      "source_location": "L429",
       "_origin": "ast",
       "id": "peertrustdisabledkeepsauditneutral",
       "community": 5,
@@ -54793,7 +54973,7 @@
       "label": "PeerTrustAllGoodRotatingFeedbackStaysHigh",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L423",
+      "source_location": "L448",
       "_origin": "ast",
       "id": "peertrustallgoodrotatingfeedbackstayshigh",
       "community": 5,
@@ -54803,7 +54983,7 @@
       "label": "PeerTrustCliqueFeedbackLowersOnlyLeaderRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L443",
+      "source_location": "L468",
       "_origin": "ast",
       "id": "peertrustcliquefeedbacklowersonlyleaderrecovery",
       "community": 5,
@@ -54813,7 +54993,7 @@
       "label": "PeerTrustSharedReviewerCliqueDropsBelowLegacyDiversityGate",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L472",
+      "source_location": "L497",
       "_origin": "ast",
       "id": "peertrustsharedreviewercliquedropsbelowlegacydiversitygate",
       "community": 5,
@@ -54823,7 +55003,7 @@
       "label": "AvailableSignerBitmapLimitsVoterRecoveryOpportunities",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L515",
+      "source_location": "L540",
       "_origin": "ast",
       "id": "availablesignerbitmaplimitsvoterrecoveryopportunities",
       "community": 5,
@@ -54833,7 +55013,7 @@
       "label": "BroadAvailableSignerBitmapDoesNotPunishUnselectedTimelyVoter",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L536",
+      "source_location": "L561",
       "_origin": "ast",
       "id": "broadavailablesignerbitmapdoesnotpunishunselectedtimelyvoter",
       "community": 5,
@@ -54843,7 +55023,7 @@
       "label": "QuorumAvailableBitmapDetectsRepeatedUnavailableSlowVoter",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L554",
+      "source_location": "L579",
       "_origin": "ast",
       "id": "quorumavailablebitmapdetectsrepeatedunavailableslowvoter",
       "community": 5,
@@ -54853,7 +55033,7 @@
       "label": "SparseTimelyAvailabilityGetsOnlyPartialRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L572",
+      "source_location": "L597",
       "_origin": "ast",
       "id": "sparsetimelyavailabilitygetsonlypartialrecovery",
       "community": 5,
@@ -54863,7 +55043,7 @@
       "label": "LowParticipationCarryoverContinuesDecayWithoutFreshOpportunities",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L594",
+      "source_location": "L619",
       "_origin": "ast",
       "id": "lowparticipationcarryovercontinuesdecaywithoutfreshopportunities",
       "community": 5,
@@ -54873,7 +55053,7 @@
       "label": "PeerTrustCleanCliqueSeparatesLeadersFromReviewers",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L615",
+      "source_location": "L640",
       "_origin": "ast",
       "id": "peertrustcleancliqueseparatesleadersfromreviewers",
       "community": 5,
@@ -54883,7 +55063,7 @@
       "label": "PeerTrustLowReviewerCredibilityReducesFeedback",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L645",
+      "source_location": "L670",
       "_origin": "ast",
       "id": "peertrustlowreviewercredibilityreducesfeedback",
       "community": 5,
@@ -54893,7 +55073,7 @@
       "label": "PeerTrustBroadAvailableOverlapDoesNotCreateDebt",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L664",
+      "source_location": "L689",
       "_origin": "ast",
       "id": "peertrustbroadavailableoverlapdoesnotcreatedebt",
       "community": 5,
@@ -54903,7 +55083,7 @@
       "label": "PeerTrustDebtPersistsWithoutLeaderFeedback",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L694",
+      "source_location": "L719",
       "_origin": "ast",
       "id": "peertrustdebtpersistswithoutleaderfeedback",
       "community": 5,
@@ -54913,7 +55093,7 @@
       "label": "PeerTrustBroadGoodLeadershipRepaysDebt",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L714",
+      "source_location": "L739",
       "_origin": "ast",
       "id": "peertrustbroadgoodleadershiprepaysdebt",
       "community": 5,
@@ -54923,7 +55103,7 @@
       "label": "CandidateDigestIsDeterministic",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L735",
+      "source_location": "L760",
       "_origin": "ast",
       "id": "candidatedigestisdeterministic",
       "community": 5,
@@ -54933,7 +55113,7 @@
       "label": "CandidateDigestIgnoresAuditRoots",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L753",
+      "source_location": "L778",
       "_origin": "ast",
       "id": "candidatedigestignoresauditroots",
       "community": 5,
@@ -54943,7 +55123,7 @@
       "label": "SybilGraphDisabledKeepsAuditNeutral",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L770",
+      "source_location": "L795",
       "_origin": "ast",
       "id": "sybilgraphdisabledkeepsauditneutral",
       "community": 5,
@@ -54953,7 +55133,7 @@
       "label": "SybilGraphAllGoodRotatingEvidenceStaysHigh",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L791",
+      "source_location": "L816",
       "_origin": "ast",
       "id": "sybilgraphallgoodrotatingevidencestayshigh",
       "community": 5,
@@ -54963,7 +55143,7 @@
       "label": "SybilGraphDenseClusterWithFewAttackEdgesDropsCluster",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L821",
+      "source_location": "L846",
       "_origin": "ast",
       "id": "sybilgraphdenseclusterwithfewattackedgesdropscluster",
       "community": 5,
@@ -54973,7 +55153,7 @@
       "label": "SybilGraphBroadHonestEndorsementsWeakenDiscount",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L874",
+      "source_location": "L899",
       "_origin": "ast",
       "id": "sybilgraphbroadhonestendorsementsweakendiscount",
       "community": 5,
@@ -54983,7 +55163,7 @@
       "label": "SybilGraphDebtPersistsAcrossQuietWindow",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L903",
+      "source_location": "L928",
       "_origin": "ast",
       "id": "sybilgraphdebtpersistsacrossquietwindow",
       "community": 5,
@@ -54993,7 +55173,7 @@
       "label": "SybilGraphDebtGatesLaterRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L916",
+      "source_location": "L941",
       "_origin": "ast",
       "id": "sybilgraphdebtgateslaterrecovery",
       "community": 5,
@@ -55003,7 +55183,7 @@
       "label": "SybilGraphDebtDoesNotRecoverFromVoterOnlyEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L930",
+      "source_location": "L955",
       "_origin": "ast",
       "id": "sybilgraphdebtdoesnotrecoverfromvoteronlyevidence",
       "community": 5,
@@ -55013,7 +55193,7 @@
       "label": "DetectsVerifiedDoubleProposal",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L944",
+      "source_location": "L969",
       "_origin": "ast",
       "id": "detectsverifieddoubleproposal",
       "community": 5,
@@ -55023,7 +55203,7 @@
       "label": "IgnoresDuplicateOrUnverifiedProposalArtifacts",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L959",
+      "source_location": "L984",
       "_origin": "ast",
       "id": "ignoresduplicateorunverifiedproposalartifacts",
       "community": 5,
@@ -55033,7 +55213,7 @@
       "label": "DoubleProposalPenaltyOverridesSoftReputation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L977",
+      "source_location": "L1002",
       "_origin": "ast",
       "id": "doubleproposalpenaltyoverridessoftreputation",
       "community": 5,
@@ -55043,7 +55223,7 @@
       "label": "DetectsVerifiedDoubleVote",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1005",
+      "source_location": "L1030",
       "_origin": "ast",
       "id": "detectsverifieddoublevote",
       "community": 5,
@@ -55053,7 +55233,7 @@
       "label": "IgnoresDuplicateOrUnverifiedVoteArtifacts",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1020",
+      "source_location": "L1045",
       "_origin": "ast",
       "id": "ignoresduplicateorunverifiedvoteartifacts",
       "community": 5,
@@ -55063,7 +55243,7 @@
       "label": "DetectsInvalidQcProposal",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1038",
+      "source_location": "L1063",
       "_origin": "ast",
       "id": "detectsinvalidqcproposal",
       "community": 5,
@@ -55073,7 +55253,7 @@
       "label": "IgnoresUnverifiedOrValidQcProposalArtifacts",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1052",
+      "source_location": "L1077",
       "_origin": "ast",
       "id": "ignoresunverifiedorvalidqcproposalartifacts",
       "community": 5,
@@ -55083,7 +55263,7 @@
       "label": "DoubleVotePenaltyOverridesSoftReputation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1065",
+      "source_location": "L1090",
       "_origin": "ast",
       "id": "doublevotepenaltyoverridessoftreputation",
       "community": 5,
@@ -55093,7 +55273,7 @@
       "label": "InvalidQcPenaltyOverridesSoftReputation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1089",
+      "source_location": "L1114",
       "_origin": "ast",
       "id": "invalidqcpenaltyoverridessoftreputation",
       "community": 5,
@@ -55103,7 +55283,7 @@
       "label": "DetectsWeightUpdateVoteEquivocation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1112",
+      "source_location": "L1137",
       "_origin": "ast",
       "id": "detectsweightupdatevoteequivocation",
       "community": 5,
@@ -55113,7 +55293,7 @@
       "label": "IgnoresDuplicateOrUnverifiedWeightUpdateVoteArtifacts",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1128",
+      "source_location": "L1153",
       "_origin": "ast",
       "id": "ignoresduplicateorunverifiedweightupdatevoteartifacts",
       "community": 5,
@@ -55123,7 +55303,7 @@
       "label": "DetectsTimeoutVoteEquivocation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1147",
+      "source_location": "L1172",
       "_origin": "ast",
       "id": "detectstimeoutvoteequivocation",
       "community": 5,
@@ -55133,7 +55313,7 @@
       "label": "IgnoresDuplicateOrUnverifiedTimeoutVotes",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1162",
+      "source_location": "L1187",
       "_origin": "ast",
       "id": "ignoresduplicateorunverifiedtimeoutvotes",
       "community": 5,
@@ -55143,7 +55323,7 @@
       "label": "DetectsInvalidTcProposal",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1180",
+      "source_location": "L1205",
       "_origin": "ast",
       "id": "detectsinvalidtcproposal",
       "community": 5,
@@ -55153,7 +55333,7 @@
       "label": "IgnoresUnverifiedOrValidTcProposalArtifacts",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1193",
+      "source_location": "L1218",
       "_origin": "ast",
       "id": "ignoresunverifiedorvalidtcproposalartifacts",
       "community": 5,
@@ -55163,7 +55343,7 @@
       "label": "ConflictingQcsPenalizeOnlySignerIntersection",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1206",
+      "source_location": "L1231",
       "_origin": "ast",
       "id": "conflictingqcspenalizeonlysignerintersection",
       "community": 5,
@@ -55173,7 +55353,7 @@
       "label": "ConflictingQcIgnoresDuplicatesAndUnverifiedQcs",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1221",
+      "source_location": "L1246",
       "_origin": "ast",
       "id": "conflictingqcignoresduplicatesandunverifiedqcs",
       "community": 5,
@@ -55183,7 +55363,7 @@
       "label": "V2StrongFaultCandidatePenaltiesAreDeterministic",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1238",
+      "source_location": "L1263",
       "_origin": "ast",
       "id": "v2strongfaultcandidatepenaltiesaredeterministic",
       "community": 5,
@@ -55193,7 +55373,7 @@
       "label": "CandidateDigestChangesWhenPenaltyRootChanges",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1284",
+      "source_location": "L1309",
       "_origin": "ast",
       "id": "candidatedigestchangeswhenpenaltyrootchanges",
       "community": 5,
@@ -55476,7 +55656,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "tuple",
-      "community": 189,
+      "community": 287,
       "norm_label": "tuple"
     },
     {
@@ -55726,7 +55906,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_h_reputation_reputation_plugin_runtime",
-      "community": 189,
+      "community": 287,
       "norm_label": "reputation_plugin_runtime.h"
     },
     {
@@ -55736,7 +55916,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_resdb",
-      "community": 189,
+      "community": 287,
       "norm_label": "resdb()"
     },
     {
@@ -55746,7 +55926,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_h_namespace",
-      "community": 189,
+      "community": 287,
       "norm_label": "namespace"
     },
     {
@@ -55920,10 +56100,20 @@
       "norm_label": "findlocalcandidatereturnscompletedcandidate"
     },
     {
-      "label": "QueueOverflowDropsWithoutBlocking",
+      "label": "ComputesSuccessiveWindowsForSameWeightVersion",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
       "source_location": "L130",
+      "_origin": "ast",
+      "id": "computessuccessivewindowsforsameweightversion",
+      "community": 209,
+      "norm_label": "computessuccessivewindowsforsameweightversion"
+    },
+    {
+      "label": "QueueOverflowDropsWithoutBlocking",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
+      "source_location": "L157",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_test_cpp_queueoverflowdropswithoutblocking",
       "community": 209,
@@ -57326,7 +57516,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "networkstrate_consensus_manager_getsignatureverifier",
-      "community": 157,
+      "community": 202,
       "norm_label": "getsignatureverifier()"
     },
     {
@@ -57336,7 +57526,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "platform_networkstrate_consensus_manager_cpp_signatureverifier",
-      "community": 157,
+      "community": 202,
       "norm_label": "signatureverifier"
     },
     {
@@ -148880,11 +149070,11 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.cpp",
-      "source_location": "L194",
+      "source_location": "L185",
       "weight": 1.0,
       "context": "return_type",
       "source": "algorithm_leader_selection_schedule_buildrecord",
-      "target": "record",
+      "target": "platform_consensus_ordering_td_hotstuff_algorithm_leader_selection_schedule_cpp_record",
       "confidence_score": 1.0
     },
     {
@@ -150875,6 +151065,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L919",
+      "weight": 1.0,
+      "source": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_algorithm_td_hotstuff",
+      "target": "algorithm_td_hotstuff_maybeactivatereadyweightupdatesafterviewadvance",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
       "source_location": "L537",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -151030,6 +151230,16 @@
       "confidence_score": 1.0,
       "source": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_algorithm_td_hotstuff",
       "target": "algorithm_td_hotstuff_receiveweightupdatevote"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L910",
+      "weight": 1.0,
+      "source": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_algorithm_td_hotstuff",
+      "target": "algorithm_td_hotstuff_refreshpendingweightactivationview",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -151679,6 +151889,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L234",
+      "weight": 1.0,
+      "source": "algorithm_td_hotstuff_startnewround",
+      "target": "algorithm_td_hotstuff_maybeactivatereadyweightupdatesafterviewadvance",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
       "source_location": "L288",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -152091,6 +152312,17 @@
       "confidence_score": 1.0,
       "source": "algorithm_td_hotstuff_currentleader",
       "target": "algorithm_td_hotstuff_currentview"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L925",
+      "weight": 1.0,
+      "source": "algorithm_td_hotstuff_maybeactivatereadyweightupdatesafterviewadvance",
+      "target": "algorithm_td_hotstuff_currentview",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -152601,6 +152833,17 @@
     {
       "relation": "calls",
       "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L898",
+      "weight": 1.0,
+      "source": "algorithm_td_hotstuff_draincompletedweightcandidates",
+      "target": "algorithm_td_hotstuff_refreshpendingweightactivationview",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
@@ -152608,6 +152851,28 @@
       "weight": 1.0,
       "source": "algorithm_td_hotstuff_draincompletedweightcandidates",
       "target": "algorithm_weight_update_controller_tocandidateweightupdate"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L938",
+      "weight": 1.0,
+      "source": "algorithm_td_hotstuff_activatereadyweightupdates",
+      "target": "algorithm_td_hotstuff_refreshpendingweightactivationview",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L927",
+      "weight": 1.0,
+      "source": "algorithm_td_hotstuff_maybeactivatereadyweightupdatesafterviewadvance",
+      "target": "algorithm_td_hotstuff_activatereadyweightupdates",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -152641,6 +152906,28 @@
       "confidence_score": 1.0,
       "source": "algorithm_td_hotstuff_receiveweightupdatevote",
       "target": "algorithm_td_hotstuff_activatereadyweightupdates"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L1001",
+      "weight": 1.0,
+      "source": "algorithm_td_hotstuff_receiveweightupdatecert",
+      "target": "algorithm_td_hotstuff_refreshpendingweightactivationview",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L987",
+      "weight": 1.0,
+      "source": "algorithm_td_hotstuff_receiveweightupdatevote",
+      "target": "algorithm_td_hotstuff_refreshpendingweightactivationview",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -154320,11 +154607,31 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
+      "source_location": "L95",
+      "weight": 1.0,
+      "source": "platform_consensus_ordering_td_hotstuff_algorithm_weight_schedule_cpp_algorithm_weight_schedule",
+      "target": "algorithm_weight_schedule_quorumweightforversion",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
       "source_location": "L68",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "platform_consensus_ordering_td_hotstuff_algorithm_weight_schedule_cpp_algorithm_weight_schedule",
       "target": "algorithm_weight_schedule_quorumweightforview"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
+      "source_location": "L51",
+      "weight": 1.0,
+      "source": "platform_consensus_ordering_td_hotstuff_algorithm_weight_schedule_cpp_algorithm_weight_schedule",
+      "target": "algorithm_weight_schedule_recordforversion",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -154345,6 +154652,16 @@
       "confidence_score": 1.0,
       "source": "platform_consensus_ordering_td_hotstuff_algorithm_weight_schedule_cpp_algorithm_weight_schedule",
       "target": "algorithm_weight_schedule_weightforsigner"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
+      "source_location": "L85",
+      "weight": 1.0,
+      "source": "platform_consensus_ordering_td_hotstuff_algorithm_weight_schedule_cpp_algorithm_weight_schedule",
+      "target": "algorithm_weight_schedule_weightforsignerinversion",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -154400,6 +154717,39 @@
       "target": "algorithm_weight_schedule_activeweightversion"
     },
     {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
+      "source_location": "L96",
+      "weight": 1.0,
+      "source": "algorithm_weight_schedule_quorumweightforversion",
+      "target": "algorithm_weight_schedule_recordforversion",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
+      "source_location": "L51",
+      "weight": 1.0,
+      "context": "return_type",
+      "source": "algorithm_weight_schedule_recordforversion",
+      "target": "platform_consensus_ordering_td_hotstuff_algorithm_weight_schedule_cpp_record",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
+      "source_location": "L87",
+      "weight": 1.0,
+      "source": "algorithm_weight_schedule_weightforsignerinversion",
+      "target": "algorithm_weight_schedule_recordforversion",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.cpp",
@@ -154430,6 +154780,16 @@
       "confidence_score": 1.0,
       "source": "algorithm_weight_schedule_resdb",
       "target": "platform_consensus_ordering_td_hotstuff_algorithm_weight_schedule_h_namespace"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
+      "source_location": "L388",
+      "weight": 1.0,
+      "source": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_cpp_algorithm_weight_update_controller",
+      "target": "algorithm_weight_update_controller_absorbpendingvoteslocked",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -154500,6 +154860,16 @@
       "confidence_score": 1.0,
       "source": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_cpp_algorithm_weight_update_controller",
       "target": "algorithm_weight_update_controller_digestforcandidateparts"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
+      "source_location": "L253",
+      "weight": 1.0,
+      "source": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_cpp_algorithm_weight_update_controller",
+      "target": "algorithm_weight_update_controller_earliestpendingactivationview",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -154681,6 +155051,17 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
+      "source_location": "L388",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "algorithm_weight_update_controller_absorbpendingvoteslocked",
+      "target": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_cpp_string",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
       "source_location": "L33",
       "weight": 1.0,
       "context": "parameter_type",
@@ -154775,6 +155156,17 @@
       "confidence_score": 1.0,
       "source": "algorithm_weight_update_controller_validatecandidatestructure",
       "target": "algorithm_weight_update_controller_digestforcandidateparts"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
+      "source_location": "L388",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "algorithm_weight_update_controller_absorbpendingvoteslocked",
+      "target": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_cpp_candidateweightupdate",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -155023,6 +155415,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
+      "source_location": "L127",
+      "weight": 1.0,
+      "source": "algorithm_weight_update_controller_addlocalcandidate",
+      "target": "algorithm_weight_update_controller_absorbpendingvoteslocked",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
       "source_location": "L108",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -155039,6 +155442,17 @@
       "confidence_score": 1.0,
       "source": "algorithm_weight_update_controller_addlocalcandidate",
       "target": "algorithm_weight_update_controller_validatecandidatestructure"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
+      "source_location": "L146",
+      "weight": 1.0,
+      "source": "algorithm_weight_update_controller_handlecandidate",
+      "target": "algorithm_weight_update_controller_absorbpendingvoteslocked",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -155221,6 +155635,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
+      "source_location": "L400",
+      "weight": 1.0,
+      "source": "algorithm_weight_update_controller_absorbpendingvoteslocked",
+      "target": "algorithm_weight_update_controller_verifyvoteforcandidate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.cpp",
       "source_location": "L289",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -155305,6 +155730,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "algorithm_weight_update_controller_test",
+      "target": "algorithm_weight_update_controller_test_candidatewithweights",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
       "source_location": "L50",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -155330,6 +155765,17 @@
       "confidence_score": 1.0,
       "source": "algorithm_weight_update_controller_test",
       "target": "algorithm_weight_update_controller_test_test"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "algorithm_weight_update_controller_test",
+      "target": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_vector",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -155401,6 +155847,17 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L59",
+      "weight": 1.0,
+      "context": "return_type",
+      "source": "algorithm_weight_update_controller_test_candidatewithweights",
+      "target": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_reputationcandidate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
       "source_location": "L50",
       "weight": 1.0,
       "context": "return_type",
@@ -155418,6 +155875,50 @@
       "confidence_score": 1.0,
       "source": "algorithm_weight_update_controller_test_test",
       "target": "algorithm_weight_update_controller_test_noopcandidate"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L59",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "algorithm_weight_update_controller_test_candidatewithweights",
+      "target": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_string",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L59",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "algorithm_weight_update_controller_test_candidatewithweights",
+      "target": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_vector",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L185",
+      "weight": 1.0,
+      "source": "algorithm_weight_update_controller_test_test",
+      "target": "algorithm_weight_update_controller_test_candidatewithweights",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L254",
+      "weight": 1.0,
+      "source": "algorithm_weight_update_controller_test_test",
+      "target": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_string",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -155456,6 +155957,17 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L172",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "algorithm_weight_update_controller_test_test",
+      "target": "certquorumusescandidateoldweightversion",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
       "source_location": "L75",
       "weight": 1.0,
       "context": "parameter_type",
@@ -155473,6 +155985,50 @@
       "confidence_score": 1.0,
       "source": "algorithm_weight_update_controller_test_test",
       "target": "ignoresnooplocalcandidate"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L283",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "algorithm_weight_update_controller_test_test",
+      "target": "invalidcertdoesnotpoisonlatervalidcert",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L311",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "algorithm_weight_update_controller_test_test",
+      "target": "latecertactivatesatcertifiedboundary",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L213",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "algorithm_weight_update_controller_test_test",
+      "target": "pendingvotescontributeaftercandidatearrives",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller_test.cpp",
+      "source_location": "L157",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "algorithm_weight_update_controller_test_test",
+      "target": "scheduledweightsdonotaffectlookupbeforeactivation",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -158896,6 +159452,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
+      "source_location": "L56",
+      "weight": 1.0,
+      "source": "platform_consensus_reputation_reputation_algorithm_cpp_reputation_reputation_algorithm",
+      "target": "reputation_reputation_algorithm_corerecoverycreditforscore",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
       "source_location": "L118",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -159084,6 +159650,28 @@
       "confidence_score": 1.0,
       "source": "reputation_reputation_algorithm_summarizefaultedvalidators",
       "target": "reputation_reputation_algorithm_strongfaulttypename"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
+      "source_location": "L282",
+      "weight": 1.0,
+      "source": "reputation_reputation_algorithm_computecoreonlyreputation",
+      "target": "reputation_reputation_algorithm_corerecoverycreditforscore",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
+      "source_location": "L69",
+      "weight": 1.0,
+      "source": "reputation_reputation_algorithm_corerecoverycreditforscore",
+      "target": "reputation_reputation_utils_roundeddivide"
     },
     {
       "relation": "calls",
@@ -160766,6 +161354,17 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
+      "source_location": "L341",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "reputation_reputation_algorithm_test_test",
+      "target": "partialhealthybelowmeanvalidatorcancatchup",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
       "source_location": "L421",
       "weight": 1.0,
       "context": "parameter_type",
@@ -161537,9 +162136,9 @@
       "source_location": "L40",
       "weight": 1.0,
       "context": "generic_arg",
+      "confidence_score": 1.0,
       "source": "reputation_reputation_plugin_runtime_auditvalidatorsjson",
-      "target": "validatorreputation",
-      "confidence_score": 1.0
+      "target": "validatorreputation"
     },
     {
       "relation": "calls",
@@ -162347,6 +162946,17 @@
       "confidence_score": 1.0,
       "source": "reputation_reputation_plugin_runtime_test_waitforcandidates",
       "target": "platform_consensus_reputation_reputation_plugin_runtime_test_cpp_vector"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
+      "source_location": "L130",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "reputation_reputation_plugin_runtime_test_test",
+      "target": "computessuccessivewindowsforsameweightversion",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -185564,5 +186174,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "c8325bf2bce9aa0c45bda8c3d915797d7002ffb4"
+  "built_at_commit": "61e1baa9fa09bd59a92a77a3f546441ec93ed973"
 }

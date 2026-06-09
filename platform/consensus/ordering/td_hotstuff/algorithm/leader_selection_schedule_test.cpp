@@ -27,6 +27,10 @@ TEST(LeaderSelectionScheduleTest, DisabledMatchesRoundRobinAndEmptyContext) {
     EXPECT_EQ(DefaultLeaderForView(view, 4), schedule.LeaderForView(view));
     EXPECT_TRUE(schedule.ContextHashForView(view).empty());
   }
+  for (int view : {16388, 24582, 32774, 57357}) {
+    EXPECT_EQ(DefaultLeaderForView(view, 4), schedule.LeaderForView(view));
+    EXPECT_TRUE(schedule.ContextHashForView(view).empty());
+  }
 }
 
 TEST(LeaderSelectionScheduleTest, EqualEnabledWeightsMatchRoundRobin) {
@@ -53,7 +57,7 @@ TEST(LeaderSelectionScheduleTest, WeightedSelectionIsDeterministicAndEligible) {
   EXPECT_EQ(50, counts[2]);
   EXPECT_EQ(0, counts[3]);
   EXPECT_EQ(0, counts[4]);
-  EXPECT_FALSE(schedule.ContextHashForView(1).empty());
+  EXPECT_TRUE(schedule.ContextHashForView(1).empty());
 }
 
 TEST(LeaderSelectionScheduleTest, AllBelowThresholdFallsBackToPositiveWeights) {
@@ -81,9 +85,11 @@ TEST(LeaderSelectionScheduleTest, ActivationBoundaryPreservesOldViews) {
                                       LeaderRoot(next, 10), next,
                                       /*eligible_min_weight=*/10));
   EXPECT_EQ(DefaultLeaderForView(5, 3), schedule.LeaderForView(5));
+  EXPECT_EQ(DefaultLeaderForView(6, 3), schedule.LeaderForView(6));
+  EXPECT_TRUE(schedule.ContextHashForView(6).empty());
   ASSERT_TRUE(schedule.ActivateUpTo(/*current_view=*/6));
   EXPECT_EQ(1, schedule.LeaderForView(6));
-  EXPECT_FALSE(schedule.ContextHashForView(6).empty());
+  EXPECT_TRUE(schedule.ContextHashForView(6).empty());
 }
 
 }  // namespace

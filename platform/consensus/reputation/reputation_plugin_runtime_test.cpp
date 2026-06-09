@@ -127,6 +127,33 @@ TEST(ReputationPluginRuntimeTest, FindLocalCandidateReturnsCompletedCandidate) {
   EXPECT_EQ(found->candidate_digest_hex, candidates[0].candidate_digest_hex);
 }
 
+TEST(ReputationPluginRuntimeTest,
+     ComputesSuccessiveWindowsForSameWeightVersion) {
+  ReputationPluginRuntime runtime(RuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(1, "qc-1")));
+  runtime.AdvanceWatermark(4);
+  auto first_candidates = WaitForCandidates(&runtime, 1);
+  ASSERT_EQ(first_candidates.size(), 1);
+  EXPECT_EQ(first_candidates[0].window_index, 0);
+  EXPECT_EQ(first_candidates[0].old_weight_version, 0);
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(4, "qc-4")));
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(5, "qc-5")));
+  runtime.AdvanceWatermark(8);
+  auto second_candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(second_candidates.size(), 1);
+  EXPECT_EQ(second_candidates[0].window_index, 1);
+  EXPECT_EQ(second_candidates[0].old_weight_version, 0);
+  EXPECT_NE(second_candidates[0].candidate_digest_hex,
+            first_candidates[0].candidate_digest_hex);
+}
+
+
 TEST(ReputationPluginRuntimeTest, QueueOverflowDropsWithoutBlocking) {
   ReputationRuntimeOptions options = RuntimeOptions();
   options.queue_capacity = 1;

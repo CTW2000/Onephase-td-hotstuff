@@ -35,7 +35,10 @@ const std::vector<int64_t>& WeightSchedule::ActiveWeights() const {
 
 const WeightSchedule::Record& WeightSchedule::RecordForView(int view) const {
   const Record* selected = &records_.front();
-  for (const Record& record : records_) {
+  const size_t last_active =
+      std::min(active_index_, records_.empty() ? size_t{0} : records_.size() - 1);
+  for (size_t i = 0; i <= last_active; ++i) {
+    const Record& record = records_[i];
     if (record.activation_view < view) {
       selected = &record;
     } else {
@@ -43,6 +46,16 @@ const WeightSchedule::Record& WeightSchedule::RecordForView(int view) const {
     }
   }
   return *selected;
+}
+
+const WeightSchedule::Record* WeightSchedule::RecordForVersion(
+    uint64_t version) const {
+  for (const Record& record : records_) {
+    if (record.version == version) {
+      return &record;
+    }
+  }
+  return nullptr;
 }
 
 uint64_t WeightSchedule::WeightVersionForView(int view) const {
@@ -67,6 +80,21 @@ int64_t WeightSchedule::WeightForSigner(int signer, int view) const {
 
 int64_t WeightSchedule::QuorumWeightForView(int view) const {
   return RecordForView(view).quorum_weight;
+}
+
+int64_t WeightSchedule::WeightForSignerInVersion(int signer,
+                                                 uint64_t version) const {
+  const Record* record = RecordForVersion(version);
+  if (record == nullptr || signer < 1 ||
+      signer > static_cast<int>(record->weights.size())) {
+    return 0;
+  }
+  return record->weights[signer - 1];
+}
+
+int64_t WeightSchedule::QuorumWeightForVersion(uint64_t version) const {
+  const Record* record = RecordForVersion(version);
+  return record == nullptr ? 0 : record->quorum_weight;
 }
 
 bool WeightSchedule::ScheduleUpdate(int activation_view,

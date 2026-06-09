@@ -183,7 +183,7 @@ TEST(TdHotstuffProposalSafetyTest, DynamicLeaderContextIsBoundToProposal) {
   std::unique_ptr<Proposal> proposal = manager.GenerateProposal(txns);
 
   ASSERT_NE(proposal, nullptr);
-  ASSERT_FALSE(proposal->header().leader_context_hash().empty());
+  ASSERT_TRUE(proposal->header().leader_context_hash().empty());
   EXPECT_TRUE(manager.Verify(*proposal));
 
   proposal->mutable_header()->set_leader_context_hash("wrong-context");

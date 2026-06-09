@@ -338,6 +338,31 @@ TEST(ReputationAlgorithmTest, BonusCanHelpBelowMeanHonestValidatorCatchUp) {
   EXPECT_EQ(candidate.validators[1].next_weight, 30);
 }
 
+TEST(ReputationAlgorithmTest, PartialHealthyBelowMeanValidatorCanCatchUp) {
+  ReputationConfig config = TestConfig();
+  config.bonus_per_epoch = 1;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 5; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+  for (int view = 6; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({2, 3, 4}, 4),
+                                   Bitmap({2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {20, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_GE(candidate.validators[0].vote_score, 60);
+  EXPECT_EQ(candidate.validators[0].recovery_credit,
+            candidate.validators[0].decay_applied);
+  EXPECT_EQ(candidate.validators[0].bonus_credit, 1);
+  EXPECT_EQ(candidate.validators[0].next_weight, 21);
+}
+
 TEST(ReputationAlgorithmTest, SlowVoterLosesRecoveryWithoutDirectSlash) {
   ReputationConfig config = TestConfig();
   config.leader_recovery_enabled = false;

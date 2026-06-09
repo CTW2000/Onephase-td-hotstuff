@@ -20,6 +20,7 @@ namespace {
 
 constexpr const char* kAlgorithmBayesV4 = "bayes_v4";
 constexpr int64_t kCarryoverDecayWeightGap = 10;
+constexpr int kHealthyCatchUpScore = 40;
 
 struct CoreEvidenceEvent {
   int view_or_round = 0;
@@ -50,6 +51,24 @@ std::string StrongFaultTypeName(StrongFaultType type) {
       return "unknown";
   }
   return "unknown";
+}
+
+int CoreRecoveryCreditForScore(int score, int max_recovery_per_epoch) {
+  if (max_recovery_per_epoch <= 0) {
+    return 0;
+  }
+  constexpr int kNoRecoveryBelow = 20;
+  constexpr int kFullRecoveryAt = 40;
+  const int bounded_score = std::max(0, std::min(100, score));
+  if (bounded_score >= kFullRecoveryAt) {
+    return max_recovery_per_epoch;
+  }
+  if (bounded_score < kNoRecoveryBelow) {
+    return 0;
+  }
+  return RoundedDivide(static_cast<uint64_t>(bounded_score - kNoRecoveryBelow) *
+                           static_cast<uint64_t>(max_recovery_per_epoch),
+                       kFullRecoveryAt - kNoRecoveryBelow);
 }
 
 std::vector<StrongFaultRecord> SummarizeFaultedValidators(
@@ -260,13 +279,22 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
         carryover_decay
             ? 0
             : std::min(validator.decay_applied,
-                       RecoveryCreditForScore(
+                       CoreRecoveryCreditForScore(
                            recovery_score, config.max_recovery_per_epoch));
     const bool below_mean_weight = validator.current_weight < mean_current_weight;
+    const bool fully_recovered_decay =
+        validator.decay_applied > 0 &&
+        validator.recovery_credit >= validator.decay_applied;
+    const bool has_recovery_debt =
+        validator.peertrust_leader_debt > 0 || validator.sybil_graph_debt > 0;
+    const bool healthy_catchup_score =
+        !has_recovery_debt && fully_recovered_decay &&
+        validator.vote_score >= kHealthyCatchUpScore &&
+        recovery_score >= kHealthyCatchUpScore;
     const bool earns_bonus =
         validator_has_enough_decay_evidence && below_mean_weight &&
         ((recovery_score >= 95 && validator.vote_score >= 95) ||
-         (near_fair_vote && recovery_score >= 67));
+         (near_fair_vote && recovery_score >= 67) || healthy_catchup_score);
     validator.bonus_credit = earns_bonus ? config.bonus_per_epoch : 0;
     validator.reputation_score =
         validator.recovery_credit >= validator.decay_applied &&
@@ -1002,10 +1030,19 @@ ReputationCandidate ComputeReputationCandidate(
                            recovery_score, config.max_recovery_per_epoch));
     const bool below_mean_weight =
         validator.current_weight < mean_current_weight;
+    const bool fully_recovered_decay =
+        validator.decay_applied > 0 &&
+        validator.recovery_credit >= validator.decay_applied;
+    const bool has_recovery_debt =
+        validator.peertrust_leader_debt > 0 || validator.sybil_graph_debt > 0;
+    const bool healthy_catchup_score =
+        !has_recovery_debt && fully_recovered_decay &&
+        validator.vote_score >= kHealthyCatchUpScore &&
+        recovery_score >= kHealthyCatchUpScore;
     const bool earns_bonus =
         validator_has_enough_decay_evidence && below_mean_weight &&
         ((recovery_score >= 95 && validator.vote_score >= 95) ||
-         (near_fair_vote && recovery_score >= 67));
+         (near_fair_vote && recovery_score >= 67) || healthy_catchup_score);
     validator.bonus_credit = earns_bonus ? config.bonus_per_epoch : 0;
     validator.reputation_score =
         validator.recovery_credit >= validator.decay_applied &&
