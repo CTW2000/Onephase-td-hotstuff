@@ -1,16 +1,16 @@
-# Graph Report - Onephase-td-hotstuff-classic-core  (2026-06-09)
+# Graph Report - Onephase-td-hotstuff-classic-core  (2026-06-10)
 
 ## Corpus Check
-- 869 files · ~614,950 words
+- 869 files · ~623,873 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7617 nodes · 10470 edges · 712 communities (482 shown, 230 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 356 edges (avg confidence: 0.74)
+- 7621 nodes · 10487 edges · 710 communities (480 shown, 230 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 357 edges (avg confidence: 0.74)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `0c456098`
+- Built from commit: `7bf5829f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -312,7 +312,6 @@
 - [[_COMMUNITY_Community 296|Community 296]]
 - [[_COMMUNITY_Community 297|Community 297]]
 - [[_COMMUNITY_Community 298|Community 298]]
-- [[_COMMUNITY_Community 299|Community 299]]
 - [[_COMMUNITY_Community 300|Community 300]]
 - [[_COMMUNITY_Community 301|Community 301]]
 - [[_COMMUNITY_Community 302|Community 302]]
@@ -333,7 +332,6 @@
 - [[_COMMUNITY_Community 317|Community 317]]
 - [[_COMMUNITY_Community 318|Community 318]]
 - [[_COMMUNITY_Community 319|Community 319]]
-- [[_COMMUNITY_Community 320|Community 320]]
 - [[_COMMUNITY_Community 321|Community 321]]
 - [[_COMMUNITY_Community 322|Community 322]]
 - [[_COMMUNITY_Community 323|Community 323]]
@@ -345,7 +343,6 @@
 - [[_COMMUNITY_Community 331|Community 331]]
 - [[_COMMUNITY_Community 332|Community 332]]
 - [[_COMMUNITY_Community 333|Community 333]]
-- [[_COMMUNITY_Community 334|Community 334]]
 - [[_COMMUNITY_Community 335|Community 335]]
 - [[_COMMUNITY_Community 336|Community 336]]
 - [[_COMMUNITY_Community 337|Community 337]]
@@ -371,7 +368,6 @@
 - [[_COMMUNITY_Community 357|Community 357]]
 - [[_COMMUNITY_Community 358|Community 358]]
 - [[_COMMUNITY_Community 359|Community 359]]
-- [[_COMMUNITY_Community 360|Community 360]]
 - [[_COMMUNITY_Community 361|Community 361]]
 - [[_COMMUNITY_Community 362|Community 362]]
 - [[_COMMUNITY_Community 363|Community 363]]
@@ -453,6 +449,7 @@
 - [[_COMMUNITY_Community 440|Community 440]]
 - [[_COMMUNITY_Community 441|Community 441]]
 - [[_COMMUNITY_Community 442|Community 442]]
+- [[_COMMUNITY_Community 443|Community 443]]
 - [[_COMMUNITY_Community 444|Community 444]]
 - [[_COMMUNITY_Community 445|Community 445]]
 - [[_COMMUNITY_Community 446|Community 446]]
@@ -654,9 +651,10 @@
 - [[_COMMUNITY_Community 663|Community 663]]
 - [[_COMMUNITY_Community 666|Community 666]]
 - [[_COMMUNITY_Community 667|Community 667]]
+- [[_COMMUNITY_Community 716|Community 716]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `TEST()` - 83 edges
+1. `TEST()` - 85 edges
 2. `GetCurrentTime()` - 59 edges
 3. `Transaction` - 47 edges
 4. `ResDB` - 45 edges
@@ -684,7 +682,7 @@
 - 1-file cycle: `ecosystem/sdk/rust-sdk/src/resdb.rs -> ecosystem/sdk/rust-sdk/src/resdb.rs`
 - 1-file cycle: `ecosystem/sdk/rust-sdk/src/transaction.rs -> ecosystem/sdk/rust-sdk/src/transaction.rs`
 
-## Communities (712 total, 230 thin omitted)
+## Communities (710 total, 230 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.04
@@ -696,11 +694,11 @@ Nodes (54): AuditPathForNode(), DrainCompletedCandidatesForTesting(), EnvFlagEna
 
 ### Community 2 - "Community 2"
 Cohesion: 0.06
-Nodes (57): CertifiedSignerEvidenceRecord, LeaderOutcomeEvidenceRecord, optional, ReputationCandidate, ReputationCandidateKey, ReputationRuntimeOptions, ReputationWeightSnapshot, set (+49 more)
+Nodes (63): CertifiedSignerEvidenceRecord, LeaderOutcomeEvidenceRecord, optional, ReputationCandidate, ReputationCandidateKey, ReputationRuntimeOptions, ReputationWeightSnapshot, set (+55 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.03
-Nodes (59): AllGoodWindowKeepsWeightsStable, AvailableSignerBitmapLimitsVoterRecoveryOpportunities, BonusCanHelpBelowMeanHonestValidatorCatchUp, BonusDoesNotDriftBalancedAllGoodWeights, BroadAvailableSignerBitmapExcusesUnselectedTimelyVoter, CandidateDigestChangesWhenPenaltyRootChanges, CandidateDigestIgnoresAuditRoots, CandidateDigestIsDeterministic (+51 more)
+Nodes (61): AllGoodWindowKeepsWeightsStable, AvailableSignerBitmapLimitsVoterRecoveryOpportunities, BonusCanHelpBelowMeanHonestValidatorCatchUp, BonusDoesNotDriftBalancedAllGoodWeights, BroadAvailableSignerBitmapExcusesUnselectedTimelyVoter, CandidateDigestChangesWhenPenaltyRootChanges, CandidateDigestIgnoresAuditRoots, CandidateDigestIsDeterministic (+53 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.04
@@ -771,8 +769,8 @@ Cohesion: 0.05
 Nodes (38): browserslist, development, production, dependencies, ajv, ajv-keywords, assert, bootstrap (+30 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.27
-Nodes (14): BenchmarkDynamicRoutingEnabled(), BenchmarkRetryEnabled(), BenchmarkRetryTimeoutUs(), BenchmarkRetryTimeoutUsForEnv(), BenchmarkRouteForObservedPrimaries(), BenchmarkRouteForView(), EnvFlagEnabled(), EnvIntOrDefault() (+6 more)
+Cohesion: 0.09
+Nodes (36): DefaultLeaderForView(), BenchmarkRetryTimeoutDoesNotUseConsensusTimeoutByDefault, DynamicRouteFallsBackToObservedPrimaryWithoutPrediction, DynamicRouteIgnoresInvalidPredictionAndObservedPrimary, DynamicRoutePrefersPredictedPrimary, DynamicRoutingDefaultsOffForClassicCore, BenchmarkDynamicRoutingEnabled(), BenchmarkRetryEnabled() (+28 more)
 
 ### Community 24 - "Community 24"
 Cohesion: 0.10
@@ -783,12 +781,12 @@ Cohesion: 0.16
 Nodes (34): fillDeliveryTransaction(), fillNewOrderTransaction(), fillOrderStatusTransaction(), fillPaymentTransaction(), fillStockLevelTransaction(), fillTpccTransaction(), DeliveryTransaction, NewOrderTransaction (+26 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.17
-Nodes (27): AdvanceToViewByTimeout(), RecordVote(), SignerBitmapMatchesSignatures(), VerifyEnvelopeForEvidence(), VerifyLeader(), VerifyLeaderContext(), VerifyProposalSignature(), VerifyQcForEvidence() (+19 more)
+Cohesion: 0.13
+Nodes (32): AdvanceToViewByTimeout(), CalculateQuorumWeight(), NormalizeReplicaWeights(), RecordVote(), SignerBitmapMatchesSignatures(), VerifyEnvelopeForEvidence(), VerifyLeader(), VerifyLeaderContext() (+24 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.07
-Nodes (54): ActivatesCertifiedWeightsAtBoundary, AbsorbPendingVotesLocked(), ActivateReady(), AddLocalCandidate(), BitmapSigners(), BuildBitmap(), CandidateLeaderWeights(), CandidateWeights() (+46 more)
+Cohesion: 0.14
+Nodes (33): AbsorbPendingVotesLocked(), ActivateReady(), AddLocalCandidate(), BitmapSigners(), BuildBitmap(), CandidateLeaderWeights(), CandidateWeights(), DigestForCandidateParts() (+25 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.10
@@ -803,8 +801,8 @@ Cohesion: 0.06
 Nodes (48): AmountError, AssetIdMismatch, ConfigurationError, CyclicBlockchainError, DatabaseDoesNotExist, DoubleSpend, DuplicateTransaction, InputDoesNotExist (+40 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.05
-Nodes (27): resdb(), resdb(), resdb(), resdb(), resdb(), resdb(), resdb(), TEST() (+19 more)
+Cohesion: 0.06
+Nodes (23): resdb(), resdb(), resdb(), resdb(), resdb(), resdb(), resdb(), resdb() (+15 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.09
@@ -827,8 +825,8 @@ Cohesion: 0.06
 Nodes (33): "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY, Commands, compile Command, Configuration ⚙️, create Command, deploy Command, distributed with this work for additional information, execute Command (+25 more)
 
 ### Community 37 - "Community 37"
-Cohesion: 0.11
-Nodes (28): AsyncConsensusVerifier(), AsyncVerifierQueueCapacityFromEnv(), AsyncVerifierWorkerCountFromEnv(), DrainVerified(), PositiveSizeFromEnv(), PushVerified(), Stop(), Submit() (+20 more)
+Cohesion: 0.10
+Nodes (30): AsyncConsensusVerifier(), AsyncVerifierQueueCapacityFromEnv(), AsyncVerifierWorkerCountFromEnv(), DrainVerified(), PositiveSizeFromEnv(), PushVerified(), Stop(), Submit() (+22 more)
 
 ### Community 38 - "Community 38"
 Cohesion: 0.07
@@ -859,8 +857,8 @@ Cohesion: 0.10
 Nodes (22): main(), GenerateReplicaInfo(), GenerateResDBConfig(), ReadCert(), ReadConfig(), ReadConfigFromFile(), ReadKey(), ConfigGenFunc (+14 more)
 
 ### Community 45 - "Community 45"
-Cohesion: 0.07
-Nodes (20): AsyncAcceptorTest, future, MultiAcceptor, MultiAcceptorError, TEST(), resdb(), resdb(), namespace (+12 more)
+Cohesion: 0.05
+Nodes (28): AsyncAcceptorTest, TEST(), future, LocalExecutorTest, MultiAcceptor, MultiAcceptorError, TEST(), TEST() (+20 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.10
@@ -899,8 +897,8 @@ Cohesion: 0.07
 Nodes (27): "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY, Building a NFT market with resdb, Comfirming, competing the TRANSFER operatiom with a commit, Creating and Transferring Assets, distributed with this work for additional information, Generating keys, How can Sajjad sell his painting to Mo? (+19 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.14
-Nodes (22): BatchProposeMsg(), DoBatch(), GenerateUserRequest(), SetDataFunc(), StartEval(), TrackPendingResponse(), UntrackPendingResponse(), BatchUserResponse (+14 more)
+Cohesion: 0.12
+Nodes (26): BatchProposeMsg(), DoBatch(), GenerateUserRequest(), PerformanceManager(), SetDataFunc(), StartEval(), TrackPendingResponse(), UntrackPendingResponse() (+18 more)
 
 ### Community 56 - "Community 56"
 Cohesion: 0.07
@@ -943,8 +941,8 @@ Cohesion: 0.25
 Nodes (9): Error, HashMap, Result, Self, String, T, Value, Vec (+1 more)
 
 ### Community 66 - "Community 66"
-Cohesion: 0.13
-Nodes (26): AddContextList(), AddResponseMsg(), BatchProposeMsg(), DoBatch(), FetchContextList(), GetPrimary(), MayConsensusChangeStatus(), NewUserRequest() (+18 more)
+Cohesion: 0.17
+Nodes (21): AddContextList(), AddResponseMsg(), BatchProposeMsg(), DoBatch(), FetchContextList(), GetPrimary(), MayConsensusChangeStatus(), NewUserRequest() (+13 more)
 
 ### Community 67 - "Community 67"
 Cohesion: 0.07
@@ -1039,8 +1037,8 @@ Cohesion: 0.15
 Nodes (21): QcFor(), SignatureFrom(), TEST(), TimeoutCertFor(), TimeoutVoteFor(), VoteFor(), WaitForEvents(), AsyncConsensusVerifier (+13 more)
 
 ### Community 90 - "Community 90"
-Cohesion: 0.11
-Nodes (22): ComputesSuccessiveWindowsForSameWeightVersion, DedupesAndSortsEquivalentEvidence, DrainsOnlyEarliestCandidatePerWeightVersion, FinalizesLeaderOutcomeEvidenceForTimeoutWindows, FinalizesOnlyAfterWatermarkReachesWindowEnd, FindLocalCandidateReturnsCompletedCandidate, CertifiedSignerEvidenceRecord, initializer_list (+14 more)
+Cohesion: 0.12
+Nodes (20): ComputesSuccessiveWindowsForSameWeightVersion, DedupesAndSortsEquivalentEvidence, DrainsOnlyEarliestCandidatePerWeightVersion, FinalizedWindowAddsScheduledLeaderOpportunities, FinalizesOnlyAfterWatermarkReachesWindowEnd, FindLocalCandidateReturnsCompletedCandidate, CertifiedSignerEvidenceRecord, initializer_list (+12 more)
 
 ### Community 91 - "Community 91"
 Cohesion: 0.13
@@ -1063,16 +1061,16 @@ Cohesion: 0.17
 Nodes (21): AddProposal(), AddQC(), FetchProposal(), GenerateProposal(), GetHash(), GetLeader(), GetProposal(), ProposalManager() (+13 more)
 
 ### Community 96 - "Community 96"
-Cohesion: 0.09
-Nodes (22): # TODO: If `other !== Fulfillment` return `False`, # NOTE: This function is used to provide a unique key for a given, # NOTE: In the case of a `CREATE` transaction, the, # NOTE: We pass a timestamp to `.validate`, as in case of a timeout, # TODO: Remove `_dict` prefix of variable., # NOTE: We remove the reference since we need `tx_dict` only for the, # NOTE: Not all Cryptoconditions return a `signature` key (e.g., # TODO: This method shouldn't call `_remove_signatures` (+14 more)
+Cohesion: 0.07
+Nodes (26): dict, HDict, memoize_from_dict(), memoize_to_dict(), # TODO: If `other !== Fulfillment` return `False`, # NOTE: This function is used to provide a unique key for a given, # NOTE: In the case of a `CREATE` transaction, the, # NOTE: We pass a timestamp to `.validate`, as in case of a timeout (+18 more)
 
 ### Community 97 - "Community 97"
 Cohesion: 0.09
 Nodes (22): author, dependencies, graphql, graphql-request, lts, nvm, description, devDependencies (+14 more)
 
 ### Community 98 - "Community 98"
-Cohesion: 0.20
-Nodes (9): BenchmarkRetryTimeoutDoesNotUseConsensusTimeoutByDefault, DynamicRouteFallsBackToObservedPrimaryWithoutPrediction, DynamicRouteIgnoresInvalidPredictionAndObservedPrimary, DynamicRoutePrefersPredictedPrimary, DynamicRoutingDefaultsOffForClassicCore, TEST(), HotStuffPerformanceManagerTest, ObservedPrimarySetKeepsPredictionWhenStillActive (+1 more)
+Cohesion: 0.25
+Nodes (5): Connection, ! Picks a :class:`~resdb_driver.connection.Connection`         instance from the, ! Picks a connection with the earliest backoff time.         As a result, the fi, ! Initializes a :class:`~resdb_driver.pool.Pool` instance.         @param connec, ! Gets a :class:`~resdb_driver.connection.Connection`         instance from the
 
 ### Community 99 - "Community 99"
 Cohesion: 0.09
@@ -1087,8 +1085,8 @@ Cohesion: 0.12
 Nodes (18): CalculateHash, CertificateInfo, CertificateKey, KeyInfo, SecretKey, SignatureVerifier, SignatureVerifyTest, unique_ptr (+10 more)
 
 ### Community 102 - "Community 102"
-Cohesion: 0.16
-Nodes (23): CertificateKeyInfo, CertificateInfo, CertificateKey, KeyInfo, Message, SignatureInfo, StatusOr, string (+15 more)
+Cohesion: 0.19
+Nodes (20): CertificateKeyInfo, CertificateInfo, KeyInfo, Message, SignatureInfo, StatusOr, string, AddPublicKey() (+12 more)
 
 ### Community 103 - "Community 103"
 Cohesion: 0.14
@@ -1135,16 +1133,16 @@ Cohesion: 0.10
 Nodes (21): devDependencies, autoprefixer, eslint, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals, postcss (+13 more)
 
 ### Community 114 - "Community 114"
-Cohesion: 0.12
-Nodes (11): resdb(), resdb(), condition_variable, namespace, namespace, namespace, namespace, namespace (+3 more)
+Cohesion: 0.10
+Nodes (13): resdb(), resdb(), condition_variable, namespace, namespace, namespace, namespace, namespace (+5 more)
 
 ### Community 115 - "Community 115"
-Cohesion: 0.08
-Nodes (74): ActivateReadyWeightUpdates(), ApplyTimeoutCertLocked(), AsyncCommit(), AsyncSend(), AsyncTimeout(), AsyncVerifiedEvents(), AsyncWeightUpdates(), BroadcastCandidateWeightUpdate() (+66 more)
+Cohesion: 0.21
+Nodes (20): AsyncCommit(), EnvFlagEnabled(), EnvListContainsId(), InitialReplicaWeightsForMode(), IsSilentLeaderForExperiment(), JoinInt64Vector(), LeaderEligibleMinWeightFromEnv(), LeaderSelectionEnabled() (+12 more)
 
 ### Community 116 - "Community 116"
-Cohesion: 0.20
-Nodes (11): CheckPoint2, GetStableCheckpoint(), CheckPoint, ResConfigData, string, vector, ReadLog, ReadLog_FlushOnce (+3 more)
+Cohesion: 0.12
+Nodes (18): CheckPoint2, MockCheckPoint, GetStableCheckpoint(), CheckPoint, ResConfigData, ResDBConfig, string, SystemInfo (+10 more)
 
 ### Community 117 - "Community 117"
 Cohesion: 0.12
@@ -1219,12 +1217,12 @@ Cohesion: 0.20
 Nodes (17): AsyncCommit(), AsyncSend(), CommitProposal(), GenerateCertificate(), HotStuff1(), IsLeader(), NextLeader(), Ready() (+9 more)
 
 ### Community 135 - "Community 135"
-Cohesion: 0.20
-Nodes (17): AsyncCommit(), AsyncSend(), CommitProposal(), GenerateCertificate(), HotStuff2(), IsLeader(), NextLeader(), Ready() (+9 more)
+Cohesion: 0.07
+Nodes (44): AsyncCommit(), AsyncSend(), CommitProposal(), GenerateCertificate(), HotStuff2(), IsLeader(), NextLeader(), Ready() (+36 more)
 
 ### Community 136 - "Community 136"
-Cohesion: 0.20
-Nodes (17): AsyncCommit(), AsyncSend(), CommitProposal(), GenerateCertificate(), HotStuff(), IsLeader(), NextLeader(), Ready() (+9 more)
+Cohesion: 0.22
+Nodes (3): Get the block with largest height., Get the block with the specified `block_id`.          Returns the block correspo, Generate and record a new ABCI chain ID. New blocks are not         accepted unt
 
 ### Community 137 - "Community 137"
 Cohesion: 0.20
@@ -1271,8 +1269,8 @@ Cohesion: 0.13
 Nodes (12): CommitableSeqSignal(), GetStableCheckpointWithVotes(), GetTxnDB(), IsValidCheckpointProof(), SetHighestPreparedSeq(), SetTimeoutHandler(), UpdateStableCheckPointStatus(), Wait() (+4 more)
 
 ### Community 148 - "Community 148"
-Cohesion: 0.15
-Nodes (19): namespace, InvalidQcProposalEvidence, InvalidTcProposalEvidence, SignedProposalEvidence, SignedTimeoutVoteEvidence, SignedVoteEvidence, SignedWeightUpdateVoteEvidence, StrongFaultRecord (+11 more)
+Cohesion: 0.19
+Nodes (17): InvalidQcProposalEvidence, InvalidTcProposalEvidence, SignedProposalEvidence, SignedTimeoutVoteEvidence, SignedVoteEvidence, SignedWeightUpdateVoteEvidence, StrongFaultRecord, vector (+9 more)
 
 ### Community 149 - "Community 149"
 Cohesion: 0.11
@@ -1303,8 +1301,8 @@ Cohesion: 0.11
 Nodes (17): compilerOptions, allowImportingTsExtensions, isolatedModules, jsx, lib, module, moduleDetection, moduleResolution (+9 more)
 
 ### Community 156 - "Community 156"
-Cohesion: 0.25
-Nodes (5): Connection, ! Picks a :class:`~resdb_driver.connection.Connection`         instance from the, ! Picks a connection with the earliest backoff time.         As a result, the fi, ! Initializes a :class:`~resdb_driver.pool.Pool` instance.         @param connec, ! Gets a :class:`~resdb_driver.connection.Connection`         instance from the
+Cohesion: 0.29
+Nodes (6): AsyncReplicaClientTest, MultiSendMessage, TEST(), SendMessage, Reconnect, SendLargeMessage
 
 ### Community 157 - "Community 157"
 Cohesion: 0.18
@@ -1315,8 +1313,8 @@ Cohesion: 0.12
 Nodes (16): "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY, distributed with this work for additional information, http://www.apache.org/licenses/LICENSE-2.0, KIND, either express or implied.  See the License for the, "License"); you may not use this file except in compliance, Licensed to the Apache Software Foundation (ASF) under one, or more contributor license agreements.  See the NOTICE file, Quick Start (+8 more)
 
 ### Community 159 - "Community 159"
-Cohesion: 0.09
-Nodes (20): CheckPointManager, CheckPointManagerTest, config_, replica_communicator_, GetConfigData(), MyCheckPointManager, call_back_, TEST_F() (+12 more)
+Cohesion: 0.13
+Nodes (13): CheckPointManager, CheckPointManagerTest, config_, replica_communicator_, GetConfigData(), MyCheckPointManager, call_back_, function (+5 more)
 
 ### Community 160 - "Community 160"
 Cohesion: 0.15
@@ -1431,8 +1429,8 @@ Cohesion: 0.16
 Nodes (12): AddValueAndCheckCache, BlockCacheEnabled, CacheEvictionPolicy, string, unique_ptr, ResLevelDB, LevelDBTest, path_ (+4 more)
 
 ### Community 188 - "Community 188"
-Cohesion: 0.22
-Nodes (3): Get the block with largest height., Get the block with the specified `block_id`.          Returns the block correspo, Generate and record a new ABCI chain ID. New blocks are not         accepted unt
+Cohesion: 0.14
+Nodes (21): ActivatesCertifiedWeightsAtBoundary, Candidate(), CandidateMessage(), CandidateWithWeights(), NoOpCandidate(), SignatureFor(), TEST(), CertQuorumUsesCandidateOldWeightVersion (+13 more)
 
 ### Community 189 - "Community 189"
 Cohesion: 0.18
@@ -1519,12 +1517,12 @@ Cohesion: 0.21
 Nodes (8): applyStylesToModal(), createOrUpdateLoginModal(), createOrUpdateModal(), generateLoginModalContent(), generateModalContent(), handleCommitOperation(), handleCustomOperation(), handleLoginOperation()
 
 ### Community 210 - "Community 210"
-Cohesion: 0.25
-Nodes (8): RecordObservedPrimary(), UntrackPendingSendTime(), CollectorResultCode, AddResponseMsg(), SendMessage(), function, Request, unique_ptr
+Cohesion: 0.40
+Nodes (4): GetDNSName, GetTcpUrl, TEST(), NetworkUtilsTest
 
 ### Community 211 - "Community 211"
-Cohesion: 0.25
-Nodes (7): MockCheckPoint, ResDBConfig, SystemInfo, RecoveryTest, checkpoint_, config_, system_info_
+Cohesion: 0.21
+Nodes (19): CertificateSigners(), CertificateWeight(), CommitProposal(), CurrentLeader(), GenerateCertificate(), LeaderForView(), MaybeFormQcLocked(), MaybeMakeQcEvidenceSnapshotLocked() (+11 more)
 
 ### Community 212 - "Community 212"
 Cohesion: 0.14
@@ -1539,8 +1537,8 @@ Cohesion: 0.14
 Nodes (9): { badgen }, badgeOpts, core, countThrottled, { glob }, ignore, path, patterns (+1 more)
 
 ### Community 215 - "Community 215"
-Cohesion: 0.22
-Nodes (10): Broadcast(), Commit(), IsSlowReplica(), ProtocolBase(), SendMessage(), Stop(), BroadcastCallFuncType, CommitFuncType (+2 more)
+Cohesion: 0.40
+Nodes (5): ResponseManager(), ReplicaCommunicator, ResDBConfig, SignatureVerifier, SystemInfo
 
 ### Community 216 - "Community 216"
 Cohesion: 0.29
@@ -1626,10 +1624,6 @@ Nodes (10): axios, calculateP99(), { getEnv }, getRandomInt(), getValue(), logge
 Cohesion: 0.17
 Nodes (11): compilerOptions, esModuleInterop, lib, module, outDir, rootDir, skipLibCheck, strict (+3 more)
 
-### Community 237 - "Community 237"
-Cohesion: 0.17
-Nodes (5): dict, HDict, memoize_from_dict(), memoize_to_dict(), ToDictWrapper
-
 ### Community 238 - "Community 238"
 Cohesion: 0.27
 Nodes (10): Account, Contract, Request, StatusOr, string, unique_ptr, CreateAccount(), Deploy() (+2 more)
@@ -1679,8 +1673,8 @@ Cohesion: 0.47
 Nodes (4): AddRequest, CollectorPoolTest, TEST_F(), LockFreeCollectorPool
 
 ### Community 251 - "Community 251"
-Cohesion: 0.23
-Nodes (11): DefaultLeaderForView(), AddTimeoutCertForProposalQc(), ProposalFor(), TEST(), AllowsHigherQcToMovePastLock, AllowsTimeoutBackedProposalAtLockedQc, Proposal, string (+3 more)
+Cohesion: 0.25
+Nodes (10): AddTimeoutCertForProposalQc(), ProposalFor(), TEST(), AllowsHigherQcToMovePastLock, AllowsTimeoutBackedProposalAtLockedQc, Proposal, string, RejectsSecondVoteForSameView (+2 more)
 
 ### Community 252 - "Community 252"
 Cohesion: 0.13
@@ -1859,12 +1853,8 @@ Cohesion: 0.43
 Nodes (7): ObserveLock(), RecordVote(), SetError(), TimeoutJustifiesLockedProposal(), Proposal, QC, string
 
 ### Community 298 - "Community 298"
-Cohesion: 0.40
-Nodes (4): TEST(), LocalExecutorTest, PrimaryNodeBroadcast, PushToQueue
-
-### Community 299 - "Community 299"
-Cohesion: 0.50
-Nodes (4): PerformanceManager(), ReplicaCommunicator, ResDBConfig, SignatureVerifier
+Cohesion: 0.26
+Nodes (13): ApplyTimeoutCertLocked(), AsyncTimeout(), AsyncVerifiedEvents(), BroadcastTimeoutCert(), BroadcastTimeoutVote(), MarkTimeoutProgressLocked(), ProcessVerifiedConsensusEvent(), ReceiveTimeoutCert() (+5 more)
 
 ### Community 300 - "Community 300"
 Cohesion: 0.32
@@ -1942,10 +1932,6 @@ Nodes (7): graphify reference: extra exports and benchmark, Step 6b - Wiki (only
 Cohesion: 0.29
 Nodes (6): Core weight-plugin architecture boundary, End-to-end pipeline checks, Experiment integrity and anti-fake-control rules, graphify, Project operation philosophy, Server version synchronization
 
-### Community 320 - "Community 320"
-Cohesion: 0.29
-Nodes (6): AsyncReplicaClientTest, MultiSendMessage, TEST(), SendMessage, Reconnect, SendLargeMessage
-
 ### Community 321 - "Community 321"
 Cohesion: 0.33
 Nodes (4): Request, unique_ptr, Get(), Put()
@@ -1989,10 +1975,6 @@ Nodes (6): LockFreeQueueTest, string, TEST(), TestItem, data, SendAndPop
 ### Community 333 - "Community 333"
 Cohesion: 0.33
 Nodes (7): BroadcastCheckPoint(), GetHash(), PopStableSeqHash(), UpdateCheckPointStatus(), pair, string, vector
-
-### Community 334 - "Community 334"
-Cohesion: 0.50
-Nodes (4): HotStuffPerformanceManager(), ReplicaCommunicator, ResDBConfig, SignatureVerifier
 
 ### Community 335 - "Community 335"
 Cohesion: 0.29
@@ -2159,8 +2141,8 @@ Cohesion: 0.40
 Nodes (4): NewRequest(), Request, Type, unique_ptr
 
 ### Community 378 - "Community 378"
-Cohesion: 0.40
-Nodes (4): GetDNSName, GetTcpUrl, TEST(), NetworkUtilsTest
+Cohesion: 0.21
+Nodes (18): ActivateReadyWeightUpdates(), AsyncSend(), AsyncWeightUpdates(), BroadcastCandidateWeightUpdate(), BroadcastWeightUpdateCert(), BroadcastWeightUpdateVote(), CurrentView(), DrainCompletedWeightCandidates() (+10 more)
 
 ### Community 379 - "Community 379"
 Cohesion: 0.40
@@ -2231,8 +2213,8 @@ Cohesion: 0.40
 Nodes (4): key, server, TEMPLATE_PATH, td_hotstuff_performance.sh script
 
 ### Community 396 - "Community 396"
-Cohesion: 0.25
-Nodes (8): CalculateQuorumWeight(), NormalizeReplicaWeights(), ProposalManager(), LeaderSelectionSchedule, shared_ptr, SignatureVerifier, vector, WeightSchedule
+Cohesion: 0.40
+Nodes (5): ProposalManager(), LeaderSelectionSchedule, shared_ptr, SignatureVerifier, WeightSchedule
 
 ### Community 398 - "Community 398"
 Cohesion: 0.40
@@ -2314,6 +2296,10 @@ Nodes (4): browserslist, development, production, proxy
 Cohesion: 0.50
 Nodes (3): HtmlWebpackPlugin, path, ReactRefreshWebpackPlugin
 
+### Community 443 - "Community 443"
+Cohesion: 0.29
+Nodes (7): TEST_F(), SendCheckPoint, SendCheckPointOnce, SendCheckPointTwo, StableCkpt, StableCkptNotEnough, Votes
+
 ### Community 460 - "Community 460"
 Cohesion: 0.67
 Nodes (3): GetCheckPointLoggingPath(), SetCheckPointLoggingPath(), string
@@ -2322,20 +2308,24 @@ Nodes (3): GetCheckPointLoggingPath(), SetCheckPointLoggingPath(), string
 Cohesion: 0.67
 Nodes (3): BroadCast(), SendMessage(), Message
 
+### Community 716 - "Community 716"
+Cohesion: 0.67
+Nodes (3): CertificateKey, vector, GetAllPublicKeys()
+
 ## Knowledge Gaps
-- **3064 isolated node(s):** `PreToolUse`, `INSTALL.sh script`, `install_bazel.sh script`, `install_protobuf.sh script`, `INSTALL_MAC.sh script` (+3059 more)
+- **3063 isolated node(s):** `PreToolUse`, `INSTALL.sh script`, `install_bazel.sh script`, `install_protobuf.sh script`, `INSTALL_MAC.sh script` (+3058 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **230 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `future` connect `Community 45` to `Community 257`, `Community 15`, `Community 144`, `Community 18`, `Community 24`, `Community 286`, `Community 159`, `Community 31`, `Community 294`, `Community 41`, `Community 298`, `Community 51`, `Community 58`, `Community 320`, `Community 199`, `Community 330`, `Community 112`, `Community 116`, `Community 253`?**
-  _High betweenness centrality (0.085) - this node is a cross-community bridge._
+- **Why does `future` connect `Community 45` to `Community 257`, `Community 294`, `Community 199`, `Community 41`, `Community 330`, `Community 15`, `Community 144`, `Community 112`, `Community 18`, `Community 51`, `Community 116`, `Community 24`, `Community 58`, `Community 156`, `Community 253`, `Community 286`, `Community 159`?**
+  _High betweenness centrality (0.090) - this node is a cross-community bridge._
 - **Why does `Semaphore` connect `Community 40` to `Community 45`?**
-  _High betweenness centrality (0.068) - this node is a cross-community bridge._
+  _High betweenness centrality (0.071) - this node is a cross-community bridge._
 - **Why does `ResilientPythonCacheError` connect `Community 40` to `Community 5`?**
-  _High betweenness centrality (0.068) - this node is a cross-community bridge._
+  _High betweenness centrality (0.070) - this node is a cross-community bridge._
 - **Are the 10 inferred relationships involving `TEST()` (e.g. with `ComputeReputationCandidate()` and `ReputationCandidateDigest()`) actually correct?**
   _`TEST()` has 10 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 58 inferred relationships involving `GetCurrentTime()` (e.g. with `AsyncCommit()` and `ReceiveProposal()`) actually correct?**
@@ -2343,4 +2333,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Are the 12 inferred relationships involving `Transaction` (e.g. with `AmountError` and `AssetIdMismatch`) actually correct?**
   _`Transaction` has 12 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `PreToolUse`, `INSTALL.sh script`, `install_bazel.sh script` to the rest of the system?**
-  _3357 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _3356 weakly-connected nodes found - possible documentation gaps or missing edges._

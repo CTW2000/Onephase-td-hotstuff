@@ -21,8 +21,8 @@ namespace {
 constexpr const char* kAlgorithmBayesV4 = "bayes_v4";
 constexpr int64_t kCarryoverDecayWeightGap = 10;
 constexpr int kHealthyCatchUpScore = 40;
-constexpr uint64_t kMinLeaderFailureOpportunities = 2;
-
+constexpr int kDebtNoRecoveryBelow = 30;
+constexpr uint64_t kMinNoCertifiedLeaderOpportunities = 3;
 struct CoreEvidenceEvent {
   int view_or_round = 0;
   int leader_id = 0;
@@ -58,8 +58,8 @@ int CoreRecoveryCreditForScore(int score, int max_recovery_per_epoch) {
   if (max_recovery_per_epoch <= 0) {
     return 0;
   }
-  constexpr int kNoRecoveryBelow = 20;
-  constexpr int kFullRecoveryAt = 40;
+  constexpr int kNoRecoveryBelow = 10;
+  constexpr int kFullRecoveryAt = 30;
   const int bounded_score = std::max(0, std::min(100, score));
   if (bounded_score >= kFullRecoveryAt) {
     return max_recovery_per_epoch;
@@ -177,6 +177,7 @@ bool HasWindowFairAvailableSignerCoverage(
 void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_events,
                                const std::vector<int64_t>& weights,
                                const ReputationConfig& config,
+                               bool count_certified_leaders_as_opportunities,
                                ReputationCandidate* candidate) {
   if (candidate == nullptr) {
     return;
@@ -196,13 +197,6 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
 
   for (const CoreEvidenceEvent& event : ordered_events) {
     const int leader = event.leader_id;
-    if (event.outcome_class == OutcomeClass::kTimeoutOrViewChange &&
-        leader >= 1 && leader <= total_replicas) {
-      if (seen_leader_opportunities.insert({event.view_or_round, leader})
-              .second) {
-        ++candidate->validators[leader - 1].leader_opportunity_count;
-      }
-    }
     if (event.outcome_class != OutcomeClass::kCertified ||
         event.signer_bitmap.empty()) {
       continue;
@@ -262,7 +256,8 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
     }
     if (leader >= 1 && leader <= total_replicas) {
       ValidatorReputation& leader_score = candidate->validators[leader - 1];
-      if (seen_leader_opportunities.insert({event.view_or_round, leader})
+      if (count_certified_leaders_as_opportunities &&
+          seen_leader_opportunities.insert({event.view_or_round, leader})
               .second) {
         ++leader_score.leader_opportunity_count;
       }
@@ -421,11 +416,17 @@ ReputationCandidate ComputeReputationCandidate(
   candidate.old_weight_version = input.old_weight_version;
   candidate.activation_view = input.activation_view;
   candidate.validators.resize(std::max(total_replicas, 0));
+  const bool has_scheduled_leader_counts =
+      input.scheduled_leader_counts.size() >=
+      static_cast<size_t>(std::max(total_replicas, 0));
   for (int i = 0; i < total_replicas; ++i) {
     ValidatorReputation& validator = candidate.validators[i];
     validator.validator_id = i + 1;
     validator.current_weight = weights[i];
     validator.next_weight = weights[i];
+    if (has_scheduled_leader_counts) {
+      validator.leader_opportunity_count = input.scheduled_leader_counts[i];
+    }
     if (config.peertrust_enabled &&
         i < static_cast<int>(input.prior_peertrust_leader_debt.size())) {
       validator.peertrust_leader_debt = std::max(
@@ -440,7 +441,8 @@ ReputationCandidate ComputeReputationCandidate(
   }
 
   if (UseCoreOnlyFastPath(input, config)) {
-    ComputeCoreOnlyReputation(ordered_events, weights, config, &candidate);
+    ComputeCoreOnlyReputation(ordered_events, weights, config,
+                              !has_scheduled_leader_counts, &candidate);
     candidate.leader_weights =
         LeaderWeightsForCandidate(candidate.validators, config);
     candidate.leader_selection_version = 1;
@@ -496,15 +498,6 @@ ReputationCandidate ComputeReputationCandidate(
   for (const CoreEvidenceEvent& event : ordered_events) {
     const int leader = event.leader_id;
     const int diversity_leader = leader;
-
-    if (event.outcome_class == OutcomeClass::kTimeoutOrViewChange &&
-        leader >= 1 && leader <= total_replicas) {
-      if (seen_leader_opportunities
-              .insert({event.view_or_round, leader})
-              .second) {
-        ++candidate.validators[leader - 1].leader_opportunity_count;
-      }
-    }
 
     if (event.outcome_class != OutcomeClass::kCertified ||
         event.signer_bitmap.empty()) {
@@ -565,7 +558,8 @@ ReputationCandidate ComputeReputationCandidate(
     }
     if (leader >= 1 && leader <= total_replicas) {
       ValidatorReputation& leader_score = candidate.validators[leader - 1];
-      if (seen_leader_opportunities
+      if (!has_scheduled_leader_counts &&
+          seen_leader_opportunities
               .insert({event.view_or_round, leader})
               .second) {
         ++leader_score.leader_opportunity_count;
@@ -1055,15 +1049,14 @@ ReputationCandidate ComputeReputationCandidate(
     }
 
     int recovery_score = validator.vote_score;
-    const bool has_strong_leader_failure_signal =
-        leader_opportunities >= kMinLeaderFailureOpportunities &&
+    const bool has_repeated_uncertified_leader_opportunities =
+        leader_opportunities >= kMinNoCertifiedLeaderOpportunities &&
         validator.leader_certified_count == 0 && validator.leader_score < 50;
     if (config.leader_recovery_enabled &&
         (leader_opportunities >= config.min_leader_opportunities ||
-         has_strong_leader_failure_signal)) {
+         has_repeated_uncertified_leader_opportunities)) {
       recovery_score = std::min(recovery_score, validator.leader_score);
-      if (leader_opportunities >= config.min_leader_opportunities &&
-          has_narrow_public_target) {
+      if (has_narrow_public_target) {
         recovery_score =
             std::min(recovery_score, validator.leader_diversity_score);
       }
@@ -1089,6 +1082,10 @@ ReputationCandidate ComputeReputationCandidate(
       const int debt_gate_score =
           std::max(0, 100 - validator.sybil_graph_debt);
       recovery_score = std::min(recovery_score, debt_gate_score);
+      if (validator.sybil_graph_debt > 0 &&
+          debt_gate_score < kDebtNoRecoveryBelow) {
+        recovery_score = 0;
+      }
     }
 
     const bool carryover_decay =

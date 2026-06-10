@@ -117,6 +117,10 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.reputation_config.leader_eligible_min_weight = PositiveIntFromEnv(
       "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT",
       options.reputation_config.leader_eligible_min_weight);
+  options.reputation_config.min_leader_opportunities = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES",
+      options.reputation_config.min_leader_opportunities);
+  options.leader_selection_enabled = EnvFlagEnabled("TD_HS_LEADER_SELECTION_ENABLE");
   options.reputation_config.leader_recovery_enabled =
       EnvFlagEnabled("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE");
   options.audit_jsonl_enabled =
@@ -161,6 +165,11 @@ TdHotstuffReputationAdapter::RuntimeFromOptions(
   runtime_options.initial_weights = options.initial_weights;
   runtime_options.initial_weight_root = options.initial_weight_root;
   runtime_options.initial_weight_version = options.initial_weight_version;
+  runtime_options.leader_selection_enabled = options.leader_selection_enabled;
+  runtime_options.initial_leader_weights = options.initial_leader_weights;
+  runtime_options.initial_leader_weight_root = options.initial_leader_weight_root;
+  runtime_options.initial_leader_weight_version =
+      options.initial_leader_weight_version;
   runtime_options.audit_jsonl_enabled = options.audit_jsonl_enabled;
   runtime_options.audit_jsonl_path = options.audit_jsonl_path.empty()
                                         ? AuditPathForNode(local_node_id)

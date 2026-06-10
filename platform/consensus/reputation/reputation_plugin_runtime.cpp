@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <numeric>
 #include <sstream>
 #include <utility>
 
@@ -36,6 +37,128 @@ std::string AuditWeightsJson(const std::vector<int64_t>& values) {
   return out.str();
 }
 
+constexpr int64_t kMinLeaderWeight = 1;
+constexpr int64_t kMaxLeaderWeight = 100;
+constexpr int kLeaderSelectionVersion = 1;
+
+int RoundRobinLeaderForView(int view, int total_replicas) {
+  if (view <= 0 || total_replicas <= 0) {
+    return 0;
+  }
+  return (view % total_replicas) + 1;
+}
+
+std::vector<int64_t> NormalizeLeaderWeights(const std::vector<int64_t>& weights,
+                                            int total_replicas) {
+  std::vector<int64_t> normalized(std::max(total_replicas, 0), kMinLeaderWeight);
+  for (int i = 0; i < total_replicas && i < static_cast<int>(weights.size());
+       ++i) {
+    normalized[i] = std::max(kMinLeaderWeight,
+                             std::min(kMaxLeaderWeight, weights[i]));
+  }
+  return normalized;
+}
+
+bool IsRoundRobinLeaderProfile(const std::vector<int64_t>& weights,
+                               int total_replicas,
+                               int64_t eligible_min_weight) {
+  if (total_replicas <= 0 || weights.size() != static_cast<size_t>(total_replicas)) {
+    return true;
+  }
+  if (weights.empty() || weights.front() < eligible_min_weight) {
+    return false;
+  }
+  for (int64_t weight : weights) {
+    if (weight != weights.front() || weight < eligible_min_weight) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::vector<int> BuildSmoothWeightedRoundRobin(
+    const std::vector<int64_t>& weights, int64_t eligible_min_weight,
+    int total_replicas) {
+  std::vector<int64_t> effective(weights.size(), 0);
+  for (size_t i = 0; i < weights.size(); ++i) {
+    if (weights[i] >= eligible_min_weight) {
+      effective[i] = weights[i];
+    }
+  }
+  int64_t total = std::accumulate(effective.begin(), effective.end(), int64_t{0});
+  if (total <= 0) {
+    for (size_t i = 0; i < weights.size(); ++i) {
+      effective[i] = std::max<int64_t>(0, weights[i]);
+    }
+    total = std::accumulate(effective.begin(), effective.end(), int64_t{0});
+  }
+  if (total <= 0) {
+    std::vector<int> fallback;
+    fallback.reserve(std::max(total_replicas, 0));
+    for (int id = 1; id <= total_replicas; ++id) {
+      fallback.push_back(id);
+    }
+    return fallback;
+  }
+
+  std::vector<int64_t> current(effective.size(), 0);
+  std::vector<int> sequence;
+  sequence.reserve(static_cast<size_t>(total));
+  for (int64_t step = 0; step < total; ++step) {
+    int best = -1;
+    for (size_t i = 0; i < effective.size(); ++i) {
+      if (effective[i] <= 0) {
+        continue;
+      }
+      current[i] += effective[i];
+      if (best < 0 || current[i] > current[best] ||
+          (current[i] == current[best] && i < static_cast<size_t>(best))) {
+        best = static_cast<int>(i);
+      }
+    }
+    if (best < 0) {
+      break;
+    }
+    sequence.push_back(best + 1);
+    current[best] -= total;
+  }
+  return sequence;
+}
+
+void FillSnapshotDefaults(ReputationWeightSnapshot* snapshot,
+                          const ReputationRuntimeOptions& options) {
+  if (snapshot == nullptr) {
+    return;
+  }
+  if (snapshot->weights.empty()) {
+    snapshot->weights = DefaultWeights(options.total_replicas);
+  }
+  snapshot->weight_root_hex =
+      WeightRootOrDefault(snapshot->weights, snapshot->weight_root_hex);
+  snapshot->leader_selection_enabled = options.leader_selection_enabled;
+  if (snapshot->leader_weights.empty()) {
+    snapshot->leader_weights = snapshot->weights;
+  }
+  snapshot->leader_weights = NormalizeLeaderWeights(snapshot->leader_weights,
+                                                    options.total_replicas);
+  if (snapshot->leader_weight_version == 0) {
+    snapshot->leader_weight_version = snapshot->weight_version;
+  }
+  if (snapshot->leader_selection_version <= 0) {
+    snapshot->leader_selection_version = kLeaderSelectionVersion;
+  }
+  if (snapshot->leader_eligible_min_weight <= 0) {
+    snapshot->leader_eligible_min_weight =
+        options.config.leader_eligible_min_weight;
+  }
+  snapshot->leader_eligible_min_weight = std::max<int64_t>(
+      kMinLeaderWeight, snapshot->leader_eligible_min_weight);
+  if (snapshot->leader_weight_root_hex.empty()) {
+    snapshot->leader_weight_root_hex = LeaderWeightRootHex(
+        snapshot->leader_weights, snapshot->leader_eligible_min_weight,
+        snapshot->leader_selection_version);
+  }
+}
 
 std::string AuditValidatorsJson(const std::vector<ValidatorReputation>& validators) {
   std::ostringstream out;
@@ -128,11 +251,19 @@ ReputationPluginRuntime::ReputationPluginRuntime(
     options_.initial_weights = DefaultWeights(options_.total_replicas);
   }
   active_snapshot_.weights = options_.initial_weights;
-  active_snapshot_.weight_root_hex =
-      WeightRootOrDefault(active_snapshot_.weights, options_.initial_weight_root);
+  active_snapshot_.weight_root_hex = options_.initial_weight_root;
   active_snapshot_.weight_version = options_.initial_weight_version;
+  active_snapshot_.leader_selection_enabled = options_.leader_selection_enabled;
+  active_snapshot_.leader_weights = options_.initial_leader_weights;
+  active_snapshot_.leader_weight_root_hex = options_.initial_leader_weight_root;
+  active_snapshot_.leader_weight_version = options_.initial_leader_weight_version;
+  active_snapshot_.leader_eligible_min_weight =
+      options_.config.leader_eligible_min_weight;
+  FillSnapshotDefaults(&active_snapshot_, options_);
   known_weights_[{active_snapshot_.weight_root_hex,
                   active_snapshot_.weight_version}] = active_snapshot_.weights;
+  known_snapshots_[{active_snapshot_.weight_root_hex,
+                    active_snapshot_.weight_version}] = active_snapshot_;
   if (options_.audit_jsonl_enabled && !options_.audit_jsonl_path.empty()) {
     audit_file_.open(options_.audit_jsonl_path, std::ios::out | std::ios::app);
     if (!audit_file_.is_open()) {
@@ -225,15 +356,13 @@ bool ReputationPluginRuntime::Enqueue(RuntimeEvent event) {
 
 void ReputationPluginRuntime::UpdateActiveWeights(
     ReputationWeightSnapshot snapshot) {
-  if (snapshot.weights.empty()) {
-    snapshot.weights = DefaultWeights(options_.total_replicas);
-  }
-  snapshot.weight_root_hex =
-      WeightRootOrDefault(snapshot.weights, snapshot.weight_root_hex);
+  FillSnapshotDefaults(&snapshot, options_);
   std::lock_guard<std::mutex> lk(mutex_);
   active_snapshot_ = std::move(snapshot);
   known_weights_[{active_snapshot_.weight_root_hex,
                   active_snapshot_.weight_version}] = active_snapshot_.weights;
+  known_snapshots_[{active_snapshot_.weight_root_hex,
+                    active_snapshot_.weight_version}] = active_snapshot_;
 }
 
 std::vector<ReputationCandidate>
@@ -294,9 +423,18 @@ ReputationWeightSnapshot ReputationPluginRuntime::SnapshotFromFields(
                                  ? active_snapshot_.weight_root_hex
                                  : weight_root_hex;
   snapshot.weight_version = weight_version;
+  auto snapshot_it = known_snapshots_.find({snapshot.weight_root_hex,
+                                            snapshot.weight_version});
+  if (snapshot_it != known_snapshots_.end()) {
+    snapshot = snapshot_it->second;
+  }
+  snapshot.weight_root_hex = weight_root_hex.empty()
+                                 ? snapshot.weight_root_hex
+                                 : weight_root_hex;
+  snapshot.weight_version = weight_version;
   if (!weights.empty()) {
     snapshot.weights = weights;
-  } else {
+  } else if (snapshot.weights.empty()) {
     auto it = known_weights_.find({snapshot.weight_root_hex,
                                    snapshot.weight_version});
     if (it != known_weights_.end()) {
@@ -305,6 +443,7 @@ ReputationWeightSnapshot ReputationPluginRuntime::SnapshotFromFields(
       snapshot.weights = active_snapshot_.weights;
     }
   }
+  FillSnapshotDefaults(&snapshot, options_);
   return snapshot;
 }
 
@@ -318,6 +457,41 @@ ReputationWeightSnapshot ReputationPluginRuntime::SnapshotForLeaderOutcome(
     const LeaderOutcomeEvidenceRecord& evidence) const {
   return SnapshotFromFields(evidence.weight_root_hex, evidence.weight_version,
                             evidence.active_weights);
+}
+
+std::vector<uint64_t> ReputationPluginRuntime::ScheduledLeaderCountsForWindow(
+    int start_view, int end_view, const ReputationWeightSnapshot& snapshot) const {
+  std::vector<uint64_t> counts(std::max(options_.total_replicas, 0), 0);
+  if (end_view <= start_view || options_.total_replicas <= 0) {
+    return counts;
+  }
+  const std::vector<int64_t> leader_weights = NormalizeLeaderWeights(
+      snapshot.leader_weights.empty() ? snapshot.weights : snapshot.leader_weights,
+      options_.total_replicas);
+  const int64_t threshold = std::max<int64_t>(
+      kMinLeaderWeight, snapshot.leader_eligible_min_weight);
+  std::vector<int> sequence;
+  if (snapshot.leader_selection_enabled &&
+      !IsRoundRobinLeaderProfile(leader_weights, options_.total_replicas,
+                                 threshold)) {
+    sequence = BuildSmoothWeightedRoundRobin(leader_weights, threshold,
+                                             options_.total_replicas);
+  }
+  for (int view = start_view; view < end_view; ++view) {
+    int leader = 0;
+    if (sequence.empty()) {
+      leader = RoundRobinLeaderForView(view, options_.total_replicas);
+    } else {
+      const int idx = ((view % static_cast<int>(sequence.size())) +
+                       static_cast<int>(sequence.size())) %
+                      static_cast<int>(sequence.size());
+      leader = sequence[idx];
+    }
+    if (leader >= 1 && leader <= options_.total_replicas) {
+      ++counts[leader - 1];
+    }
+  }
+  return counts;
 }
 
 void ReputationPluginRuntime::ProcessEvidence(
@@ -454,6 +628,8 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
     evidence.artifact_digest = record.artifact_digest;
     input.leader_outcome_evidence.push_back(std::move(evidence));
   }
+  input.scheduled_leader_counts = ScheduledLeaderCountsForWindow(
+      buffer->start_view, buffer->end_view, buffer->snapshot);
 
   ReputationCandidate candidate = ComputeReputationCandidate(input, options_.config);
   candidate.window_index = key.window_index;

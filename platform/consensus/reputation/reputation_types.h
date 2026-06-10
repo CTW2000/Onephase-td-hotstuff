@@ -202,6 +202,7 @@ struct ReputationWindowInput {
   int activation_view = 0;
   std::vector<CertifiedSignerEvidence> certified_signer_evidence;
   std::vector<LeaderOutcomeEvidence> leader_outcome_evidence;
+  std::vector<uint64_t> scheduled_leader_counts;
   std::vector<SignedProposalEvidence> signed_proposal_evidence;
   std::vector<SignedVoteEvidence> signed_vote_evidence;
   std::vector<InvalidQcProposalEvidence> invalid_qc_proposal_evidence;

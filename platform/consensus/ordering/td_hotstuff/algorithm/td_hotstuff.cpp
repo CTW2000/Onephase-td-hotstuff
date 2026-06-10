@@ -303,8 +303,6 @@ void HotStuff::AsyncTimeout() {
     bool has_vote = false;
     bool has_cert = false;
     bool advanced = false;
-    TdHotstuffLeaderOutcomeEvidenceSnapshot timeout_outcome_snapshot;
-    bool has_timeout_outcome_snapshot = false;
     {
       std::unique_lock<std::mutex> lk(mutex_);
       if (timeout_progress_epoch_ != observed_progress_epoch) {
@@ -353,11 +351,6 @@ void HotStuff::AsyncTimeout() {
         cert = *formed_cert;
         has_cert = true;
         advanced = ApplyTimeoutCertLocked(cert);
-        if (advanced && reputation_adapter_ != nullptr) {
-          has_timeout_outcome_snapshot =
-              MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
-                  cert, &timeout_outcome_snapshot);
-        }
         if (advanced) {
           watched_view = proposal_manager_->CurrentView();
           view_started_at = now;
@@ -371,10 +364,6 @@ void HotStuff::AsyncTimeout() {
     if (has_cert) {
       BroadcastTimeoutCert(cert);
     }
-    if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
-      reputation_adapter_->TryRecordLeaderOutcome(
-          std::move(timeout_outcome_snapshot));
-    }
     if (advanced) {
       StartNewRound();
     }
@@ -383,6 +372,7 @@ void HotStuff::AsyncTimeout() {
 
 void HotStuff::AsyncSend() {
   while (!IsStop()) {
+    MaybeActivateReadyWeightUpdatesAfterViewAdvance();
     {
       std::unique_lock<std::mutex> lk(n_mutex_);
       vote_cv_.wait_for(lk, std::chrono::microseconds(1000),
@@ -391,6 +381,7 @@ void HotStuff::AsyncSend() {
     if (IsStop()) {
       return;
     }
+    MaybeActivateReadyWeightUpdatesAfterViewAdvance();
     if (!Ready()) {
       continue;
     }
@@ -425,6 +416,16 @@ void HotStuff::AsyncSend() {
     }
 
     if (proposal != nullptr) {
+      MaybeActivateReadyWeightUpdatesAfterViewAdvance();
+      const int proposal_view = proposal->header().view();
+      const int active_leader = LeaderForView(proposal_view);
+      if (proposal->sender() != active_leader) {
+        LOG_EVERY_N(WARNING, 1000)
+            << "drop locally generated proposal after leader profile activation, view:"
+            << proposal_view << " sender:" << proposal->sender()
+            << " active_leader:" << active_leader;
+        continue;
+      }
       broadcast_call_(MessageType::NewProposal, *proposal);
       continue;
     }
@@ -599,18 +600,36 @@ int64_t HotStuff::CertificateWeight(
 
 std::vector<int> HotStuff::CertificateSigners(
     const std::map<int, std::unique_ptr<Certificate>>& certs, int view) const {
+  std::vector<int> available_signers;
+  available_signers.reserve(certs.size());
+  for (const auto& entry : certs) {
+    if (WeightForSigner(entry.first, view) > 0) {
+      available_signers.push_back(entry.first);
+    }
+  }
+  if (available_signers.empty()) {
+    return {};
+  }
+
+  // std::map iteration always starts from the smallest validator id. Rotate the
+  // timely signer set by view so all honest voters get comparable QC inclusion
+  // opportunities without waiting for late votes.
+  const size_t start =
+      static_cast<size_t>(std::max(view - 1, 0)) % available_signers.size();
+
   std::vector<int> signers;
-  signers.reserve(certs.size());
+  signers.reserve(available_signers.size());
   int64_t selected_weight = 0;
   const int64_t quorum_weight =
       weight_schedule_ != nullptr ? weight_schedule_->QuorumWeightForView(view)
                                   : quorum_weight_;
-  for (const auto& entry : certs) {
-    const int64_t weight = WeightForSigner(entry.first, view);
+  for (size_t offset = 0; offset < available_signers.size(); ++offset) {
+    const int signer = available_signers[(start + offset) % available_signers.size()];
+    const int64_t weight = WeightForSigner(signer, view);
     if (weight <= 0) {
       continue;
     }
-    signers.push_back(entry.first);
+    signers.push_back(signer);
     selected_weight += weight;
     if (selected_weight >= quorum_weight) {
       break;
@@ -638,25 +657,6 @@ bool HotStuff::MaybeMakeQcEvidenceSnapshotLocked(
   snapshot->active_weight_root = weight_schedule_->WeightRootForView(qc.view());
   snapshot->active_weight_version =
       weight_schedule_->WeightVersionForView(qc.view());
-  return true;
-}
-
-bool HotStuff::MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
-    const TimeoutCert& cert, TdHotstuffLeaderOutcomeEvidenceSnapshot* snapshot) {
-  if (snapshot == nullptr || reputation_adapter_ == nullptr ||
-      weight_schedule_ == nullptr || cert.view() < 0) {
-    return false;
-  }
-  snapshot->local_node_id = id_;
-  snapshot->total_replicas = total_num_;
-  snapshot->view = cert.view();
-  snapshot->leader_id = LeaderForView(cert.view());
-  snapshot->outcome_class =
-      resdb::consensus::reputation::OutcomeClass::kTimeoutOrViewChange;
-  snapshot->artifact_digest = TimeoutCertDigest(cert);
-  snapshot->active_weight_root = weight_schedule_->WeightRootForView(cert.view());
-  snapshot->active_weight_version =
-      weight_schedule_->WeightVersionForView(cert.view());
   return true;
 }
 
@@ -796,8 +796,6 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
   bool has_local_vote = false;
   bool formed_cert = false;
   bool advanced = false;
-  TdHotstuffLeaderOutcomeEvidenceSnapshot timeout_outcome_snapshot;
-  bool has_timeout_outcome_snapshot = false;
   {
     std::unique_lock<std::mutex> lk(mutex_);
     const int current_view = proposal_manager_->CurrentView();
@@ -809,11 +807,6 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
       cert = *maybe_cert;
       formed_cert = true;
       advanced = ApplyTimeoutCertLocked(cert);
-      if (advanced && reputation_adapter_ != nullptr) {
-        has_timeout_outcome_snapshot =
-            MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
-                cert, &timeout_outcome_snapshot);
-      }
     }
 
     if (vote->signer() != id_ && vote->view() >= current_view &&
@@ -830,11 +823,6 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
           cert = *local_cert;
           formed_cert = true;
           advanced = ApplyTimeoutCertLocked(cert);
-          if (advanced && reputation_adapter_ != nullptr) {
-            has_timeout_outcome_snapshot =
-                MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
-                    cert, &timeout_outcome_snapshot);
-          }
         }
       }
     }
@@ -844,10 +832,6 @@ bool HotStuff::ReceiveTimeoutVote(std::unique_ptr<TimeoutVote> vote) {
   }
   if (formed_cert) {
     BroadcastTimeoutCert(cert);
-  }
-  if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
-    reputation_adapter_->TryRecordLeaderOutcome(
-        std::move(timeout_outcome_snapshot));
   }
   if (advanced) {
     StartNewRound();
@@ -861,19 +845,9 @@ bool HotStuff::ReceiveTimeoutCert(std::unique_ptr<TimeoutCert> cert) {
     return false;
   }
   bool advanced = false;
-  TdHotstuffLeaderOutcomeEvidenceSnapshot timeout_outcome_snapshot;
-  bool has_timeout_outcome_snapshot = false;
   {
     std::unique_lock<std::mutex> lk(mutex_);
     advanced = ApplyTimeoutCertLocked(*cert);
-    if (advanced && reputation_adapter_ != nullptr) {
-      has_timeout_outcome_snapshot =
-          MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
-              *cert, &timeout_outcome_snapshot);
-    }
-  }
-  if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
-    reputation_adapter_->TryRecordLeaderOutcome(std::move(timeout_outcome_snapshot));
   }
   if (advanced) {
     StartNewRound();
@@ -1011,6 +985,14 @@ void HotStuff::ActivateReadyWeightUpdates(int view) {
     snapshot.weights = weight_schedule_->ActiveWeights();
     snapshot.weight_root_hex = weight_schedule_->ActiveWeightRoot();
     snapshot.weight_version = weight_schedule_->ActiveWeightVersion();
+    if (leader_schedule_ != nullptr) {
+      snapshot.leader_selection_enabled = leader_schedule_->enabled();
+      snapshot.leader_weights = leader_schedule_->ActiveLeaderWeights();
+      snapshot.leader_weight_root_hex = leader_schedule_->ActiveLeaderWeightRoot();
+      snapshot.leader_weight_version = leader_schedule_->ActiveLeaderVersion();
+      snapshot.leader_eligible_min_weight =
+          leader_schedule_->ActiveEligibleMinWeight();
+    }
     const std::vector<int64_t> active_leader_weights =
         leader_schedule_ == nullptr ? snapshot.weights
                                     : leader_schedule_->ActiveLeaderWeights();
@@ -1111,8 +1093,6 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   std::unique_ptr<Certificate> cert;
   TdHotstuffQcEvidenceSnapshot proposal_qc_snapshot;
   bool has_proposal_qc_snapshot = false;
-  TdHotstuffLeaderOutcomeEvidenceSnapshot timeout_outcome_snapshot;
-  bool has_timeout_outcome_snapshot = false;
   bool proposal_valid = true;
   bool stale_proposal = false;
   int next_leader = 0;
@@ -1124,13 +1104,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     }
 
     if (proposal->header().has_timeout_cert()) {
-      const bool advanced_by_tc =
-          ApplyTimeoutCertLocked(proposal->header().timeout_cert());
-      if (advanced_by_tc && reputation_adapter_ != nullptr) {
-        has_timeout_outcome_snapshot =
-            MaybeMakeTimeoutLeaderOutcomeSnapshotLocked(
-                proposal->header().timeout_cert(), &timeout_outcome_snapshot);
-      }
+      ApplyTimeoutCertLocked(proposal->header().timeout_cert());
     }
     const int local_current_view = proposal_manager_->CurrentView();
     if (view < local_current_view) {
@@ -1183,26 +1157,14 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     if (has_proposal_qc_snapshot && reputation_adapter_ != nullptr) {
       reputation_adapter_->TryRecordCertifiedQc(std::move(proposal_qc_snapshot));
     }
-    if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
-      reputation_adapter_->TryRecordLeaderOutcome(
-          std::move(timeout_outcome_snapshot));
-    }
     return true;
   }
   if (!proposal_valid || cert == nullptr) {
-    if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
-      reputation_adapter_->TryRecordLeaderOutcome(
-          std::move(timeout_outcome_snapshot));
-    }
     return false;
   }
   const int send_result = SendMessage(MessageType::Vote, *cert, next_leader);
   if (has_proposal_qc_snapshot && reputation_adapter_ != nullptr) {
     reputation_adapter_->TryRecordCertifiedQc(std::move(proposal_qc_snapshot));
-  }
-  if (has_timeout_outcome_snapshot && reputation_adapter_ != nullptr) {
-    reputation_adapter_->TryRecordLeaderOutcome(
-        std::move(timeout_outcome_snapshot));
   }
   return send_result >= 0;
 }

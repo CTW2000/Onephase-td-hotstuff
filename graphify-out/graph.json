@@ -2442,7 +2442,7 @@
       "source_location": "L149",
       "_origin": "ast",
       "id": "common_crypto_signature_verifier_cpp_certificatekey",
-      "community": 102,
+      "community": 716,
       "norm_label": "certificatekey"
     },
     {
@@ -2472,7 +2472,7 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "crypto_signature_verifier_getallpublickeys",
-      "community": 102,
+      "community": 716,
       "norm_label": "getallpublickeys()"
     },
     {
@@ -2482,7 +2482,7 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "common_crypto_signature_verifier_cpp_vector",
-      "community": 102,
+      "community": 716,
       "norm_label": "vector"
     },
     {
@@ -8136,7 +8136,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "resdb_driver_pool_abstractpicker_pick",
-      "community": 156,
+      "community": 98,
       "norm_label": ".pick()"
     },
     {
@@ -8146,7 +8146,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "connection",
-      "community": 156,
+      "community": 98,
       "norm_label": "connection"
     },
     {
@@ -8166,7 +8166,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "resdb_driver_pool_roundrobinpicker_pick",
-      "community": 156,
+      "community": 98,
       "norm_label": ".pick()"
     },
     {
@@ -8186,7 +8186,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "resdb_driver_pool_pool_init",
-      "community": 156,
+      "community": 98,
       "norm_label": ".__init__()"
     },
     {
@@ -8196,7 +8196,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "resdb_driver_pool_pool_get_connection",
-      "community": 156,
+      "community": 98,
       "norm_label": ".get_connection()"
     },
     {
@@ -8216,7 +8216,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "resdb_driver_pool_rationale_29",
-      "community": 156,
+      "community": 98,
       "norm_label": "! picks a :class:`~resdb_driver.connection.connection`         instance from the"
     },
     {
@@ -8236,7 +8236,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "resdb_driver_pool_rationale_44",
-      "community": 156,
+      "community": 98,
       "norm_label": "! picks a connection with the earliest backoff time.         as a result, the fi"
     },
     {
@@ -8256,7 +8256,7 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "resdb_driver_pool_rationale_67",
-      "community": 156,
+      "community": 98,
       "norm_label": "! initializes a :class:`~resdb_driver.pool.pool` instance.         @param connec"
     },
     {
@@ -8266,7 +8266,7 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "resdb_driver_pool_rationale_74",
-      "community": 156,
+      "community": 98,
       "norm_label": "! gets a :class:`~resdb_driver.connection.connection`         instance from the"
     },
     {
@@ -11406,7 +11406,7 @@
       "source_location": "L244",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_transactions",
-      "community": 188,
+      "community": 136,
       "norm_label": ".get_transactions()"
     },
     {
@@ -11456,7 +11456,7 @@
       "source_location": "L308",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_latest_block",
-      "community": 188,
+      "community": 136,
       "norm_label": ".get_latest_block()"
     },
     {
@@ -11466,7 +11466,7 @@
       "source_location": "L313",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_block",
-      "community": 188,
+      "community": 136,
       "norm_label": ".get_block()"
     },
     {
@@ -11616,7 +11616,7 @@
       "source_location": "L451",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_store_abci_chain",
-      "community": 188,
+      "community": 136,
       "norm_label": ".store_abci_chain()"
     },
     {
@@ -11636,7 +11636,7 @@
       "source_location": "L458",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_get_latest_abci_chain",
-      "community": 188,
+      "community": 136,
       "norm_label": ".get_latest_abci_chain()"
     },
     {
@@ -11646,7 +11646,7 @@
       "source_location": "L461",
       "_origin": "ast",
       "id": "resdb_validator_lib_resdb_migrate_abci_chain",
-      "community": 188,
+      "community": 136,
       "norm_label": ".migrate_abci_chain()"
     },
     {
@@ -11796,7 +11796,7 @@
       "source_location": "L309",
       "_origin": "ast",
       "id": "resdb_validator_lib_rationale_309",
-      "community": 188,
+      "community": 136,
       "norm_label": "get the block with largest height."
     },
     {
@@ -11806,7 +11806,7 @@
       "source_location": "L314",
       "_origin": "ast",
       "id": "resdb_validator_lib_rationale_314",
-      "community": 188,
+      "community": 136,
       "norm_label": "get the block with the specified `block_id`.          returns the block correspo"
     },
     {
@@ -11876,7 +11876,7 @@
       "source_location": "L462",
       "_origin": "ast",
       "id": "resdb_validator_lib_rationale_462",
-      "community": 188,
+      "community": 136,
       "norm_label": "generate and record a new abci chain id. new blocks are not         accepted unt"
     },
     {
@@ -11916,7 +11916,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "resdb_validator_memoize",
-      "community": 237,
+      "community": 96,
       "norm_label": "memoize.py"
     },
     {
@@ -11926,7 +11926,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "resdb_validator_memoize_hdict",
-      "community": 237,
+      "community": 96,
       "norm_label": "hdict"
     },
     {
@@ -11936,7 +11936,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "dict",
-      "community": 237,
+      "community": 96,
       "norm_label": "dict"
     },
     {
@@ -11946,7 +11946,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "resdb_validator_memoize_hdict_hash",
-      "community": 237,
+      "community": 96,
       "norm_label": ".__hash__()"
     },
     {
@@ -11956,7 +11956,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "resdb_validator_memoize_from_dict",
-      "community": 237,
+      "community": 96,
       "norm_label": "from_dict()"
     },
     {
@@ -11966,7 +11966,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "resdb_validator_memoize_memoize_from_dict",
-      "community": 237,
+      "community": 96,
       "norm_label": "memoize_from_dict()"
     },
     {
@@ -12016,7 +12016,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "resdb_validator_memoize_to_dict",
-      "community": 237,
+      "community": 96,
       "norm_label": "to_dict()"
     },
     {
@@ -12026,7 +12026,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "resdb_validator_memoize_memoize_to_dict",
-      "community": 237,
+      "community": 96,
       "norm_label": "memoize_to_dict()"
     },
     {
@@ -33846,7 +33846,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "network_network_utils_test",
-      "community": 378,
+      "community": 210,
       "norm_label": "network_utils_test.cpp"
     },
     {
@@ -33856,7 +33856,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "network_network_utils_test_test",
-      "community": 378,
+      "community": 210,
       "norm_label": "test()"
     },
     {
@@ -33866,7 +33866,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "networkutilstest",
-      "community": 378,
+      "community": 210,
       "norm_label": "networkutilstest"
     },
     {
@@ -33876,7 +33876,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "getdnsname",
-      "community": 378,
+      "community": 210,
       "norm_label": "getdnsname"
     },
     {
@@ -33886,7 +33886,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "gettcpurl",
-      "community": 378,
+      "community": 210,
       "norm_label": "gettcpurl"
     },
     {
@@ -34146,7 +34146,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "network_tcp_socket_test",
-      "community": 31,
+      "community": 45,
       "norm_label": "tcp_socket_test.cpp"
     },
     {
@@ -34156,7 +34156,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "network_tcp_socket_test_test",
-      "community": 31,
+      "community": 45,
       "norm_label": "test()"
     },
     {
@@ -34166,7 +34166,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "platform_common_network_tcp_socket_test_cpp_tcpsocket",
-      "community": 31,
+      "community": 45,
       "norm_label": "tcpsocket"
     },
     {
@@ -34176,7 +34176,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "sendandrecv",
-      "community": 31,
+      "community": 45,
       "norm_label": "sendandrecv"
     },
     {
@@ -34186,7 +34186,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "sendafterclose",
-      "community": 31,
+      "community": 45,
       "norm_label": "sendafterclose"
     },
     {
@@ -36326,7 +36326,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "execution_geo_transaction_executor_test",
-      "community": 298,
+      "community": 45,
       "norm_label": "geo_transaction_executor_test.cpp"
     },
     {
@@ -36336,7 +36336,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "execution_geo_transaction_executor_test_test",
-      "community": 298,
+      "community": 45,
       "norm_label": "test()"
     },
     {
@@ -36346,7 +36346,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "localexecutortest",
-      "community": 298,
+      "community": 45,
       "norm_label": "localexecutortest"
     },
     {
@@ -36356,7 +36356,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "pushtoqueue",
-      "community": 298,
+      "community": 45,
       "norm_label": "pushtoqueue"
     },
     {
@@ -36366,7 +36366,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "primarynodebroadcast",
-      "community": 298,
+      "community": 45,
       "norm_label": "primarynodebroadcast"
     },
     {
@@ -37206,7 +37206,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "platform_consensus_ordering_common_algorithm_protocol_base_cpp_algorithm_protocol_base",
-      "community": 215,
+      "community": 135,
       "norm_label": "protocol_base.cpp"
     },
     {
@@ -37216,7 +37216,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "algorithm_protocol_base_protocolbase",
-      "community": 215,
+      "community": 135,
       "norm_label": "protocolbase()"
     },
     {
@@ -37226,7 +37226,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "singlecallfunctype",
-      "community": 215,
+      "community": 135,
       "norm_label": "singlecallfunctype"
     },
     {
@@ -37236,7 +37236,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "broadcastcallfunctype",
-      "community": 215,
+      "community": 135,
       "norm_label": "broadcastcallfunctype"
     },
     {
@@ -37246,7 +37246,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "commitfunctype",
-      "community": 215,
+      "community": 135,
       "norm_label": "commitfunctype"
     },
     {
@@ -37256,7 +37256,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "algorithm_protocol_base_stop",
-      "community": 215,
+      "community": 135,
       "norm_label": "stop()"
     },
     {
@@ -37266,7 +37266,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "algorithm_protocol_base_isstop",
-      "community": 215,
+      "community": 135,
       "norm_label": "isstop()"
     },
     {
@@ -37276,7 +37276,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "algorithm_protocol_base_isslowreplica",
-      "community": 215,
+      "community": 135,
       "norm_label": "isslowreplica()"
     },
     {
@@ -37286,7 +37286,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "algorithm_protocol_base_sendmessage",
-      "community": 215,
+      "community": 135,
       "norm_label": "sendmessage()"
     },
     {
@@ -37296,7 +37296,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "platform_consensus_ordering_common_algorithm_protocol_base_cpp_message",
-      "community": 215,
+      "community": 135,
       "norm_label": "message"
     },
     {
@@ -37306,7 +37306,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "algorithm_protocol_base_broadcast",
-      "community": 215,
+      "community": 135,
       "norm_label": "broadcast()"
     },
     {
@@ -37316,7 +37316,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "algorithm_protocol_base_commit",
-      "community": 215,
+      "community": 135,
       "norm_label": "commit()"
     },
     {
@@ -37326,7 +37326,7 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "algorithm_protocol_base_setnetworkdelaygenerator",
-      "community": 215,
+      "community": 135,
       "norm_label": "setnetworkdelaygenerator()"
     },
     {
@@ -37706,7 +37706,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "framework_performance_manager_performancemanager",
-      "community": 299,
+      "community": 55,
       "norm_label": "performancemanager()"
     },
     {
@@ -37716,7 +37716,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "platform_consensus_ordering_common_framework_performance_manager_cpp_resdbconfig",
-      "community": 299,
+      "community": 55,
       "norm_label": "resdbconfig"
     },
     {
@@ -37726,7 +37726,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "platform_consensus_ordering_common_framework_performance_manager_cpp_replicacommunicator",
-      "community": 299,
+      "community": 55,
       "norm_label": "replicacommunicator"
     },
     {
@@ -37736,7 +37736,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "platform_consensus_ordering_common_framework_performance_manager_cpp_signatureverifier",
-      "community": 299,
+      "community": 55,
       "norm_label": "signatureverifier"
     },
     {
@@ -38976,7 +38976,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "platform_consensus_ordering_hs_algorithm_hs_cpp_algorithm_hs",
-      "community": 136,
+      "community": 135,
       "norm_label": "hs.cpp"
     },
     {
@@ -38986,7 +38986,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "algorithm_hs_hotstuff",
-      "community": 136,
+      "community": 135,
       "norm_label": "hotstuff()"
     },
     {
@@ -38996,7 +38996,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "platform_consensus_ordering_hs_algorithm_hs_cpp_signatureverifier",
-      "community": 136,
+      "community": 135,
       "norm_label": "signatureverifier"
     },
     {
@@ -39006,7 +39006,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "algorithm_hs_nextleader",
-      "community": 136,
+      "community": 135,
       "norm_label": "nextleader()"
     },
     {
@@ -39016,7 +39016,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "algorithm_hs_isleader",
-      "community": 136,
+      "community": 135,
       "norm_label": "isleader()"
     },
     {
@@ -39026,7 +39026,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "algorithm_hs_ready",
-      "community": 136,
+      "community": 135,
       "norm_label": "ready()"
     },
     {
@@ -39036,7 +39036,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "algorithm_hs_startnewround",
-      "community": 136,
+      "community": 135,
       "norm_label": "startnewround()"
     },
     {
@@ -39046,7 +39046,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "algorithm_hs_asyncsend",
-      "community": 136,
+      "community": 135,
       "norm_label": "asyncsend()"
     },
     {
@@ -39056,7 +39056,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "algorithm_hs_asynccommit",
-      "community": 136,
+      "community": 135,
       "norm_label": "asynccommit()"
     },
     {
@@ -39066,7 +39066,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "algorithm_hs_receivetransaction",
-      "community": 136,
+      "community": 135,
       "norm_label": "receivetransaction()"
     },
     {
@@ -39076,7 +39076,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "platform_consensus_ordering_hs_algorithm_hs_cpp_unique_ptr",
-      "community": 136,
+      "community": 135,
       "norm_label": "unique_ptr"
     },
     {
@@ -39086,7 +39086,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "platform_consensus_ordering_hs_algorithm_hs_cpp_transaction",
-      "community": 136,
+      "community": 135,
       "norm_label": "transaction"
     },
     {
@@ -39096,7 +39096,7 @@
       "source_location": "L118",
       "_origin": "ast",
       "id": "algorithm_hs_receiveproposal",
-      "community": 136,
+      "community": 135,
       "norm_label": "receiveproposal()"
     },
     {
@@ -39106,7 +39106,7 @@
       "source_location": "L118",
       "_origin": "ast",
       "id": "platform_consensus_ordering_hs_algorithm_hs_cpp_proposal",
-      "community": 136,
+      "community": 135,
       "norm_label": "proposal"
     },
     {
@@ -39116,7 +39116,7 @@
       "source_location": "L172",
       "_origin": "ast",
       "id": "algorithm_hs_receivecertificate",
-      "community": 136,
+      "community": 135,
       "norm_label": "receivecertificate()"
     },
     {
@@ -39126,7 +39126,7 @@
       "source_location": "L172",
       "_origin": "ast",
       "id": "platform_consensus_ordering_hs_algorithm_hs_cpp_certificate",
-      "community": 136,
+      "community": 135,
       "norm_label": "certificate"
     },
     {
@@ -39136,7 +39136,7 @@
       "source_location": "L215",
       "_origin": "ast",
       "id": "algorithm_hs_commitproposal",
-      "community": 136,
+      "community": 135,
       "norm_label": "commitproposal()"
     },
     {
@@ -39146,7 +39146,7 @@
       "source_location": "L219",
       "_origin": "ast",
       "id": "algorithm_hs_generatecertificate",
-      "community": 136,
+      "community": 135,
       "norm_label": "generatecertificate()"
     },
     {
@@ -41916,7 +41916,7 @@
       "source_location": "L107",
       "_origin": "ast",
       "id": "pbft_checkpoint_manager_test_test_f",
-      "community": 159,
+      "community": 443,
       "norm_label": "test_f()"
     },
     {
@@ -41926,7 +41926,7 @@
       "source_location": "L107",
       "_origin": "ast",
       "id": "sendcheckpoint",
-      "community": 159,
+      "community": 443,
       "norm_label": "sendcheckpoint"
     },
     {
@@ -41936,7 +41936,7 @@
       "source_location": "L127",
       "_origin": "ast",
       "id": "sendcheckpointonce",
-      "community": 159,
+      "community": 443,
       "norm_label": "sendcheckpointonce"
     },
     {
@@ -41946,7 +41946,7 @@
       "source_location": "L151",
       "_origin": "ast",
       "id": "sendcheckpointtwo",
-      "community": 159,
+      "community": 443,
       "norm_label": "sendcheckpointtwo"
     },
     {
@@ -41956,7 +41956,7 @@
       "source_location": "L179",
       "_origin": "ast",
       "id": "stableckpt",
-      "community": 159,
+      "community": 443,
       "norm_label": "stableckpt"
     },
     {
@@ -41966,7 +41966,7 @@
       "source_location": "L206",
       "_origin": "ast",
       "id": "stableckptnotenough",
-      "community": 159,
+      "community": 443,
       "norm_label": "stableckptnotenough"
     },
     {
@@ -41976,7 +41976,7 @@
       "source_location": "L249",
       "_origin": "ast",
       "id": "votes",
-      "community": 159,
+      "community": 443,
       "norm_label": "votes"
     },
     {
@@ -44506,7 +44506,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "pbft_response_manager_responsemanager",
-      "community": 66,
+      "community": 215,
       "norm_label": "responsemanager()"
     },
     {
@@ -44516,7 +44516,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_response_manager_cpp_resdbconfig",
-      "community": 66,
+      "community": 215,
       "norm_label": "resdbconfig"
     },
     {
@@ -44526,7 +44526,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_response_manager_cpp_replicacommunicator",
-      "community": 66,
+      "community": 215,
       "norm_label": "replicacommunicator"
     },
     {
@@ -44536,7 +44536,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_response_manager_cpp_systeminfo",
-      "community": 66,
+      "community": 215,
       "norm_label": "systeminfo"
     },
     {
@@ -44546,7 +44546,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "platform_consensus_ordering_pbft_response_manager_cpp_signatureverifier",
-      "community": 66,
+      "community": 215,
       "norm_label": "signatureverifier"
     },
     {
@@ -47343,7 +47343,7 @@
       "label": "TdHotstuffReputationAdapter()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L131",
+      "source_location": "L135",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_tdhotstuffreputationadapter",
       "community": 1,
@@ -47353,7 +47353,7 @@
       "label": "shared_ptr",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L139",
+      "source_location": "L143",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_adapter_td_hotstuff_reputation_adapter_cpp_shared_ptr",
       "community": 1,
@@ -47363,7 +47363,7 @@
       "label": "ReputationPluginRuntime",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L139",
+      "source_location": "L143",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_adapter_td_hotstuff_reputation_adapter_cpp_reputationpluginruntime",
       "community": 1,
@@ -47373,7 +47373,7 @@
       "label": "RuntimeFromOptions()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L151",
+      "source_location": "L155",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_runtimefromoptions",
       "community": 1,
@@ -47383,7 +47383,7 @@
       "label": "Start()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L174",
+      "source_location": "L183",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_start",
       "community": 1,
@@ -47393,7 +47393,7 @@
       "label": "Stop()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L180",
+      "source_location": "L189",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_stop",
       "community": 1,
@@ -47403,7 +47403,7 @@
       "label": "TryRecordCertifiedQc()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L186",
+      "source_location": "L195",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_tryrecordcertifiedqc",
       "community": 1,
@@ -47413,7 +47413,7 @@
       "label": "TryRecordLeaderOutcome()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L200",
+      "source_location": "L209",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_tryrecordleaderoutcome",
       "community": 1,
@@ -47423,7 +47423,7 @@
       "label": "AdvanceWatermark()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L215",
+      "source_location": "L224",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_advancewatermark",
       "community": 1,
@@ -47433,7 +47433,7 @@
       "label": "UpdateActiveWeights()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L219",
+      "source_location": "L228",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_updateactiveweights",
       "community": 1,
@@ -47443,7 +47443,7 @@
       "label": "ReputationWeightSnapshot",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L219",
+      "source_location": "L228",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_adapter_td_hotstuff_reputation_adapter_cpp_reputationweightsnapshot",
       "community": 1,
@@ -47453,7 +47453,7 @@
       "label": "TakeCompletedCandidates()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L226",
+      "source_location": "L235",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_takecompletedcandidates",
       "community": 1,
@@ -47463,7 +47463,7 @@
       "label": "vector",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L226",
+      "source_location": "L235",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_adapter_td_hotstuff_reputation_adapter_cpp_vector",
       "community": 1,
@@ -47473,7 +47473,7 @@
       "label": "ReputationCandidate",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L226",
+      "source_location": "L235",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_adapter_td_hotstuff_reputation_adapter_cpp_reputationcandidate",
       "community": 1,
@@ -47483,7 +47483,7 @@
       "label": "DrainCompletedCandidatesForTesting()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L234",
+      "source_location": "L243",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_draincompletedcandidatesfortesting",
       "community": 1,
@@ -47493,7 +47493,7 @@
       "label": "FindLocalCandidate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L239",
+      "source_location": "L248",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_findlocalcandidate",
       "community": 1,
@@ -47503,7 +47503,7 @@
       "label": "optional",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L239",
+      "source_location": "L248",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_adapter_td_hotstuff_reputation_adapter_cpp_optional",
       "community": 1,
@@ -47513,7 +47513,7 @@
       "label": "ReputationCandidateKey",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L239",
+      "source_location": "L248",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_adapter_td_hotstuff_reputation_adapter_cpp_reputationcandidatekey",
       "community": 1,
@@ -47523,7 +47523,7 @@
       "label": "queued_count()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L248",
+      "source_location": "L257",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_queued_count",
       "community": 1,
@@ -47533,7 +47533,7 @@
       "label": "dropped_count()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L252",
+      "source_location": "L261",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_dropped_count",
       "community": 1,
@@ -47543,7 +47543,7 @@
       "label": "computed_window_count()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.cpp",
-      "source_location": "L256",
+      "source_location": "L265",
       "_origin": "ast",
       "id": "adapter_td_hotstuff_reputation_adapter_computed_window_count",
       "community": 1,
@@ -47770,20 +47770,20 @@
       "norm_label": "convertstimeoutsnapshottoleaderoutcomeevidence"
     },
     {
-      "label": "TimeoutLeaderOutcomeCanFinalizeCandidate",
+      "label": "CertifiedQcWindowAddsScheduledLeaderOpportunity",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter_test.cpp",
       "source_location": "L141",
       "_origin": "ast",
-      "id": "timeoutleaderoutcomecanfinalizecandidate",
+      "id": "certifiedqcwindowaddsscheduledleaderopportunity",
       "community": 1,
-      "norm_label": "timeoutleaderoutcomecanfinalizecandidate"
+      "norm_label": "certifiedqcwindowaddsscheduledleaderopportunity"
     },
     {
       "label": "CandidateExcusesAvailableButUnselectedSigner",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter_test.cpp",
-      "source_location": "L161",
+      "source_location": "L166",
       "_origin": "ast",
       "id": "candidateexcusesavailablebutunselectedsigner",
       "community": 1,
@@ -47793,7 +47793,7 @@
       "label": "EquivalentEvidenceProducesIdenticalCandidateDigest",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter_test.cpp",
-      "source_location": "L183",
+      "source_location": "L188",
       "_origin": "ast",
       "id": "equivalentevidenceproducesidenticalcandidatedigest",
       "community": 1,
@@ -47803,7 +47803,7 @@
       "label": "QueueOverflowDropsWithoutBlocking",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter_test.cpp",
-      "source_location": "L213",
+      "source_location": "L218",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_adapter_td_hotstuff_reputation_adapter_test_cpp_queueoverflowdropswithoutblocking",
       "community": 1,
@@ -47813,7 +47813,7 @@
       "label": "WindowFinalizationComputesCandidate",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter_test.cpp",
-      "source_location": "L225",
+      "source_location": "L230",
       "_origin": "ast",
       "id": "windowfinalizationcomputescandidate",
       "community": 1,
@@ -49206,7 +49206,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "algorithm_proposal_manager_normalizereplicaweights",
-      "community": 396,
+      "community": 26,
       "norm_label": "normalizereplicaweights()"
     },
     {
@@ -49216,7 +49216,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_proposal_manager_cpp_vector",
-      "community": 396,
+      "community": 26,
       "norm_label": "vector"
     },
     {
@@ -49226,7 +49226,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "algorithm_proposal_manager_calculatequorumweight",
-      "community": 396,
+      "community": 26,
       "norm_label": "calculatequorumweight()"
     },
     {
@@ -49276,7 +49276,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "algorithm_proposal_manager_defaultleaderforview",
-      "community": 251,
+      "community": 23,
       "norm_label": "defaultleaderforview()"
     },
     {
@@ -49416,7 +49416,7 @@
       "source_location": "L168",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_proposal_manager_cpp_algorithm_proposal_manager_verifycert",
-      "community": 360,
+      "community": 26,
       "norm_label": "verifycert()"
     },
     {
@@ -49426,7 +49426,7 @@
       "source_location": "L168",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_proposal_manager_cpp_certificate",
-      "community": 360,
+      "community": 26,
       "norm_label": "certificate"
     },
     {
@@ -49986,7 +49986,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_timeoutcert",
-      "community": 115,
+      "community": 298,
       "norm_label": "timeoutcert"
     },
     {
@@ -50036,7 +50036,7 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_hotstuff",
-      "community": 115,
+      "community": 37,
       "norm_label": "hotstuff()"
     },
     {
@@ -50046,7 +50046,7 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_signatureverifier",
-      "community": 115,
+      "community": 37,
       "norm_label": "signatureverifier"
     },
     {
@@ -50056,7 +50056,7 @@
       "source_location": "L215",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_leaderforview",
-      "community": 115,
+      "community": 211,
       "norm_label": "leaderforview()"
     },
     {
@@ -50066,7 +50066,7 @@
       "source_location": "L220",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_nextleader",
-      "community": 115,
+      "community": 211,
       "norm_label": "nextleader()"
     },
     {
@@ -50076,7 +50076,7 @@
       "source_location": "L222",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_isleader",
-      "community": 115,
+      "community": 378,
       "norm_label": "isleader()"
     },
     {
@@ -50096,7 +50096,7 @@
       "source_location": "L229",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_marktimeoutprogresslocked",
-      "community": 115,
+      "community": 298,
       "norm_label": "marktimeoutprogresslocked()"
     },
     {
@@ -50106,7 +50106,7 @@
       "source_location": "L235",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_ready",
-      "community": 115,
+      "community": 378,
       "norm_label": "ready()"
     },
     {
@@ -50116,7 +50116,7 @@
       "source_location": "L240",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_startnewround",
-      "community": 115,
+      "community": 298,
       "norm_label": "startnewround()"
     },
     {
@@ -50126,24 +50126,24 @@
       "source_location": "L247",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_asynctimeout",
-      "community": 115,
+      "community": 298,
       "norm_label": "asynctimeout()"
     },
     {
       "label": "AsyncSend()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L384",
+      "source_location": "L373",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_asyncsend",
-      "community": 115,
+      "community": 378,
       "norm_label": "asyncsend()"
     },
     {
       "label": "AsyncCommit()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L437",
+      "source_location": "L438",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_asynccommit",
       "community": 115,
@@ -50153,47 +50153,47 @@
       "label": "AsyncVerifiedEvents()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L453",
+      "source_location": "L454",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_asyncverifiedevents",
-      "community": 115,
+      "community": 298,
       "norm_label": "asyncverifiedevents()"
     },
     {
       "label": "AsyncWeightUpdates()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L471",
+      "source_location": "L472",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_asyncweightupdates",
-      "community": 115,
+      "community": 378,
       "norm_label": "asyncweightupdates()"
     },
     {
       "label": "ProcessVerifiedConsensusEvent()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L484",
+      "source_location": "L485",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_processverifiedconsensusevent",
-      "community": 115,
+      "community": 298,
       "norm_label": "processverifiedconsensusevent()"
     },
     {
       "label": "VerifiedConsensusEvent",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L484",
+      "source_location": "L485",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_verifiedconsensusevent",
-      "community": 115,
+      "community": 298,
       "norm_label": "verifiedconsensusevent"
     },
     {
       "label": "ReceiveTransaction()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L500",
+      "source_location": "L501",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivetransaction",
       "community": 115,
@@ -50203,17 +50203,17 @@
       "label": "unique_ptr",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L500",
+      "source_location": "L501",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_unique_ptr",
-      "community": 115,
+      "community": 211,
       "norm_label": "unique_ptr"
     },
     {
       "label": "ReceiveTransactionForView()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L504",
+      "source_location": "L505",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivetransactionforview",
       "community": 115,
@@ -50223,7 +50223,7 @@
       "label": "TakeTransactionsForView()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L528",
+      "source_location": "L529",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_taketransactionsforview",
       "community": 115,
@@ -50233,7 +50233,7 @@
       "label": "MarkTransactionCommitted()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L561",
+      "source_location": "L562",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_marktransactioncommitted",
       "community": 115,
@@ -50243,121 +50243,101 @@
       "label": "CurrentView()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L568",
+      "source_location": "L569",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_currentview",
-      "community": 115,
+      "community": 378,
       "norm_label": "currentview()"
     },
     {
       "label": "CurrentLeader()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L573",
+      "source_location": "L574",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_currentleader",
-      "community": 115,
+      "community": 211,
       "norm_label": "currentleader()"
     },
     {
       "label": "WeightForSigner()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L581",
+      "source_location": "L582",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_weightforsigner",
-      "community": 115,
+      "community": 211,
       "norm_label": "weightforsigner()"
     },
     {
       "label": "CertificateWeight()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L591",
+      "source_location": "L592",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_certificateweight",
-      "community": 115,
+      "community": 211,
       "norm_label": "certificateweight()"
     },
     {
       "label": "map",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L591",
+      "source_location": "L592",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_map",
-      "community": 115,
+      "community": 211,
       "norm_label": "map"
     },
     {
       "label": "Certificate",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L591",
+      "source_location": "L592",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_certificate",
-      "community": 115,
+      "community": 211,
       "norm_label": "certificate"
     },
     {
       "label": "CertificateSigners()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L600",
+      "source_location": "L601",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_certificatesigners",
-      "community": 115,
+      "community": 211,
       "norm_label": "certificatesigners()"
     },
     {
       "label": "MaybeMakeQcEvidenceSnapshotLocked()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L622",
+      "source_location": "L641",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_maybemakeqcevidencesnapshotlocked",
-      "community": 115,
+      "community": 211,
       "norm_label": "maybemakeqcevidencesnapshotlocked()"
     },
     {
       "label": "QC",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L622",
+      "source_location": "L641",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_qc",
-      "community": 115,
+      "community": 211,
       "norm_label": "qc"
     },
     {
       "label": "TdHotstuffQcEvidenceSnapshot",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L622",
+      "source_location": "L641",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_tdhotstuffqcevidencesnapshot",
-      "community": 115,
+      "community": 211,
       "norm_label": "tdhotstuffqcevidencesnapshot"
-    },
-    {
-      "label": "MaybeMakeTimeoutLeaderOutcomeSnapshotLocked()",
-      "file_type": "code",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L644",
-      "_origin": "ast",
-      "id": "algorithm_td_hotstuff_maybemaketimeoutleaderoutcomesnapshotlocked",
-      "community": 115,
-      "norm_label": "maybemaketimeoutleaderoutcomesnapshotlocked()"
-    },
-    {
-      "label": "TdHotstuffLeaderOutcomeEvidenceSnapshot",
-      "file_type": "code",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L644",
-      "_origin": "ast",
-      "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_tdhotstuffleaderoutcomeevidencesnapshot",
-      "community": 115,
-      "norm_label": "tdhotstuffleaderoutcomeevidencesnapshot"
     },
     {
       "label": "MaybeFormQcLocked()",
@@ -50366,7 +50346,7 @@
       "source_location": "L663",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_maybeformqclocked",
-      "community": 115,
+      "community": 211,
       "norm_label": "maybeformqclocked()"
     },
     {
@@ -50376,7 +50356,7 @@
       "source_location": "L746",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivecertificate",
-      "community": 115,
+      "community": 211,
       "norm_label": "receivecertificate()"
     },
     {
@@ -50386,7 +50366,7 @@
       "source_location": "L762",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_processverifiedcertificate",
-      "community": 115,
+      "community": 211,
       "norm_label": "processverifiedcertificate()"
     },
     {
@@ -50396,7 +50376,7 @@
       "source_location": "L789",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivetimeoutvote",
-      "community": 115,
+      "community": 298,
       "norm_label": "receivetimeoutvote()"
     },
     {
@@ -50406,217 +50386,217 @@
       "source_location": "L789",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_timeoutvote",
-      "community": 115,
+      "community": 298,
       "norm_label": "timeoutvote"
     },
     {
       "label": "ReceiveTimeoutCert()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L858",
+      "source_location": "L842",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivetimeoutcert",
-      "community": 115,
+      "community": 298,
       "norm_label": "receivetimeoutcert()"
     },
     {
       "label": "BroadcastTimeoutVote()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L884",
+      "source_location": "L858",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_broadcasttimeoutvote",
-      "community": 115,
+      "community": 298,
       "norm_label": "broadcasttimeoutvote()"
     },
     {
       "label": "BroadcastTimeoutCert()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L890",
+      "source_location": "L864",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_broadcasttimeoutcert",
-      "community": 115,
+      "community": 298,
       "norm_label": "broadcasttimeoutcert()"
     },
     {
       "label": "BroadcastCandidateWeightUpdate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L896",
+      "source_location": "L870",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_broadcastcandidateweightupdate",
-      "community": 115,
+      "community": 378,
       "norm_label": "broadcastcandidateweightupdate()"
     },
     {
       "label": "CandidateWeightUpdate",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L896",
+      "source_location": "L870",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_candidateweightupdate",
-      "community": 115,
+      "community": 378,
       "norm_label": "candidateweightupdate"
     },
     {
       "label": "BroadcastWeightUpdateVote()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L903",
+      "source_location": "L877",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_broadcastweightupdatevote",
-      "community": 115,
+      "community": 378,
       "norm_label": "broadcastweightupdatevote()"
     },
     {
       "label": "WeightUpdateVote",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L903",
+      "source_location": "L877",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_weightupdatevote",
-      "community": 115,
+      "community": 378,
       "norm_label": "weightupdatevote"
     },
     {
       "label": "BroadcastWeightUpdateCert()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L909",
+      "source_location": "L883",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_broadcastweightupdatecert",
-      "community": 115,
+      "community": 378,
       "norm_label": "broadcastweightupdatecert()"
     },
     {
       "label": "WeightUpdateCert",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L909",
+      "source_location": "L883",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_weightupdatecert",
-      "community": 115,
+      "community": 378,
       "norm_label": "weightupdatecert"
     },
     {
       "label": "DrainCompletedWeightCandidates()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L915",
+      "source_location": "L889",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_draincompletedweightcandidates",
-      "community": 115,
+      "community": 378,
       "norm_label": "draincompletedweightcandidates()"
     },
     {
       "label": "ActivateReadyWeightUpdates()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L969",
+      "source_location": "L943",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_activatereadyweightupdates",
-      "community": 115,
+      "community": 378,
       "norm_label": "activatereadyweightupdates()"
     },
     {
       "label": "RefreshPendingWeightActivationView()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L973",
+      "source_location": "L947",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_refreshpendingweightactivationview",
-      "community": 115,
+      "community": 378,
       "norm_label": "refreshpendingweightactivationview()"
     },
     {
       "label": "MaybeActivateReadyWeightUpdatesAfterViewAdvance()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L982",
+      "source_location": "L956",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_maybeactivatereadyweightupdatesafterviewadvance",
-      "community": 115,
+      "community": 378,
       "norm_label": "maybeactivatereadyweightupdatesafterviewadvance()"
     },
     {
       "label": "ReceiveCandidateWeightUpdate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1033",
+      "source_location": "L1015",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receivecandidateweightupdate",
-      "community": 115,
+      "community": 378,
       "norm_label": "receivecandidateweightupdate()"
     },
     {
       "label": "ReceiveWeightUpdateVote()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1047",
+      "source_location": "L1029",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receiveweightupdatevote",
-      "community": 115,
+      "community": 378,
       "norm_label": "receiveweightupdatevote()"
     },
     {
       "label": "ReceiveWeightUpdateCert()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1063",
+      "source_location": "L1045",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receiveweightupdatecert",
-      "community": 115,
+      "community": 378,
       "norm_label": "receiveweightupdatecert()"
     },
     {
       "label": "ApplyTimeoutCertLocked()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1076",
+      "source_location": "L1058",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_applytimeoutcertlocked",
-      "community": 115,
+      "community": 298,
       "norm_label": "applytimeoutcertlocked()"
     },
     {
       "label": "ReceiveProposal()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1106",
+      "source_location": "L1088",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_receiveproposal",
-      "community": 115,
+      "community": 211,
       "norm_label": "receiveproposal()"
     },
     {
       "label": "Proposal",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1106",
+      "source_location": "L1088",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_proposal",
-      "community": 115,
+      "community": 211,
       "norm_label": "proposal"
     },
     {
       "label": "CommitProposal()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1210",
+      "source_location": "L1172",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_commitproposal",
-      "community": 115,
+      "community": 211,
       "norm_label": "commitproposal()"
     },
     {
       "label": "GenerateCertificate()",
       "file_type": "code",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1214",
+      "source_location": "L1176",
       "_origin": "ast",
       "id": "algorithm_td_hotstuff_generatecertificate",
-      "community": 115,
+      "community": 211,
       "norm_label": "generatecertificate()"
     },
     {
@@ -52086,7 +52066,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_test",
-      "community": 27,
+      "community": 188,
       "norm_label": "weight_update_controller_test.cpp"
     },
     {
@@ -52096,7 +52076,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_test_signaturefor",
-      "community": 27,
+      "community": 188,
       "norm_label": "signaturefor()"
     },
     {
@@ -52106,7 +52086,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_signatureinfo",
-      "community": 27,
+      "community": 188,
       "norm_label": "signatureinfo"
     },
     {
@@ -52116,7 +52096,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_test_candidate",
-      "community": 27,
+      "community": 188,
       "norm_label": "candidate()"
     },
     {
@@ -52126,7 +52106,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_reputationcandidate",
-      "community": 27,
+      "community": 188,
       "norm_label": "reputationcandidate"
     },
     {
@@ -52136,7 +52116,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_test_noopcandidate",
-      "community": 27,
+      "community": 188,
       "norm_label": "noopcandidate()"
     },
     {
@@ -52146,7 +52126,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_test_candidatewithweights",
-      "community": 27,
+      "community": 188,
       "norm_label": "candidatewithweights()"
     },
     {
@@ -52156,7 +52136,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_vector",
-      "community": 27,
+      "community": 188,
       "norm_label": "vector"
     },
     {
@@ -52166,7 +52146,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_string",
-      "community": 27,
+      "community": 188,
       "norm_label": "string"
     },
     {
@@ -52176,7 +52156,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_test_candidatemessage",
-      "community": 27,
+      "community": 188,
       "norm_label": "candidatemessage()"
     },
     {
@@ -52186,7 +52166,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_algorithm_weight_update_controller_test_cpp_candidateweightupdate",
-      "community": 27,
+      "community": 188,
       "norm_label": "candidateweightupdate"
     },
     {
@@ -52196,7 +52176,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "algorithm_weight_update_controller_test_test",
-      "community": 27,
+      "community": 188,
       "norm_label": "test()"
     },
     {
@@ -52206,7 +52186,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "weightupdatecontrollertest",
-      "community": 27,
+      "community": 188,
       "norm_label": "weightupdatecontrollertest"
     },
     {
@@ -52216,7 +52196,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "ignoresnooplocalcandidate",
-      "community": 27,
+      "community": 188,
       "norm_label": "ignoresnooplocalcandidate"
     },
     {
@@ -52226,7 +52206,7 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "votesonlyformatchinglocalcandidate",
-      "community": 27,
+      "community": 188,
       "norm_label": "votesonlyformatchinglocalcandidate"
     },
     {
@@ -52236,7 +52216,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "formscertafteroldweightquorumvotes",
-      "community": 27,
+      "community": 188,
       "norm_label": "formscertafteroldweightquorumvotes"
     },
     {
@@ -52246,7 +52226,7 @@
       "source_location": "L157",
       "_origin": "ast",
       "id": "scheduledweightsdonotaffectlookupbeforeactivation",
-      "community": 27,
+      "community": 188,
       "norm_label": "scheduledweightsdonotaffectlookupbeforeactivation"
     },
     {
@@ -52256,7 +52236,7 @@
       "source_location": "L172",
       "_origin": "ast",
       "id": "certquorumusescandidateoldweightversion",
-      "community": 27,
+      "community": 188,
       "norm_label": "certquorumusescandidateoldweightversion"
     },
     {
@@ -52266,7 +52246,7 @@
       "source_location": "L213",
       "_origin": "ast",
       "id": "pendingvotescontributeaftercandidatearrives",
-      "community": 27,
+      "community": 188,
       "norm_label": "pendingvotescontributeaftercandidatearrives"
     },
     {
@@ -52276,7 +52256,7 @@
       "source_location": "L242",
       "_origin": "ast",
       "id": "activatescertifiedweightsatboundary",
-      "community": 27,
+      "community": 188,
       "norm_label": "activatescertifiedweightsatboundary"
     },
     {
@@ -52286,7 +52266,7 @@
       "source_location": "L283",
       "_origin": "ast",
       "id": "invalidcertdoesnotpoisonlatervalidcert",
-      "community": 27,
+      "community": 188,
       "norm_label": "invalidcertdoesnotpoisonlatervalidcert"
     },
     {
@@ -52296,7 +52276,7 @@
       "source_location": "L311",
       "_origin": "ast",
       "id": "latecertactivatesatcertifiedboundary",
-      "community": 27,
+      "community": 188,
       "norm_label": "latecertactivatesatcertifiedboundary"
     },
     {
@@ -52636,7 +52616,7 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_framework_performance_manager_hotstuffperformancemanager",
-      "community": 334,
+      "community": 23,
       "norm_label": "hotstuffperformancemanager()"
     },
     {
@@ -52646,7 +52626,7 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_resdbconfig",
-      "community": 334,
+      "community": 23,
       "norm_label": "resdbconfig"
     },
     {
@@ -52656,7 +52636,7 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_replicacommunicator",
-      "community": 334,
+      "community": 23,
       "norm_label": "replicacommunicator"
     },
     {
@@ -52666,7 +52646,7 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_signatureverifier",
-      "community": 334,
+      "community": 23,
       "norm_label": "signatureverifier"
     },
     {
@@ -52686,7 +52666,7 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_framework_performance_manager_sendmessage",
-      "community": 210,
+      "community": 23,
       "norm_label": "sendmessage()"
     },
     {
@@ -52696,7 +52676,7 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_request",
-      "community": 210,
+      "community": 23,
       "norm_label": "request"
     },
     {
@@ -52706,7 +52686,7 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "framework_performance_manager_untrackpendingsendtime",
-      "community": 210,
+      "community": 23,
       "norm_label": "untrackpendingsendtime()"
     },
     {
@@ -52716,7 +52696,7 @@
       "source_location": "L189",
       "_origin": "ast",
       "id": "framework_performance_manager_recordobservedprimary",
-      "community": 210,
+      "community": 23,
       "norm_label": "recordobservedprimary()"
     },
     {
@@ -52766,7 +52746,7 @@
       "source_location": "L287",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_framework_performance_manager_addresponsemsg",
-      "community": 210,
+      "community": 23,
       "norm_label": "addresponsemsg()"
     },
     {
@@ -52776,7 +52756,7 @@
       "source_location": "L287",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_collectorresultcode",
-      "community": 210,
+      "community": 23,
       "norm_label": "collectorresultcode"
     },
     {
@@ -52786,7 +52766,7 @@
       "source_location": "L287",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_unique_ptr",
-      "community": 210,
+      "community": 23,
       "norm_label": "unique_ptr"
     },
     {
@@ -52796,7 +52776,7 @@
       "source_location": "L287",
       "_origin": "ast",
       "id": "platform_consensus_ordering_td_hotstuff_framework_performance_manager_cpp_function",
-      "community": 210,
+      "community": 23,
       "norm_label": "function"
     },
     {
@@ -52836,7 +52816,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "framework_performance_manager_test",
-      "community": 98,
+      "community": 23,
       "norm_label": "performance_manager_test.cpp"
     },
     {
@@ -52846,7 +52826,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "framework_performance_manager_test_test",
-      "community": 98,
+      "community": 23,
       "norm_label": "test()"
     },
     {
@@ -52856,7 +52836,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "hotstuffperformancemanagertest",
-      "community": 98,
+      "community": 23,
       "norm_label": "hotstuffperformancemanagertest"
     },
     {
@@ -52866,7 +52846,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "dynamicroutepreferspredictedprimary",
-      "community": 98,
+      "community": 23,
       "norm_label": "dynamicroutepreferspredictedprimary"
     },
     {
@@ -52876,7 +52856,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "dynamicroutefallsbacktoobservedprimarywithoutprediction",
-      "community": 98,
+      "community": 23,
       "norm_label": "dynamicroutefallsbacktoobservedprimarywithoutprediction"
     },
     {
@@ -52886,7 +52866,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "dynamicrouteignoresinvalidpredictionandobservedprimary",
-      "community": 98,
+      "community": 23,
       "norm_label": "dynamicrouteignoresinvalidpredictionandobservedprimary"
     },
     {
@@ -52896,7 +52876,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "observedprimarysetkeepspredictionwhenstillactive",
-      "community": 98,
+      "community": 23,
       "norm_label": "observedprimarysetkeepspredictionwhenstillactive"
     },
     {
@@ -52906,7 +52886,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "observedprimarysetskipsmissingpredictedleader",
-      "community": 98,
+      "community": 23,
       "norm_label": "observedprimarysetskipsmissingpredictedleader"
     },
     {
@@ -52916,7 +52896,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "benchmarkretrytimeoutdoesnotuseconsensustimeoutbydefault",
-      "community": 98,
+      "community": 23,
       "norm_label": "benchmarkretrytimeoutdoesnotuseconsensustimeoutbydefault"
     },
     {
@@ -52926,7 +52906,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "dynamicroutingdefaultsoffforclassiccore",
-      "community": 98,
+      "community": 23,
       "norm_label": "dynamicroutingdefaultsoffforclassiccore"
     },
     {
@@ -54226,7 +54206,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "recovery_recovery_test_recoverytest",
-      "community": 211,
+      "community": 116,
       "norm_label": "recoverytest"
     },
     {
@@ -54236,7 +54216,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "recovery_recovery_test_recoverytest_recoverytest",
-      "community": 211,
+      "community": 116,
       "norm_label": ".recoverytest()"
     },
     {
@@ -54246,7 +54226,7 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "platform_consensus_recovery_recovery_test_cpp_resdbconfig",
-      "community": 211,
+      "community": 116,
       "norm_label": "resdbconfig"
     },
     {
@@ -54256,7 +54236,7 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "recovery_recovery_test_recoverytest_config",
-      "community": 211,
+      "community": 116,
       "norm_label": "config_"
     },
     {
@@ -54266,7 +54246,7 @@
       "source_location": "L75",
       "_origin": "ast",
       "id": "platform_consensus_recovery_recovery_test_cpp_systeminfo",
-      "community": 211,
+      "community": 116,
       "norm_label": "systeminfo"
     },
     {
@@ -54276,7 +54256,7 @@
       "source_location": "L75",
       "_origin": "ast",
       "id": "recovery_recovery_test_recoverytest_system_info",
-      "community": 211,
+      "community": 116,
       "norm_label": "system_info_"
     },
     {
@@ -54286,7 +54266,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "mockcheckpoint",
-      "community": 211,
+      "community": 116,
       "norm_label": "mockcheckpoint"
     },
     {
@@ -54296,7 +54276,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "recovery_recovery_test_recoverytest_checkpoint",
-      "community": 211,
+      "community": 116,
       "norm_label": "checkpoint_"
     },
     {
@@ -54643,7 +54623,7 @@
       "label": "ComputeReputationCandidate()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm.cpp",
-      "source_location": "L372",
+      "source_location": "L367",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_computereputationcandidate",
       "community": 21,
@@ -54883,7 +54863,7 @@
       "label": "ProposalArtifact()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L139",
+      "source_location": "L141",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_test_proposalartifact",
       "community": 34,
@@ -54893,7 +54873,7 @@
       "label": "SignedProposalEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L139",
+      "source_location": "L141",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_test_cpp_signedproposalevidence",
       "community": 34,
@@ -54903,7 +54883,7 @@
       "label": "VoteArtifact()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L154",
+      "source_location": "L156",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_test_voteartifact",
       "community": 34,
@@ -54913,7 +54893,7 @@
       "label": "SignedVoteEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L154",
+      "source_location": "L156",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_test_cpp_signedvoteevidence",
       "community": 34,
@@ -54923,7 +54903,7 @@
       "label": "InvalidQcArtifact()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L169",
+      "source_location": "L171",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_test_invalidqcartifact",
       "community": 34,
@@ -54933,7 +54913,7 @@
       "label": "InvalidQcProposalEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L169",
+      "source_location": "L171",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_test_cpp_invalidqcproposalevidence",
       "community": 34,
@@ -54943,7 +54923,7 @@
       "label": "WeightUpdateVoteArtifact()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L186",
+      "source_location": "L188",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_test_weightupdatevoteartifact",
       "community": 34,
@@ -54953,7 +54933,7 @@
       "label": "SignedWeightUpdateVoteEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L186",
+      "source_location": "L188",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_test_cpp_signedweightupdatevoteevidence",
       "community": 34,
@@ -54963,7 +54943,7 @@
       "label": "TimeoutVoteArtifact()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L202",
+      "source_location": "L204",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_test_timeoutvoteartifact",
       "community": 34,
@@ -54973,7 +54953,7 @@
       "label": "SignedTimeoutVoteEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L202",
+      "source_location": "L204",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_test_cpp_signedtimeoutvoteevidence",
       "community": 34,
@@ -54983,7 +54963,7 @@
       "label": "InvalidTcArtifact()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L216",
+      "source_location": "L218",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_test_invalidtcartifact",
       "community": 34,
@@ -54993,7 +54973,7 @@
       "label": "InvalidTcProposalEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L216",
+      "source_location": "L218",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_test_cpp_invalidtcproposalevidence",
       "community": 34,
@@ -55003,7 +54983,7 @@
       "label": "QcArtifact()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L234",
+      "source_location": "L236",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_test_qcartifact",
       "community": 34,
@@ -55013,7 +54993,7 @@
       "label": "VerifiedQcArtifactEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L234",
+      "source_location": "L236",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_algorithm_test_cpp_verifiedqcartifactevidence",
       "community": 34,
@@ -55023,7 +55003,7 @@
       "label": "TEST()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L250",
+      "source_location": "L252",
       "_origin": "ast",
       "id": "reputation_reputation_algorithm_test_test",
       "community": 3,
@@ -55033,7 +55013,7 @@
       "label": "ReputationAlgorithmTest",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L250",
+      "source_location": "L252",
       "_origin": "ast",
       "id": "reputationalgorithmtest",
       "community": 3,
@@ -55043,7 +55023,7 @@
       "label": "WindowInputComputesFromCertifiedSignerEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L250",
+      "source_location": "L252",
       "_origin": "ast",
       "id": "windowinputcomputesfromcertifiedsignerevidence",
       "community": 3,
@@ -55053,7 +55033,7 @@
       "label": "DecodesSignerBitmap",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L280",
+      "source_location": "L282",
       "_origin": "ast",
       "id": "decodessignerbitmap",
       "community": 3,
@@ -55063,7 +55043,7 @@
       "label": "AllGoodWindowKeepsWeightsStable",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L285",
+      "source_location": "L287",
       "_origin": "ast",
       "id": "allgoodwindowkeepsweightsstable",
       "community": 3,
@@ -55073,7 +55053,7 @@
       "label": "BonusDoesNotDriftBalancedAllGoodWeights",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L303",
+      "source_location": "L305",
       "_origin": "ast",
       "id": "bonusdoesnotdriftbalancedallgoodweights",
       "community": 3,
@@ -55083,7 +55063,7 @@
       "label": "BonusCanHelpBelowMeanHonestValidatorCatchUp",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L322",
+      "source_location": "L324",
       "_origin": "ast",
       "id": "bonuscanhelpbelowmeanhonestvalidatorcatchup",
       "community": 3,
@@ -55093,7 +55073,7 @@
       "label": "PartialHealthyBelowMeanValidatorCanCatchUp",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L341",
+      "source_location": "L343",
       "_origin": "ast",
       "id": "partialhealthybelowmeanvalidatorcancatchup",
       "community": 3,
@@ -55103,7 +55083,7 @@
       "label": "LeaderWeightsStayRoundRobinWhenEveryoneEligible",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L366",
+      "source_location": "L368",
       "_origin": "ast",
       "id": "leaderweightsstayroundrobinwheneveryoneeligible",
       "community": 3,
@@ -55113,7 +55093,7 @@
       "label": "LeaderWeightsPreserveBelowThresholdForExclusion",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L384",
+      "source_location": "L386",
       "_origin": "ast",
       "id": "leaderweightspreservebelowthresholdforexclusion",
       "community": 3,
@@ -55123,7 +55103,7 @@
       "label": "LeaderWeightsDropThresholdBoundaryFromLeaderSet",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L396",
+      "source_location": "L398",
       "_origin": "ast",
       "id": "leaderweightsdropthresholdboundaryfromleaderset",
       "community": 3,
@@ -55133,7 +55113,7 @@
       "label": "SlowVoterLosesRecoveryWithoutDirectSlash",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L412",
+      "source_location": "L414",
       "_origin": "ast",
       "id": "slowvoterlosesrecoverywithoutdirectslash",
       "community": 3,
@@ -55143,7 +55123,7 @@
       "label": "SingleTransientTimeoutDoesNotReduceLeaderRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L432",
+      "source_location": "L434",
       "_origin": "ast",
       "id": "singletransienttimeoutdoesnotreduceleaderrecovery",
       "community": 3,
@@ -55153,17 +55133,37 @@
       "label": "SilentLeaderLosesLeaderRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L449",
+      "source_location": "L451",
       "_origin": "ast",
       "id": "silentleaderlosesleaderrecovery",
       "community": 3,
       "norm_label": "silentleaderlosesleaderrecovery"
     },
     {
-      "label": "LeaderRecoveryPreventsCatchupBonusAtEligibilityBoundary",
+      "label": "OneScheduledLeaderMissDoesNotReduceRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
       "source_location": "L469",
+      "_origin": "ast",
+      "id": "onescheduledleadermissdoesnotreducerecovery",
+      "community": 3,
+      "norm_label": "onescheduledleadermissdoesnotreducerecovery"
+    },
+    {
+      "label": "RepeatedScheduledLeaderMissesReduceRecoveryBeforeFullThreshold",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
+      "source_location": "L486",
+      "_origin": "ast",
+      "id": "repeatedscheduledleadermissesreducerecoverybeforefullthreshold",
+      "community": 3,
+      "norm_label": "repeatedscheduledleadermissesreducerecoverybeforefullthreshold"
+    },
+    {
+      "label": "LeaderRecoveryPreventsCatchupBonusAtEligibilityBoundary",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
+      "source_location": "L506",
       "_origin": "ast",
       "id": "leaderrecoverypreventscatchupbonusateligibilityboundary",
       "community": 3,
@@ -55173,7 +55173,7 @@
       "label": "NarrowSignerTargetOnlyReducesLeaderRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L488",
+      "source_location": "L525",
       "_origin": "ast",
       "id": "narrowsignertargetonlyreducesleaderrecovery",
       "community": 3,
@@ -55183,7 +55183,7 @@
       "label": "PeerTrustDisabledKeepsAuditNeutral",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L513",
+      "source_location": "L550",
       "_origin": "ast",
       "id": "peertrustdisabledkeepsauditneutral",
       "community": 3,
@@ -55193,7 +55193,7 @@
       "label": "PeerTrustAllGoodRotatingFeedbackStaysHigh",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L532",
+      "source_location": "L569",
       "_origin": "ast",
       "id": "peertrustallgoodrotatingfeedbackstayshigh",
       "community": 3,
@@ -55203,7 +55203,7 @@
       "label": "PeerTrustCliqueFeedbackLowersOnlyLeaderRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L552",
+      "source_location": "L589",
       "_origin": "ast",
       "id": "peertrustcliquefeedbacklowersonlyleaderrecovery",
       "community": 3,
@@ -55213,7 +55213,7 @@
       "label": "PeerTrustSharedReviewerCliqueDropsBelowLegacyDiversityGate",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L581",
+      "source_location": "L618",
       "_origin": "ast",
       "id": "peertrustsharedreviewercliquedropsbelowlegacydiversitygate",
       "community": 3,
@@ -55223,7 +55223,7 @@
       "label": "AvailableSignerBitmapLimitsVoterRecoveryOpportunities",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L624",
+      "source_location": "L661",
       "_origin": "ast",
       "id": "availablesignerbitmaplimitsvoterrecoveryopportunities",
       "community": 3,
@@ -55233,7 +55233,7 @@
       "label": "BroadAvailableSignerBitmapExcusesUnselectedTimelyVoter",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L645",
+      "source_location": "L682",
       "_origin": "ast",
       "id": "broadavailablesignerbitmapexcusesunselectedtimelyvoter",
       "community": 3,
@@ -55243,7 +55243,7 @@
       "label": "QuorumAvailableBitmapDetectsRepeatedUnavailableSlowVoter",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L663",
+      "source_location": "L700",
       "_origin": "ast",
       "id": "quorumavailablebitmapdetectsrepeatedunavailableslowvoter",
       "community": 3,
@@ -55253,7 +55253,7 @@
       "label": "QuorumAvailableBitmapWorksWithLeaderRecoveryEnabled",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L681",
+      "source_location": "L718",
       "_origin": "ast",
       "id": "quorumavailablebitmapworkswithleaderrecoveryenabled",
       "community": 3,
@@ -55263,7 +55263,7 @@
       "label": "SparseTimelyAvailabilityGetsOnlyPartialRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L707",
+      "source_location": "L744",
       "_origin": "ast",
       "id": "sparsetimelyavailabilitygetsonlypartialrecovery",
       "community": 3,
@@ -55273,7 +55273,7 @@
       "label": "LowParticipationCarryoverContinuesDecayWithoutFreshOpportunities",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L729",
+      "source_location": "L766",
       "_origin": "ast",
       "id": "lowparticipationcarryovercontinuesdecaywithoutfreshopportunities",
       "community": 3,
@@ -55283,7 +55283,7 @@
       "label": "PeerTrustCleanCliqueSeparatesLeadersFromReviewers",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L750",
+      "source_location": "L787",
       "_origin": "ast",
       "id": "peertrustcleancliqueseparatesleadersfromreviewers",
       "community": 3,
@@ -55293,7 +55293,7 @@
       "label": "PeerTrustLowReviewerCredibilityReducesFeedback",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L782",
+      "source_location": "L819",
       "_origin": "ast",
       "id": "peertrustlowreviewercredibilityreducesfeedback",
       "community": 3,
@@ -55303,7 +55303,7 @@
       "label": "PeerTrustBroadAvailableOverlapDoesNotCreateDebt",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L801",
+      "source_location": "L838",
       "_origin": "ast",
       "id": "peertrustbroadavailableoverlapdoesnotcreatedebt",
       "community": 3,
@@ -55313,7 +55313,7 @@
       "label": "PeerTrustDebtPersistsWithoutLeaderFeedback",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L831",
+      "source_location": "L868",
       "_origin": "ast",
       "id": "peertrustdebtpersistswithoutleaderfeedback",
       "community": 3,
@@ -55323,7 +55323,7 @@
       "label": "PeerTrustBroadGoodLeadershipRepaysDebt",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L851",
+      "source_location": "L888",
       "_origin": "ast",
       "id": "peertrustbroadgoodleadershiprepaysdebt",
       "community": 3,
@@ -55333,7 +55333,7 @@
       "label": "CandidateDigestIsDeterministic",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L872",
+      "source_location": "L909",
       "_origin": "ast",
       "id": "candidatedigestisdeterministic",
       "community": 3,
@@ -55343,7 +55343,7 @@
       "label": "CandidateDigestIgnoresAuditRoots",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L890",
+      "source_location": "L927",
       "_origin": "ast",
       "id": "candidatedigestignoresauditroots",
       "community": 3,
@@ -55353,7 +55353,7 @@
       "label": "SybilGraphDisabledKeepsAuditNeutral",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L907",
+      "source_location": "L944",
       "_origin": "ast",
       "id": "sybilgraphdisabledkeepsauditneutral",
       "community": 3,
@@ -55363,7 +55363,7 @@
       "label": "SybilGraphAllGoodRotatingEvidenceStaysHigh",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L928",
+      "source_location": "L965",
       "_origin": "ast",
       "id": "sybilgraphallgoodrotatingevidencestayshigh",
       "community": 3,
@@ -55373,7 +55373,7 @@
       "label": "SybilGraphDenseClusterWithFewAttackEdgesDropsCluster",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L958",
+      "source_location": "L995",
       "_origin": "ast",
       "id": "sybilgraphdenseclusterwithfewattackedgesdropscluster",
       "community": 3,
@@ -55383,7 +55383,7 @@
       "label": "SybilGraphBroadHonestEndorsementsWeakenDiscount",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1011",
+      "source_location": "L1048",
       "_origin": "ast",
       "id": "sybilgraphbroadhonestendorsementsweakendiscount",
       "community": 3,
@@ -55393,7 +55393,7 @@
       "label": "SybilGraphDebtPersistsAcrossQuietWindow",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1040",
+      "source_location": "L1077",
       "_origin": "ast",
       "id": "sybilgraphdebtpersistsacrossquietwindow",
       "community": 3,
@@ -55403,7 +55403,7 @@
       "label": "SybilGraphDebtGatesLaterRecovery",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1053",
+      "source_location": "L1090",
       "_origin": "ast",
       "id": "sybilgraphdebtgateslaterrecovery",
       "community": 3,
@@ -55413,7 +55413,7 @@
       "label": "SybilGraphDebtDoesNotRecoverFromVoterOnlyEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1067",
+      "source_location": "L1104",
       "_origin": "ast",
       "id": "sybilgraphdebtdoesnotrecoverfromvoteronlyevidence",
       "community": 3,
@@ -55423,7 +55423,7 @@
       "label": "DetectsVerifiedDoubleProposal",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1081",
+      "source_location": "L1118",
       "_origin": "ast",
       "id": "detectsverifieddoubleproposal",
       "community": 3,
@@ -55433,7 +55433,7 @@
       "label": "IgnoresDuplicateOrUnverifiedProposalArtifacts",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1096",
+      "source_location": "L1133",
       "_origin": "ast",
       "id": "ignoresduplicateorunverifiedproposalartifacts",
       "community": 3,
@@ -55443,7 +55443,7 @@
       "label": "DoubleProposalPenaltyOverridesSoftReputation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1114",
+      "source_location": "L1151",
       "_origin": "ast",
       "id": "doubleproposalpenaltyoverridessoftreputation",
       "community": 3,
@@ -55453,7 +55453,7 @@
       "label": "DetectsVerifiedDoubleVote",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1142",
+      "source_location": "L1179",
       "_origin": "ast",
       "id": "detectsverifieddoublevote",
       "community": 3,
@@ -55463,7 +55463,7 @@
       "label": "IgnoresDuplicateOrUnverifiedVoteArtifacts",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1157",
+      "source_location": "L1194",
       "_origin": "ast",
       "id": "ignoresduplicateorunverifiedvoteartifacts",
       "community": 3,
@@ -55473,7 +55473,7 @@
       "label": "DetectsInvalidQcProposal",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1175",
+      "source_location": "L1212",
       "_origin": "ast",
       "id": "detectsinvalidqcproposal",
       "community": 3,
@@ -55483,7 +55483,7 @@
       "label": "IgnoresUnverifiedOrValidQcProposalArtifacts",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1189",
+      "source_location": "L1226",
       "_origin": "ast",
       "id": "ignoresunverifiedorvalidqcproposalartifacts",
       "community": 3,
@@ -55493,7 +55493,7 @@
       "label": "DoubleVotePenaltyOverridesSoftReputation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1202",
+      "source_location": "L1239",
       "_origin": "ast",
       "id": "doublevotepenaltyoverridessoftreputation",
       "community": 3,
@@ -55503,7 +55503,7 @@
       "label": "InvalidQcPenaltyOverridesSoftReputation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1226",
+      "source_location": "L1263",
       "_origin": "ast",
       "id": "invalidqcpenaltyoverridessoftreputation",
       "community": 3,
@@ -55513,7 +55513,7 @@
       "label": "DetectsWeightUpdateVoteEquivocation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1249",
+      "source_location": "L1286",
       "_origin": "ast",
       "id": "detectsweightupdatevoteequivocation",
       "community": 3,
@@ -55523,7 +55523,7 @@
       "label": "IgnoresDuplicateOrUnverifiedWeightUpdateVoteArtifacts",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1265",
+      "source_location": "L1302",
       "_origin": "ast",
       "id": "ignoresduplicateorunverifiedweightupdatevoteartifacts",
       "community": 3,
@@ -55533,7 +55533,7 @@
       "label": "DetectsTimeoutVoteEquivocation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1284",
+      "source_location": "L1321",
       "_origin": "ast",
       "id": "detectstimeoutvoteequivocation",
       "community": 3,
@@ -55543,7 +55543,7 @@
       "label": "IgnoresDuplicateOrUnverifiedTimeoutVotes",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1299",
+      "source_location": "L1336",
       "_origin": "ast",
       "id": "ignoresduplicateorunverifiedtimeoutvotes",
       "community": 3,
@@ -55553,7 +55553,7 @@
       "label": "DetectsInvalidTcProposal",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1317",
+      "source_location": "L1354",
       "_origin": "ast",
       "id": "detectsinvalidtcproposal",
       "community": 3,
@@ -55563,7 +55563,7 @@
       "label": "IgnoresUnverifiedOrValidTcProposalArtifacts",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1330",
+      "source_location": "L1367",
       "_origin": "ast",
       "id": "ignoresunverifiedorvalidtcproposalartifacts",
       "community": 3,
@@ -55573,7 +55573,7 @@
       "label": "ConflictingQcsPenalizeOnlySignerIntersection",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1343",
+      "source_location": "L1380",
       "_origin": "ast",
       "id": "conflictingqcspenalizeonlysignerintersection",
       "community": 3,
@@ -55583,7 +55583,7 @@
       "label": "ConflictingQcIgnoresDuplicatesAndUnverifiedQcs",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1358",
+      "source_location": "L1395",
       "_origin": "ast",
       "id": "conflictingqcignoresduplicatesandunverifiedqcs",
       "community": 3,
@@ -55593,7 +55593,7 @@
       "label": "V2StrongFaultCandidatePenaltiesAreDeterministic",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1375",
+      "source_location": "L1412",
       "_origin": "ast",
       "id": "v2strongfaultcandidatepenaltiesaredeterministic",
       "community": 3,
@@ -55603,7 +55603,7 @@
       "label": "CandidateDigestChangesWhenPenaltyRootChanges",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
-      "source_location": "L1421",
+      "source_location": "L1458",
       "_origin": "ast",
       "id": "candidatedigestchangeswhenpenaltyrootchanges",
       "community": 3,
@@ -55623,7 +55623,7 @@
       "label": "DefaultWeights()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L17",
+      "source_location": "L18",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_defaultweights",
       "community": 2,
@@ -55633,7 +55633,7 @@
       "label": "vector",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L17",
+      "source_location": "L18",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_vector",
       "community": 2,
@@ -55643,7 +55643,7 @@
       "label": "WeightRootOrDefault()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L21",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_weightrootordefault",
       "community": 2,
@@ -55653,7 +55653,7 @@
       "label": "string",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L21",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_string",
       "community": 2,
@@ -55663,17 +55663,87 @@
       "label": "AuditWeightsJson()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L26",
+      "source_location": "L27",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_auditweightsjson",
       "community": 2,
       "norm_label": "auditweightsjson()"
     },
     {
+      "label": "RoundRobinLeaderForView()",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L44",
+      "_origin": "ast",
+      "id": "reputation_reputation_plugin_runtime_roundrobinleaderforview",
+      "community": 2,
+      "norm_label": "roundrobinleaderforview()"
+    },
+    {
+      "label": "NormalizeLeaderWeights()",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L51",
+      "_origin": "ast",
+      "id": "reputation_reputation_plugin_runtime_normalizeleaderweights",
+      "community": 2,
+      "norm_label": "normalizeleaderweights()"
+    },
+    {
+      "label": "IsRoundRobinLeaderProfile()",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L62",
+      "_origin": "ast",
+      "id": "reputation_reputation_plugin_runtime_isroundrobinleaderprofile",
+      "community": 2,
+      "norm_label": "isroundrobinleaderprofile()"
+    },
+    {
+      "label": "BuildSmoothWeightedRoundRobin()",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L79",
+      "_origin": "ast",
+      "id": "reputation_reputation_plugin_runtime_buildsmoothweightedroundrobin",
+      "community": 2,
+      "norm_label": "buildsmoothweightedroundrobin()"
+    },
+    {
+      "label": "FillSnapshotDefaults()",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L128",
+      "_origin": "ast",
+      "id": "reputation_reputation_plugin_runtime_fillsnapshotdefaults",
+      "community": 2,
+      "norm_label": "fillsnapshotdefaults()"
+    },
+    {
+      "label": "ReputationWeightSnapshot",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L128",
+      "_origin": "ast",
+      "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot",
+      "community": 2,
+      "norm_label": "reputationweightsnapshot"
+    },
+    {
+      "label": "ReputationRuntimeOptions",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L128",
+      "_origin": "ast",
+      "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationruntimeoptions",
+      "community": 2,
+      "norm_label": "reputationruntimeoptions"
+    },
+    {
       "label": "AuditValidatorsJson()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L40",
+      "source_location": "L163",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_auditvalidatorsjson",
       "community": 2,
@@ -55683,7 +55753,7 @@
       "label": "ValidatorReputation",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L40",
+      "source_location": "L163",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_validatorreputation",
       "community": 2,
@@ -55693,7 +55763,7 @@
       "label": "ReputationPluginRuntime::RuntimeEvent",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L68",
+      "source_location": "L191",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_runtimeevent",
       "community": 2,
@@ -55703,7 +55773,7 @@
       "label": "Type",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L70",
+      "source_location": "L193",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_type",
       "community": 2,
@@ -55713,7 +55783,7 @@
       "label": "type",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L70",
+      "source_location": "L193",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_runtimeevent_type",
       "community": 2,
@@ -55723,7 +55793,7 @@
       "label": "CertifiedSignerEvidenceRecord",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L71",
+      "source_location": "L194",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_certifiedsignerevidencerecord",
       "community": 2,
@@ -55733,7 +55803,7 @@
       "label": "evidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L71",
+      "source_location": "L194",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_runtimeevent_evidence",
       "community": 2,
@@ -55743,7 +55813,7 @@
       "label": "LeaderOutcomeEvidenceRecord",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L72",
+      "source_location": "L195",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_leaderoutcomeevidencerecord",
       "community": 2,
@@ -55753,7 +55823,7 @@
       "label": "leader_outcome",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L72",
+      "source_location": "L195",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_runtimeevent_leader_outcome",
       "community": 2,
@@ -55763,7 +55833,7 @@
       "label": "watermark",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L73",
+      "source_location": "L196",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_runtimeevent_watermark",
       "community": 2,
@@ -55773,7 +55843,7 @@
       "label": "ReputationPluginRuntime::WindowKey",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L76",
+      "source_location": "L199",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowkey",
       "community": 2,
@@ -55783,7 +55853,7 @@
       "label": "window_index",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L77",
+      "source_location": "L200",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowkey_window_index",
       "community": 2,
@@ -55793,7 +55863,7 @@
       "label": "weight_root_hex",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L78",
+      "source_location": "L201",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowkey_weight_root_hex",
       "community": 2,
@@ -55803,7 +55873,7 @@
       "label": "weight_version",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L79",
+      "source_location": "L202",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowkey_weight_version",
       "community": 2,
@@ -55813,7 +55883,7 @@
       "label": ".operator<()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L81",
+      "source_location": "L204",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowkey_operator",
       "community": 2,
@@ -55823,7 +55893,7 @@
       "label": "WindowKey",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L81",
+      "source_location": "L204",
       "_origin": "ast",
       "id": "windowkey",
       "community": 2,
@@ -55833,7 +55903,7 @@
       "label": "ReputationPluginRuntime::WindowBuffer",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L88",
+      "source_location": "L211",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer",
       "community": 2,
@@ -55843,7 +55913,7 @@
       "label": "start_view",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L89",
+      "source_location": "L212",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer_start_view",
       "community": 2,
@@ -55853,27 +55923,17 @@
       "label": "end_view",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L90",
+      "source_location": "L213",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer_end_view",
       "community": 2,
       "norm_label": "end_view"
     },
     {
-      "label": "ReputationWeightSnapshot",
-      "file_type": "code",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L91",
-      "_origin": "ast",
-      "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot",
-      "community": 2,
-      "norm_label": "reputationweightsnapshot"
-    },
-    {
       "label": "snapshot",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L91",
+      "source_location": "L214",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer_snapshot",
       "community": 2,
@@ -55883,7 +55943,7 @@
       "label": "evidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L92",
+      "source_location": "L215",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer_evidence",
       "community": 2,
@@ -55893,7 +55953,7 @@
       "label": "leader_outcomes",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L93",
+      "source_location": "L216",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer_leader_outcomes",
       "community": 2,
@@ -55903,7 +55963,7 @@
       "label": "set",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L94",
+      "source_location": "L217",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_set",
       "community": 2,
@@ -55913,7 +55973,7 @@
       "label": "tuple",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L94",
+      "source_location": "L217",
       "_origin": "ast",
       "id": "tuple",
       "community": 148,
@@ -55923,7 +55983,7 @@
       "label": "seen",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L94",
+      "source_location": "L217",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer_seen",
       "community": 2,
@@ -55933,7 +55993,7 @@
       "label": "seen_leader_outcomes",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L95",
+      "source_location": "L218",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer_seen_leader_outcomes",
       "community": 2,
@@ -55943,7 +56003,7 @@
       "label": "CandidateComesBefore()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L98",
+      "source_location": "L221",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_candidatecomesbefore",
       "community": 2,
@@ -55953,7 +56013,7 @@
       "label": "ReputationCandidate",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L98",
+      "source_location": "L221",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationcandidate",
       "community": 2,
@@ -55963,7 +56023,7 @@
       "label": "FromCandidate()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L106",
+      "source_location": "L229",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_fromcandidate",
       "community": 2,
@@ -55973,7 +56033,7 @@
       "label": "ReputationCandidateKey",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L106",
+      "source_location": "L229",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationcandidatekey",
       "community": 2,
@@ -55983,27 +56043,17 @@
       "label": "ReputationPluginRuntime()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L118",
+      "source_location": "L241",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_reputationpluginruntime",
       "community": 2,
       "norm_label": "reputationpluginruntime()"
     },
     {
-      "label": "ReputationRuntimeOptions",
-      "file_type": "code",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L118",
-      "_origin": "ast",
-      "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationruntimeoptions",
-      "community": 2,
-      "norm_label": "reputationruntimeoptions"
-    },
-    {
       "label": "Start()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L147",
+      "source_location": "L278",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_start",
       "community": 2,
@@ -56013,7 +56063,7 @@
       "label": "Stop()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L160",
+      "source_location": "L291",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_stop",
       "community": 2,
@@ -56023,7 +56073,7 @@
       "label": "RecordEvidence()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L179",
+      "source_location": "L310",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_recordevidence",
       "community": 2,
@@ -56033,7 +56083,7 @@
       "label": "RecordLeaderOutcome()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L187",
+      "source_location": "L318",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_recordleaderoutcome",
       "community": 2,
@@ -56043,7 +56093,7 @@
       "label": "AdvanceWatermark()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L195",
+      "source_location": "L326",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_advancewatermark",
       "community": 2,
@@ -56053,7 +56103,7 @@
       "label": "Enqueue()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L202",
+      "source_location": "L333",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_enqueue",
       "community": 2,
@@ -56063,7 +56113,7 @@
       "label": "RuntimeEvent",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L202",
+      "source_location": "L333",
       "_origin": "ast",
       "id": "runtimeevent",
       "community": 2,
@@ -56073,7 +56123,7 @@
       "label": "UpdateActiveWeights()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L226",
+      "source_location": "L357",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_updateactiveweights",
       "community": 2,
@@ -56083,7 +56133,7 @@
       "label": "TakeCompletedCandidates()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L239",
+      "source_location": "L368",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_takecompletedcandidates",
       "community": 2,
@@ -56093,7 +56143,7 @@
       "label": "FindLocalCandidate()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L254",
+      "source_location": "L383",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_findlocalcandidate",
       "community": 2,
@@ -56103,7 +56153,7 @@
       "label": "optional",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L254",
+      "source_location": "L383",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_cpp_optional",
       "community": 2,
@@ -56113,7 +56163,7 @@
       "label": "WorkerLoop()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L264",
+      "source_location": "L393",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_workerloop",
       "community": 2,
@@ -56123,7 +56173,7 @@
       "label": "SnapshotFromFields()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L289",
+      "source_location": "L418",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_snapshotfromfields",
       "community": 2,
@@ -56133,7 +56183,7 @@
       "label": "SnapshotForEvidence()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L311",
+      "source_location": "L450",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_snapshotforevidence",
       "community": 2,
@@ -56143,17 +56193,27 @@
       "label": "SnapshotForLeaderOutcome()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L317",
+      "source_location": "L456",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_snapshotforleaderoutcome",
       "community": 2,
       "norm_label": "snapshotforleaderoutcome()"
     },
     {
+      "label": "ScheduledLeaderCountsForWindow()",
+      "file_type": "code",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L462",
+      "_origin": "ast",
+      "id": "reputation_reputation_plugin_runtime_scheduledleadercountsforwindow",
+      "community": 2,
+      "norm_label": "scheduledleadercountsforwindow()"
+    },
+    {
       "label": "ProcessEvidence()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L323",
+      "source_location": "L497",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_processevidence",
       "community": 2,
@@ -56163,7 +56223,7 @@
       "label": "ProcessLeaderOutcome()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L355",
+      "source_location": "L529",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_processleaderoutcome",
       "community": 2,
@@ -56173,7 +56233,7 @@
       "label": "ProcessWatermark()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L388",
+      "source_location": "L562",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_processwatermark",
       "community": 2,
@@ -56183,7 +56243,7 @@
       "label": "FinalizeWindow()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L406",
+      "source_location": "L580",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_finalizewindow",
       "community": 2,
@@ -56193,7 +56253,7 @@
       "label": "WindowBuffer",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L406",
+      "source_location": "L580",
       "_origin": "ast",
       "id": "windowbuffer",
       "community": 2,
@@ -56203,7 +56263,7 @@
       "label": "PushCompleted()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L473",
+      "source_location": "L649",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_pushcompleted",
       "community": 2,
@@ -56213,7 +56273,7 @@
       "label": "WriteAudit()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L484",
+      "source_location": "L660",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_writeaudit",
       "community": 2,
@@ -56226,7 +56286,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_h_reputation_reputation_plugin_runtime",
-      "community": 148,
+      "community": 114,
       "norm_label": "reputation_plugin_runtime.h"
     },
     {
@@ -56236,7 +56296,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_resdb",
-      "community": 148,
+      "community": 114,
       "norm_label": "resdb()"
     },
     {
@@ -56246,7 +56306,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_h_namespace",
-      "community": 148,
+      "community": 114,
       "norm_label": "namespace"
     },
     {
@@ -56330,30 +56390,10 @@
       "norm_label": "certifiedsignerevidencerecord"
     },
     {
-      "label": "TimeoutOutcome()",
-      "file_type": "code",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L54",
-      "_origin": "ast",
-      "id": "reputation_reputation_plugin_runtime_test_timeoutoutcome",
-      "community": 90,
-      "norm_label": "timeoutoutcome()"
-    },
-    {
-      "label": "LeaderOutcomeEvidenceRecord",
-      "file_type": "code",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L54",
-      "_origin": "ast",
-      "id": "platform_consensus_reputation_reputation_plugin_runtime_test_cpp_leaderoutcomeevidencerecord",
-      "community": 90,
-      "norm_label": "leaderoutcomeevidencerecord"
-    },
-    {
       "label": "WaitForCandidates()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L66",
+      "source_location": "L54",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_test_waitforcandidates",
       "community": 90,
@@ -56363,7 +56403,7 @@
       "label": "vector",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L66",
+      "source_location": "L54",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_test_cpp_vector",
       "community": 90,
@@ -56373,7 +56413,7 @@
       "label": "ReputationCandidate",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L66",
+      "source_location": "L54",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_test_cpp_reputationcandidate",
       "community": 90,
@@ -56383,7 +56423,7 @@
       "label": "ReputationPluginRuntime",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L66",
+      "source_location": "L54",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_test_cpp_reputationpluginruntime",
       "community": 90,
@@ -56393,7 +56433,7 @@
       "label": "TEST()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L78",
+      "source_location": "L66",
       "_origin": "ast",
       "id": "reputation_reputation_plugin_runtime_test_test",
       "community": 90,
@@ -56403,7 +56443,7 @@
       "label": "ReputationPluginRuntimeTest",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L78",
+      "source_location": "L66",
       "_origin": "ast",
       "id": "reputationpluginruntimetest",
       "community": 90,
@@ -56413,7 +56453,7 @@
       "label": "FinalizesOnlyAfterWatermarkReachesWindowEnd",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L78",
+      "source_location": "L66",
       "_origin": "ast",
       "id": "finalizesonlyafterwatermarkreacheswindowend",
       "community": 90,
@@ -56423,7 +56463,7 @@
       "label": "DedupesAndSortsEquivalentEvidence",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L99",
+      "source_location": "L87",
       "_origin": "ast",
       "id": "dedupesandsortsequivalentevidence",
       "community": 90,
@@ -56433,27 +56473,27 @@
       "label": "FindLocalCandidateReturnsCompletedCandidate",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L125",
+      "source_location": "L113",
       "_origin": "ast",
       "id": "findlocalcandidatereturnscompletedcandidate",
       "community": 90,
       "norm_label": "findlocalcandidatereturnscompletedcandidate"
     },
     {
-      "label": "FinalizesLeaderOutcomeEvidenceForTimeoutWindows",
+      "label": "FinalizedWindowAddsScheduledLeaderOpportunities",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L142",
+      "source_location": "L130",
       "_origin": "ast",
-      "id": "finalizesleaderoutcomeevidencefortimeoutwindows",
+      "id": "finalizedwindowaddsscheduledleaderopportunities",
       "community": 90,
-      "norm_label": "finalizesleaderoutcomeevidencefortimeoutwindows"
+      "norm_label": "finalizedwindowaddsscheduledleaderopportunities"
     },
     {
       "label": "ComputesSuccessiveWindowsForSameWeightVersion",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L165",
+      "source_location": "L153",
       "_origin": "ast",
       "id": "computessuccessivewindowsforsameweightversion",
       "community": 90,
@@ -56463,7 +56503,7 @@
       "label": "DrainsOnlyEarliestCandidatePerWeightVersion",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L192",
+      "source_location": "L180",
       "_origin": "ast",
       "id": "drainsonlyearliestcandidateperweightversion",
       "community": 90,
@@ -56473,7 +56513,7 @@
       "label": "QueueOverflowDropsWithoutBlocking",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L210",
+      "source_location": "L198",
       "_origin": "ast",
       "id": "platform_consensus_reputation_reputation_plugin_runtime_test_cpp_queueoverflowdropswithoutblocking",
       "community": 90,
@@ -56913,7 +56953,7 @@
       "label": "FairExpectedSignerOpportunities()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/soft_reputation.cpp",
-      "source_location": "L25",
+      "source_location": "L27",
       "_origin": "ast",
       "id": "reputation_soft_reputation_fairexpectedsigneropportunities",
       "community": 21,
@@ -56923,7 +56963,7 @@
       "label": "RecoveryCreditForScore()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/soft_reputation.cpp",
-      "source_location": "L36",
+      "source_location": "L38",
       "_origin": "ast",
       "id": "reputation_soft_reputation_recoverycreditforscore",
       "community": 21,
@@ -56933,7 +56973,7 @@
       "label": "HasNearFairInclusion()",
       "file_type": "code",
       "source_file": "platform/consensus/reputation/soft_reputation.cpp",
-      "source_location": "L54",
+      "source_location": "L56",
       "_origin": "ast",
       "id": "reputation_soft_reputation_hasnearfairinclusion",
       "community": 21,
@@ -57716,7 +57756,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "networkstrate_async_replica_client_test",
-      "community": 320,
+      "community": 156,
       "norm_label": "async_replica_client_test.cpp"
     },
     {
@@ -57726,7 +57766,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "networkstrate_async_replica_client_test_test",
-      "community": 320,
+      "community": 156,
       "norm_label": "test()"
     },
     {
@@ -57736,7 +57776,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "asyncreplicaclienttest",
-      "community": 320,
+      "community": 156,
       "norm_label": "asyncreplicaclienttest"
     },
     {
@@ -57746,7 +57786,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "platform_networkstrate_async_replica_client_test_cpp_sendmessage",
-      "community": 320,
+      "community": 156,
       "norm_label": "sendmessage"
     },
     {
@@ -57756,7 +57796,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "sendlargemessage",
-      "community": 320,
+      "community": 156,
       "norm_label": "sendlargemessage"
     },
     {
@@ -57766,7 +57806,7 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "multisendmessage",
-      "community": 320,
+      "community": 156,
       "norm_label": "multisendmessage"
     },
     {
@@ -57776,7 +57816,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "reconnect",
-      "community": 320,
+      "community": 156,
       "norm_label": "reconnect"
     },
     {
@@ -146965,6 +147005,17 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter_test.cpp",
+      "source_location": "L141",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "adapter_td_hotstuff_reputation_adapter_test_test",
+      "target": "certifiedqcwindowaddsscheduledleaderopportunity"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter_test.cpp",
       "source_location": "L74",
       "weight": 1.0,
       "context": "parameter_type",
@@ -147001,9 +147052,9 @@
       "source_location": "L91",
       "weight": 1.0,
       "context": "parameter_type",
+      "confidence_score": 1.0,
       "source": "adapter_td_hotstuff_reputation_adapter_test_test",
-      "target": "optionsfromenvreadsreputationtuning",
-      "confidence_score": 1.0
+      "target": "optionsfromenvreadsreputationtuning"
     },
     {
       "relation": "references",
@@ -147026,17 +147077,6 @@
       "confidence_score": 1.0,
       "source": "adapter_td_hotstuff_reputation_adapter_test_test",
       "target": "tdhotstuffreputationadaptertest"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter_test.cpp",
-      "source_location": "L117",
-      "weight": 1.0,
-      "context": "parameter_type",
-      "confidence_score": 1.0,
-      "source": "adapter_td_hotstuff_reputation_adapter_test_test",
-      "target": "timeoutleaderoutcomecanfinalizecandidate"
     },
     {
       "relation": "references",
@@ -151635,16 +151675,6 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L644",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_algorithm_td_hotstuff",
-      "target": "algorithm_td_hotstuff_maybemaketimeoutleaderoutcomesnapshotlocked"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
       "source_location": "L156",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -152126,17 +152156,6 @@
       "target": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_string"
     },
     {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L656",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "algorithm_td_hotstuff_maybemaketimeoutleaderoutcomesnapshotlocked",
-      "target": "algorithm_td_hotstuff_timeoutcertdigest"
-    },
-    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
@@ -152167,17 +152186,6 @@
       "context": "parameter_type",
       "confidence_score": 1.0,
       "source": "algorithm_td_hotstuff_broadcasttimeoutcert",
-      "target": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_timeoutcert"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L644",
-      "weight": 1.0,
-      "context": "parameter_type",
-      "confidence_score": 1.0,
-      "source": "algorithm_td_hotstuff_maybemaketimeoutleaderoutcomesnapshotlocked",
       "target": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_timeoutcert"
     },
     {
@@ -152306,6 +152314,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L421",
+      "weight": 1.0,
+      "source": "algorithm_td_hotstuff_asyncsend",
+      "target": "algorithm_td_hotstuff_leaderforview",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
       "source_location": "L489",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -152343,17 +152362,6 @@
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "algorithm_td_hotstuff_maybemakeqcevidencesnapshotlocked",
-      "target": "algorithm_td_hotstuff_leaderforview"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L653",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "algorithm_td_hotstuff_maybemaketimeoutleaderoutcomesnapshotlocked",
       "target": "algorithm_td_hotstuff_leaderforview"
     },
     {
@@ -152590,17 +152598,6 @@
     {
       "relation": "calls",
       "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L358",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "algorithm_td_hotstuff_asynctimeout",
-      "target": "algorithm_td_hotstuff_maybemaketimeoutleaderoutcomesnapshotlocked"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
@@ -152630,6 +152627,17 @@
       "confidence_score": 1.0,
       "source": "algorithm_td_hotstuff_asyncsend",
       "target": "algorithm_td_hotstuff_currentview"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
+      "source_location": "L375",
+      "weight": 1.0,
+      "source": "algorithm_td_hotstuff_asyncsend",
+      "target": "algorithm_td_hotstuff_maybeactivatereadyweightupdatesafterviewadvance",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -153202,50 +153210,6 @@
       "confidence_score": 1.0,
       "source": "algorithm_td_hotstuff_maybeformqclocked",
       "target": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_tdhotstuffqcevidencesnapshot"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L644",
-      "weight": 1.0,
-      "context": "parameter_type",
-      "confidence_score": 1.0,
-      "source": "algorithm_td_hotstuff_maybemaketimeoutleaderoutcomesnapshotlocked",
-      "target": "platform_consensus_ordering_td_hotstuff_algorithm_td_hotstuff_cpp_tdhotstuffleaderoutcomeevidencesnapshot"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L1131",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "algorithm_td_hotstuff_receiveproposal",
-      "target": "algorithm_td_hotstuff_maybemaketimeoutleaderoutcomesnapshotlocked"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L871",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "algorithm_td_hotstuff_receivetimeoutcert",
-      "target": "algorithm_td_hotstuff_maybemaketimeoutleaderoutcomesnapshotlocked"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff.cpp",
-      "source_location": "L814",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "algorithm_td_hotstuff_receivetimeoutvote",
-      "target": "algorithm_td_hotstuff_maybemaketimeoutleaderoutcomesnapshotlocked"
     },
     {
       "relation": "calls",
@@ -162186,6 +162150,17 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
+      "source_location": "L469",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_algorithm_test_test",
+      "target": "onescheduledleadermissdoesnotreducerecovery"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
       "source_location": "L341",
       "weight": 1.0,
       "context": "parameter_type",
@@ -162313,6 +162288,17 @@
       "confidence_score": 1.0,
       "source": "reputation_reputation_algorithm_test_test",
       "target": "quorumavailablebitmapworkswithleaderrecoveryenabled"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_algorithm_test.cpp",
+      "source_location": "L486",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_algorithm_test_test",
+      "target": "repeatedscheduledleadermissesreducerecoverybeforefullthreshold"
     },
     {
       "relation": "calls",
@@ -162601,6 +162587,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L79",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputation_reputation_plugin_runtime",
+      "target": "reputation_reputation_plugin_runtime_buildsmoothweightedroundrobin"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
       "source_location": "L95",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -162631,6 +162627,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L128",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputation_reputation_plugin_runtime",
+      "target": "reputation_reputation_plugin_runtime_fillsnapshotdefaults"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
       "source_location": "L312",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -162656,6 +162662,26 @@
       "confidence_score": 1.0,
       "source": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputation_reputation_plugin_runtime",
       "target": "reputation_reputation_plugin_runtime_fromcandidate"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L62",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputation_reputation_plugin_runtime",
+      "target": "reputation_reputation_plugin_runtime_isroundrobinleaderprofile"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L51",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputation_reputation_plugin_runtime",
+      "target": "reputation_reputation_plugin_runtime_normalizeleaderweights"
     },
     {
       "relation": "contains",
@@ -162756,6 +162782,26 @@
       "confidence_score": 1.0,
       "source": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputation_reputation_plugin_runtime",
       "target": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowkey"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L44",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputation_reputation_plugin_runtime",
+      "target": "reputation_reputation_plugin_runtime_roundrobinleaderforview"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L462",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputation_reputation_plugin_runtime",
+      "target": "reputation_reputation_plugin_runtime_scheduledleadercountsforwindow"
     },
     {
       "relation": "contains",
@@ -162873,6 +162919,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L134",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_fillsnapshotdefaults",
+      "target": "reputation_reputation_plugin_runtime_defaultweights"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
       "source_location": "L90",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -162916,11 +162973,55 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L79",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_buildsmoothweightedroundrobin",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_vector"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L62",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_isroundrobinleaderprofile",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_vector"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L51",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_normalizeleaderweights",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_vector"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
       "source_location": "L64",
       "weight": 1.0,
       "context": "field",
       "confidence_score": 1.0,
       "source": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_vector"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L462",
+      "weight": 1.0,
+      "context": "return_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_scheduledleadercountsforwindow",
       "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_vector"
     },
     {
@@ -162955,6 +163056,17 @@
       "confidence_score": 1.0,
       "source": "reputation_reputation_plugin_runtime_weightrootordefault",
       "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_vector"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L137",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_fillsnapshotdefaults",
+      "target": "reputation_reputation_plugin_runtime_weightrootordefault"
     },
     {
       "relation": "calls",
@@ -163054,6 +163166,193 @@
       "confidence_score": 1.0,
       "source": "reputation_reputation_plugin_runtime_writeaudit",
       "target": "reputation_reputation_plugin_runtime_auditweightsjson"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L483",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_scheduledleadercountsforwindow",
+      "target": "reputation_reputation_plugin_runtime_roundrobinleaderforview"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L142",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_fillsnapshotdefaults",
+      "target": "reputation_reputation_plugin_runtime_normalizeleaderweights"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L468",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_scheduledleadercountsforwindow",
+      "target": "reputation_reputation_plugin_runtime_normalizeleaderweights"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L475",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_scheduledleadercountsforwindow",
+      "target": "reputation_reputation_plugin_runtime_isroundrobinleaderprofile"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L477",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_scheduledleadercountsforwindow",
+      "target": "reputation_reputation_plugin_runtime_buildsmoothweightedroundrobin"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L128",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_fillsnapshotdefaults",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationruntimeoptions"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L128",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_fillsnapshotdefaults",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L262",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_reputationpluginruntime",
+      "target": "reputation_reputation_plugin_runtime_fillsnapshotdefaults"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L446",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_snapshotfromfields",
+      "target": "reputation_reputation_plugin_runtime_fillsnapshotdefaults"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L359",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_updateactiveweights",
+      "target": "reputation_reputation_plugin_runtime_fillsnapshotdefaults"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L63",
+      "weight": 1.0,
+      "context": "field",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L462",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_scheduledleadercountsforwindow",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L241",
+      "weight": 1.0,
+      "context": "return_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_snapshotforevidence",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L317",
+      "weight": 1.0,
+      "context": "return_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_snapshotforleaderoutcome",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L289",
+      "weight": 1.0,
+      "context": "return_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_snapshotfromfields",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L176",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_updateactiveweights",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L80",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_reputationpluginruntime",
+      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationruntimeoptions"
     },
     {
       "relation": "references",
@@ -163311,17 +163610,6 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L63",
-      "weight": 1.0,
-      "context": "field",
-      "confidence_score": 1.0,
-      "source": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer",
-      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
       "source_location": "L65",
       "weight": 1.0,
       "context": "field",
@@ -163416,50 +163704,6 @@
       "confidence_score": 1.0,
       "source": "reputation_reputation_plugin_runtime_reputationpluginruntime_windowbuffer",
       "target": "tuple"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L241",
-      "weight": 1.0,
-      "context": "return_type",
-      "confidence_score": 1.0,
-      "source": "reputation_reputation_plugin_runtime_snapshotforevidence",
-      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L317",
-      "weight": 1.0,
-      "context": "return_type",
-      "confidence_score": 1.0,
-      "source": "reputation_reputation_plugin_runtime_snapshotforleaderoutcome",
-      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L289",
-      "weight": 1.0,
-      "context": "return_type",
-      "confidence_score": 1.0,
-      "source": "reputation_reputation_plugin_runtime_snapshotfromfields",
-      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L176",
-      "weight": 1.0,
-      "context": "parameter_type",
-      "confidence_score": 1.0,
-      "source": "reputation_reputation_plugin_runtime_updateactiveweights",
-      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationweightsnapshot"
     },
     {
       "relation": "imports",
@@ -163592,17 +163836,6 @@
       "confidence_score": 1.0,
       "source": "reputation_reputation_plugin_runtime_findlocalcandidate",
       "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationcandidatekey"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
-      "source_location": "L80",
-      "weight": 1.0,
-      "context": "parameter_type",
-      "confidence_score": 1.0,
-      "source": "reputation_reputation_plugin_runtime_reputationpluginruntime",
-      "target": "platform_consensus_reputation_reputation_plugin_runtime_cpp_reputationruntimeoptions"
     },
     {
       "relation": "calls",
@@ -163746,6 +163979,17 @@
       "confidence_score": 1.0,
       "source": "reputation_reputation_plugin_runtime_processleaderoutcome",
       "target": "reputation_reputation_plugin_runtime_snapshotforleaderoutcome"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "platform/consensus/reputation/reputation_plugin_runtime.cpp",
+      "source_location": "L631",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "reputation_reputation_plugin_runtime_finalizewindow",
+      "target": "reputation_reputation_plugin_runtime_scheduledleadercountsforwindow"
     },
     {
       "relation": "calls",
@@ -163915,16 +164159,6 @@
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "reputation_reputation_plugin_runtime_test",
-      "target": "reputation_reputation_plugin_runtime_test_timeoutoutcome"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L54",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "reputation_reputation_plugin_runtime_test",
       "target": "reputation_reputation_plugin_runtime_test_waitforcandidates"
     },
     {
@@ -164031,28 +164265,6 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L152",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "reputation_reputation_plugin_runtime_test_test",
-      "target": "reputation_reputation_plugin_runtime_test_timeoutoutcome"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L54",
-      "weight": 1.0,
-      "context": "return_type",
-      "confidence_score": 1.0,
-      "source": "reputation_reputation_plugin_runtime_test_timeoutoutcome",
-      "target": "platform_consensus_reputation_reputation_plugin_runtime_test_cpp_leaderoutcomeevidencerecord"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
       "source_location": "L73",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -164129,12 +164341,12 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "platform/consensus/reputation/reputation_plugin_runtime_test.cpp",
-      "source_location": "L142",
+      "source_location": "L130",
       "weight": 1.0,
       "context": "parameter_type",
       "confidence_score": 1.0,
       "source": "reputation_reputation_plugin_runtime_test_test",
-      "target": "finalizesleaderoutcomeevidencefortimeoutwindows"
+      "target": "finalizedwindowaddsscheduledleaderopportunities"
     },
     {
       "relation": "references",
@@ -165000,6 +165212,17 @@
       "source_location": "L58",
       "weight": 1.0,
       "source": "reputation_soft_reputation_hasnearfairinclusion",
+      "target": "reputation_reputation_utils_roundeddivide"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "platform/consensus/reputation/soft_reputation.cpp",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "reputation_soft_reputation_leadercertifiedscore",
       "target": "reputation_reputation_utils_roundeddivide"
     },
     {
@@ -187414,5 +187637,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "0c456098b23c9fce78e1422b37d70211b670b6cc"
+  "built_at_commit": "7bf5829f2088aae6f3a165e56ae8f0ec4fa9e55d"
 }

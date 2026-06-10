@@ -139,15 +139,19 @@ TEST(TdHotstuffReputationAdapterTest,
 }
 
 TEST(TdHotstuffReputationAdapterTest,
-     TimeoutLeaderOutcomeCanFinalizeCandidate) {
-  TdHotstuffReputationAdapterOptions options = TestOptions(/*window_size=*/1);
+     CertifiedQcWindowAddsScheduledLeaderOpportunity) {
+  TdHotstuffReputationAdapterOptions options = TestOptions(/*window_size=*/4);
   options.reputation_config.leader_recovery_enabled = true;
   options.reputation_config.min_leader_opportunities = 1;
+  options.initial_weights = {100, 100, 100, 100};
+  options.initial_weight_root =
+      resdb::consensus::reputation::WeightRootHex(options.initial_weights);
   TdHotstuffReputationAdapter adapter(/*local_node_id=*/1, /*total_replicas=*/4,
                                       options);
   adapter.Start();
 
-  ASSERT_TRUE(adapter.TryRecordLeaderOutcome(TimeoutSnapshot(7, 4)));
+  ASSERT_TRUE(adapter.TryRecordCertifiedQc(
+      Snapshot(/*view=*/4, /*leader=*/1, {1, 2, 3}, {1, 2, 3, 4})));
   ASSERT_TRUE(adapter.AdvanceWatermark(8));
 
   auto candidates = WaitForCandidates(&adapter, 1);
@@ -155,7 +159,8 @@ TEST(TdHotstuffReputationAdapterTest,
 
   ASSERT_EQ(candidates.size(), 1);
   EXPECT_EQ(candidates[0].event_count, 1);
-  EXPECT_EQ(candidates[0].validators[3].leader_opportunity_count, 1);
+  EXPECT_EQ(candidates[0].validators[1].leader_opportunity_count, 1);
+  EXPECT_EQ(candidates[0].validators[1].leader_certified_count, 0);
 }
 
 TEST(TdHotstuffReputationAdapterTest,

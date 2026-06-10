@@ -49,6 +49,10 @@ struct TdHotstuffReputationAdapterOptions {
   std::vector<int64_t> initial_weights;
   std::string initial_weight_root;
   uint64_t initial_weight_version = 0;
+  bool leader_selection_enabled = false;
+  std::vector<int64_t> initial_leader_weights;
+  std::string initial_leader_weight_root;
+  uint64_t initial_leader_weight_version = 0;
   resdb::consensus::reputation::ReputationConfig reputation_config;
 };
 

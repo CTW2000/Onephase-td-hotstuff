@@ -19,7 +19,9 @@ int LeaderCertifiedScore(uint64_t certified_count,
   if (leader_opportunities == 0) {
     return 100;
   }
-  return VoteScore(certified_count, leader_opportunities);
+  return std::max(
+      0, std::min(100, RoundedDivide(certified_count * 100,
+                                     leader_opportunities)));
 }
 
 uint64_t FairExpectedSignerOpportunities(uint64_t selected_signer_slots,
@@ -37,8 +39,8 @@ int RecoveryCreditForScore(int score, int max_recovery_per_epoch) {
   if (max_recovery_per_epoch <= 0) {
     return 0;
   }
-  constexpr int kNoRecoveryBelow = 30;
-  constexpr int kFullRecoveryAt = 67;
+  constexpr int kNoRecoveryBelow = 10;
+  constexpr int kFullRecoveryAt = 30;
   const int bounded_score = std::max(0, std::min(100, score));
   if (bounded_score >= kFullRecoveryAt) {
     return max_recovery_per_epoch;

@@ -120,7 +120,8 @@ ReputationCandidate ComputeCandidate(
     const std::vector<VerifiedQcArtifactEvidence>& verified_qc_artifact_evidence =
         {},
     const std::vector<int>& prior_peertrust_leader_debt = {},
-    const std::vector<int>& prior_sybil_graph_debt = {}) {
+    const std::vector<int>& prior_sybil_graph_debt = {},
+    const std::vector<uint64_t>& scheduled_leader_counts = {}) {
   ReputationWindowInput input = BuildWindowInput(
       node_id, total_replicas, window_index, evidence, current_weights,
       old_weight_root_hex, old_weight_version, activation_view);
@@ -133,6 +134,7 @@ ReputationCandidate ComputeCandidate(
   input.verified_qc_artifact_evidence = verified_qc_artifact_evidence;
   input.prior_peertrust_leader_debt = prior_peertrust_leader_debt;
   input.prior_sybil_graph_debt = prior_sybil_graph_debt;
+  input.scheduled_leader_counts = scheduled_leader_counts;
   return ComputeReputationCandidate(input, config);
 }
 
@@ -441,7 +443,7 @@ TEST(ReputationAlgorithmTest, SingleTransientTimeoutDoesNotReduceLeaderRecovery)
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
-  EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 1);
+  EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 0);
   EXPECT_GE(candidate.validators[1].vote_score, 40);
   EXPECT_EQ(candidate.validators[1].next_weight, 30);
 }
@@ -452,18 +454,53 @@ TEST(ReputationAlgorithmTest, SilentLeaderLosesLeaderRecovery) {
     evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
                                    Bitmap({1, 2, 3, 4}, 4)));
   }
-  for (int view = 5; view <= 8; ++view) {
-    evidence.push_back(TimeoutEvidence(view, 2));
-  }
 
   const ReputationCandidate candidate = ComputeCandidate(
-      1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64);
+      1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64,
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
 
   EXPECT_EQ(candidate.validators[0].leader_certified_count, 4);
   EXPECT_EQ(candidate.validators[0].leader_opportunity_count, 4);
   EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
   EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 4);
   EXPECT_LT(candidate.validators[1].next_weight, candidate.validators[0].next_weight);
+}
+
+TEST(ReputationAlgorithmTest, OneScheduledLeaderMissDoesNotReduceRecovery) {
+  ReputationConfig config = TestConfig();
+  config.min_leader_opportunities = 8;
+  config.leader_recovery_enabled = true;
+  std::vector<TestEvidence> evidence;
+  evidence.push_back(CertifiedQc(1, 1, Bitmap({1, 2, 3, 4}, 4),
+                                 Bitmap({1, 2, 3, 4}, 4)));
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64,
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {1, 1, 0, 0});
+
+  EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
+  EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 1);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest,
+     RepeatedScheduledLeaderMissesReduceRecoveryBeforeFullThreshold) {
+  ReputationConfig config = TestConfig();
+  config.min_leader_opportunities = 8;
+  config.leader_recovery_enabled = true;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 3; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64,
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {3, 3, 0, 0});
+
+  EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
+  EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 3);
+  EXPECT_LT(candidate.validators[1].next_weight, 30);
 }
 
 TEST(ReputationAlgorithmTest,

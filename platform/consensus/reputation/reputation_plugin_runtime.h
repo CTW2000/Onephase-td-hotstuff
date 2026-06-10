@@ -48,6 +48,12 @@ struct ReputationWeightSnapshot {
   std::vector<int64_t> weights;
   std::string weight_root_hex;
   uint64_t weight_version = 0;
+  bool leader_selection_enabled = false;
+  std::vector<int64_t> leader_weights;
+  std::string leader_weight_root_hex;
+  uint64_t leader_weight_version = 0;
+  int leader_selection_version = 1;
+  int64_t leader_eligible_min_weight = 10;
 };
 
 struct ReputationRuntimeOptions {
@@ -59,6 +65,10 @@ struct ReputationRuntimeOptions {
   std::vector<int64_t> initial_weights;
   std::string initial_weight_root;
   uint64_t initial_weight_version = 0;
+  bool leader_selection_enabled = false;
+  std::vector<int64_t> initial_leader_weights;
+  std::string initial_leader_weight_root;
+  uint64_t initial_leader_weight_version = 0;
   bool audit_jsonl_enabled = false;
   std::string audit_jsonl_path;
   ReputationConfig config;
@@ -128,6 +138,9 @@ class ReputationPluginRuntime {
       const CertifiedSignerEvidenceRecord& evidence) const;
   ReputationWeightSnapshot SnapshotForLeaderOutcome(
       const LeaderOutcomeEvidenceRecord& evidence) const;
+  std::vector<uint64_t> ScheduledLeaderCountsForWindow(
+      int start_view, int end_view,
+      const ReputationWeightSnapshot& snapshot) const;
 
   ReputationRuntimeOptions options_;
 
@@ -140,6 +153,8 @@ class ReputationPluginRuntime {
 
   ReputationWeightSnapshot active_snapshot_;
   std::map<std::pair<std::string, uint64_t>, std::vector<int64_t>> known_weights_;
+  std::map<std::pair<std::string, uint64_t>, ReputationWeightSnapshot>
+      known_snapshots_;
   std::map<WindowKey, WindowBuffer> windows_;
   std::map<uint64_t, ReputationCandidate> completed_by_version_;
   std::map<ReputationCandidateKey, ReputationCandidate> completed_index_;

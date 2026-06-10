@@ -51,18 +51,6 @@ CertifiedSignerEvidenceRecord Evidence(int view, const std::string& digest) {
   return record;
 }
 
-LeaderOutcomeEvidenceRecord TimeoutOutcome(int view, int leader) {
-  LeaderOutcomeEvidenceRecord record;
-  record.view_or_round = view;
-  record.leader_id = leader;
-  record.outcome_class = OutcomeClass::kTimeoutOrViewChange;
-  record.artifact_digest = "tc-" + std::to_string(view);
-  record.weight_root_hex = WeightRootHex({100, 100, 100, 100});
-  record.weight_version = 0;
-  record.active_weights = {100, 100, 100, 100};
-  return record;
-}
-
 std::vector<ReputationCandidate> WaitForCandidates(
     ReputationPluginRuntime* runtime, size_t count) {
   for (int i = 0; i < 100; ++i) {
@@ -140,7 +128,7 @@ TEST(ReputationPluginRuntimeTest, FindLocalCandidateReturnsCompletedCandidate) {
 }
 
 TEST(ReputationPluginRuntimeTest,
-     FinalizesLeaderOutcomeEvidenceForTimeoutWindows) {
+     FinalizedWindowAddsScheduledLeaderOpportunities) {
   ReputationRuntimeOptions options = RuntimeOptions();
   options.initial_weights = {100, 100, 100, 100};
   options.initial_weight_root = WeightRootHex(options.initial_weights);
@@ -149,8 +137,8 @@ TEST(ReputationPluginRuntimeTest,
   ReputationPluginRuntime runtime(options);
   runtime.Start();
 
-  EXPECT_TRUE(runtime.RecordLeaderOutcome(TimeoutOutcome(1, 2)));
-  runtime.AdvanceWatermark(4);
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(4, "qc-4")));
+  runtime.AdvanceWatermark(8);
   auto candidates = WaitForCandidates(&runtime, 1);
   runtime.Stop();
 
