@@ -106,6 +106,20 @@ resdb::consensus::reputation::SignedProposalEvidence ToSignedProposalEvidence(
   return evidence;
 }
 
+resdb::consensus::reputation::SignedVoteEvidence ToSignedVoteEvidence(
+    const TdHotstuffSignedVoteEvidenceSnapshot& snapshot) {
+  resdb::consensus::reputation::SignedVoteEvidence evidence;
+  evidence.protocol_id = "td_hotstuff";
+  evidence.signer_id = snapshot.signer_id;
+  evidence.view_or_round = snapshot.view;
+  evidence.slot_or_height = snapshot.slot;
+  evidence.proposal_hash = snapshot.proposal_hash;
+  evidence.signature_verified = snapshot.signature_verified;
+  evidence.active_weight_root = snapshot.active_weight_root;
+  evidence.weight_version = snapshot.active_weight_version;
+  return evidence;
+}
+
 TdHotstuffReputationAdapterOptions
 TdHotstuffReputationAdapter::OptionsFromEnv() {
   TdHotstuffReputationAdapterOptions options;
@@ -159,6 +173,9 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.signed_proposal_evidence_enabled =
       options.reputation_config.strong_fault_enabled &&
       options.reputation_config.double_proposal_detection_enabled;
+  options.signed_vote_evidence_enabled =
+      options.reputation_config.strong_fault_enabled &&
+      options.reputation_config.double_vote_detection_enabled;
   options.audit_jsonl_enabled =
       EnvFlagEnabled("TD_HS_REPUTATION_AUDIT_JSONL_ENABLE");
   const char* audit_path = std::getenv("TD_HS_REPUTATION_AUDIT_JSONL_PATH");
@@ -176,6 +193,7 @@ TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
           RuntimeFromOptions(local_node_id, total_replicas, options),
           options.enabled) {
   signed_proposal_evidence_enabled_ = options.signed_proposal_evidence_enabled;
+  signed_vote_evidence_enabled_ = options.signed_vote_evidence_enabled;
 }
 
 TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
@@ -187,6 +205,7 @@ TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
       total_replicas_(total_replicas),
       enabled_(enabled),
       signed_proposal_evidence_enabled_(false),
+      signed_vote_evidence_enabled_(false),
       runtime_(std::move(runtime)) {}
 
 TdHotstuffReputationAdapter::~TdHotstuffReputationAdapter() { Stop(); }
@@ -275,6 +294,20 @@ bool TdHotstuffReputationAdapter::TryRecordSignedProposal(
       ToSignedProposalEvidence(snapshot));
 }
 
+bool TdHotstuffReputationAdapter::TryRecordSignedVote(
+    TdHotstuffSignedVoteEvidenceSnapshot snapshot) {
+  if (!WantsSignedVoteEvidence() || runtime_ == nullptr) {
+    return false;
+  }
+  if (snapshot.total_replicas <= 0) {
+    snapshot.total_replicas = total_replicas_;
+  }
+  if (snapshot.local_node_id <= 0) {
+    snapshot.local_node_id = local_node_id_;
+  }
+  return runtime_->RecordSignedVoteEvidence(ToSignedVoteEvidence(snapshot));
+}
+
 bool TdHotstuffReputationAdapter::AdvanceWatermark(int view) {
   return enabled_ && runtime_ != nullptr && runtime_->AdvanceWatermark(view);
 }
@@ -310,6 +343,10 @@ TdHotstuffReputationAdapter::FindLocalCandidate(
 
 bool TdHotstuffReputationAdapter::WantsSignedProposalEvidence() const {
   return enabled_ && signed_proposal_evidence_enabled_;
+}
+
+bool TdHotstuffReputationAdapter::WantsSignedVoteEvidence() const {
+  return enabled_ && signed_vote_evidence_enabled_;
 }
 
 uint64_t TdHotstuffReputationAdapter::queued_count() const {

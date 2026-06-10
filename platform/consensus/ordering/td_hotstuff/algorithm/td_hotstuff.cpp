@@ -244,6 +244,10 @@ bool HotStuff::IsDoubleProposalForExperiment() const {
          EnvListContainsId("TD_HS_DOUBLE_PROPOSAL_IDS", id_);
 }
 
+bool HotStuff::IsDoubleVoteForExperiment() const {
+  return EnvFlagEnabled("TD_HS_DOUBLE_VOTE");
+}
+
 std::unique_ptr<Proposal> HotStuff::MakeConflictingProposalForExperiment(
     const Proposal& proposal) {
   if (verifier_ == nullptr) {
@@ -262,6 +266,29 @@ std::unique_ptr<Proposal> HotStuff::MakeConflictingProposalForExperiment(
     return nullptr;
   }
   *conflicting->mutable_signature() = *signature_or;
+  return conflicting;
+}
+
+std::unique_ptr<Certificate> HotStuff::MakeConflictingCertificateForExperiment(
+    const Certificate& cert) {
+  if (verifier_ == nullptr || cert.hash().empty()) {
+    return nullptr;
+  }
+  std::unique_ptr<Certificate> conflicting =
+      std::make_unique<Certificate>(cert);
+  const std::string conflict_material =
+      cert.hash() + "|td_hotstuff_double_vote|" + std::to_string(id_) + "|" +
+      std::to_string(cert.view()) + "|" + std::to_string(cert.slot());
+  conflicting->set_hash(SignatureVerifier::CalculateHash(conflict_material));
+  conflicting->clear_sign();
+  auto signature_or =
+      verifier_->SignMessage(VoteSignaturePayload(*conflicting));
+  if (!signature_or.ok()) {
+    LOG(ERROR) << "failed to sign TD-Hotstuff conflicting vote view:"
+               << conflicting->view();
+    return nullptr;
+  }
+  *conflicting->mutable_sign() = *signature_or;
   return conflicting;
 }
 
@@ -707,6 +734,27 @@ bool HotStuff::MaybeMakeSignedProposalEvidenceSnapshotLocked(
   return true;
 }
 
+bool HotStuff::MaybeMakeSignedVoteEvidenceSnapshotLocked(
+    const Certificate& cert, TdHotstuffSignedVoteEvidenceSnapshot* snapshot) {
+  if (snapshot == nullptr || reputation_adapter_ == nullptr ||
+      !reputation_adapter_->WantsSignedVoteEvidence() || cert.hash().empty() ||
+      weight_schedule_ == nullptr) {
+    return false;
+  }
+  snapshot->local_node_id = id_;
+  snapshot->total_replicas = total_num_;
+  snapshot->view = cert.view();
+  snapshot->slot = cert.slot();
+  snapshot->signer_id = cert.signer();
+  snapshot->proposal_hash = cert.hash();
+  snapshot->signature_verified = true;
+  snapshot->active_weight_root =
+      weight_schedule_->WeightRootForView(snapshot->view);
+  snapshot->active_weight_version =
+      weight_schedule_->WeightVersionForView(snapshot->view);
+  return true;
+}
+
 bool HotStuff::MaybeMakeQcEvidenceSnapshotLocked(
     const QC& qc, TdHotstuffQcEvidenceSnapshot* snapshot) {
   if (snapshot == nullptr || reputation_adapter_ == nullptr ||
@@ -832,25 +880,31 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
   if (cert == nullptr) {
     return false;
   }
+  TdHotstuffSignedVoteEvidenceSnapshot signed_vote_snapshot;
+  bool has_signed_vote_snapshot = false;
   {
     std::unique_lock<std::mutex> lk(mutex_);
+    has_signed_vote_snapshot = MaybeMakeSignedVoteEvidenceSnapshotLocked(
+        *cert, &signed_vote_snapshot);
     const int view = cert->view();
     const int local_current_view = proposal_manager_->CurrentView();
-    if (view < local_current_view) {
-      return true;
+    if (view >= local_current_view) {
+      const std::string hash = cert->hash();
+      auto& certs = receive_[view][hash];
+      const int64_t previous_weight = CertificateWeight(certs, view);
+      certs.insert(std::make_pair(cert->signer(), std::move(cert)));
+      const int64_t current_weight = CertificateWeight(certs, view);
+      const int64_t quorum_weight =
+          weight_schedule_ != nullptr ? weight_schedule_->QuorumWeightForView(view)
+                                      : quorum_weight_;
+      if (previous_weight < quorum_weight && current_weight >= quorum_weight) {
+        MarkTimeoutProgressLocked();
+        MaybeFormQcLocked(view, hash);
+      }
     }
-    const std::string hash = cert->hash();
-    auto& certs = receive_[view][hash];
-    const int64_t previous_weight = CertificateWeight(certs, view);
-    certs.insert(std::make_pair(cert->signer(), std::move(cert)));
-    const int64_t current_weight = CertificateWeight(certs, view);
-    const int64_t quorum_weight =
-        weight_schedule_ != nullptr ? weight_schedule_->QuorumWeightForView(view)
-                                    : quorum_weight_;
-    if (previous_weight < quorum_weight && current_weight >= quorum_weight) {
-      MarkTimeoutProgressLocked();
-      MaybeFormQcLocked(view, hash);
-    }
+  }
+  if (has_signed_vote_snapshot && reputation_adapter_ != nullptr) {
+    reputation_adapter_->TryRecordSignedVote(std::move(signed_vote_snapshot));
   }
   return true;
 }
@@ -1160,6 +1214,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   }
   const int view = proposal->header().view();
   std::unique_ptr<Certificate> cert;
+  std::unique_ptr<Certificate> conflicting_cert;
   TdHotstuffQcEvidenceSnapshot proposal_qc_snapshot;
   TdHotstuffSignedProposalEvidenceSnapshot signed_proposal_snapshot;
   bool has_proposal_qc_snapshot = false;
@@ -1210,6 +1265,9 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
       if (cert == nullptr) {
         proposal_valid = false;
       } else {
+        if (IsDoubleVoteForExperiment()) {
+          conflicting_cert = MakeConflictingCertificateForExperiment(*cert);
+        }
         std::vector<std::unique_ptr<Proposal>> committed_p_list =
             proposal_manager_->AddProposal(std::move(proposal));
         for (int i = static_cast<int>(committed_p_list.size()) - 1; i >= 0;
@@ -1244,6 +1302,9 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     return false;
   }
   const int send_result = SendMessage(MessageType::Vote, *cert, next_leader);
+  if (conflicting_cert != nullptr) {
+    SendMessage(MessageType::Vote, *conflicting_cert, next_leader);
+  }
   if (has_signed_proposal_snapshot && reputation_adapter_ != nullptr) {
     reputation_adapter_->TryRecordSignedProposal(
         std::move(signed_proposal_snapshot));

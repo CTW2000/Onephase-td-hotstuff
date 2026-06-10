@@ -75,6 +75,21 @@ TdHotstuffLeaderOutcomeEvidenceSnapshot TimeoutSnapshot(int view, int leader) {
   return snapshot;
 }
 
+TdHotstuffSignedVoteEvidenceSnapshot VoteSnapshot(int view, int signer,
+                                                  const std::string& hash) {
+  TdHotstuffSignedVoteEvidenceSnapshot snapshot;
+  snapshot.local_node_id = 1;
+  snapshot.total_replicas = 4;
+  snapshot.view = view;
+  snapshot.slot = 0;
+  snapshot.signer_id = signer;
+  snapshot.proposal_hash = hash;
+  snapshot.signature_verified = true;
+  snapshot.active_weight_root = "old-root";
+  snapshot.active_weight_version = 7;
+  return snapshot;
+}
+
 std::vector<resdb::consensus::reputation::ReputationCandidate>
 WaitForCandidates(TdHotstuffReputationAdapter* adapter, size_t count) {
   for (int i = 0; i < 200; ++i) {
@@ -134,6 +149,28 @@ TEST(TdHotstuffReputationAdapterTest,
   unsetenv("TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE");
 }
 
+TEST(TdHotstuffReputationAdapterTest,
+     SignedVoteEvidenceIsGatedByDoubleVoteDetection) {
+  unsetenv("TD_HS_STRONG_FAULT_ENABLE");
+  unsetenv("TD_HS_DOUBLE_VOTE_DETECT_ENABLE");
+  setenv("TD_HS_REPUTATION_ENABLE", "1", 1);
+  TdHotstuffReputationAdapterOptions options =
+      TdHotstuffReputationAdapter::OptionsFromEnv();
+  EXPECT_FALSE(options.signed_vote_evidence_enabled);
+
+  setenv("TD_HS_STRONG_FAULT_ENABLE", "1", 1);
+  options = TdHotstuffReputationAdapter::OptionsFromEnv();
+  EXPECT_FALSE(options.signed_vote_evidence_enabled);
+
+  setenv("TD_HS_DOUBLE_VOTE_DETECT_ENABLE", "1", 1);
+  options = TdHotstuffReputationAdapter::OptionsFromEnv();
+  EXPECT_TRUE(options.signed_vote_evidence_enabled);
+
+  unsetenv("TD_HS_REPUTATION_ENABLE");
+  unsetenv("TD_HS_STRONG_FAULT_ENABLE");
+  unsetenv("TD_HS_DOUBLE_VOTE_DETECT_ENABLE");
+}
+
 TEST(TdHotstuffReputationAdapterTest, ConvertsQcSnapshotToCertifiedEvidence) {
   const TdHotstuffQcEvidenceSnapshot snapshot =
       Snapshot(/*view=*/7, /*leader=*/4, {1, 2, 3}, {1, 2, 3, 4});
@@ -159,6 +196,22 @@ TEST(TdHotstuffReputationAdapterTest,
   EXPECT_EQ(evidence.outcome_class,
             resdb::consensus::reputation::OutcomeClass::kTimeoutOrViewChange);
   EXPECT_EQ(evidence.artifact_digest, "tc-7");
+}
+
+TEST(TdHotstuffReputationAdapterTest, ConvertsVoteSnapshotToSignedVoteEvidence) {
+  const TdHotstuffSignedVoteEvidenceSnapshot snapshot =
+      VoteSnapshot(/*view=*/9, /*signer=*/3, "proposal-a");
+
+  const auto evidence = ToSignedVoteEvidence(snapshot);
+
+  EXPECT_EQ(evidence.protocol_id, "td_hotstuff");
+  EXPECT_EQ(evidence.signer_id, 3);
+  EXPECT_EQ(evidence.view_or_round, 9);
+  EXPECT_EQ(evidence.slot_or_height, 0);
+  EXPECT_EQ(evidence.proposal_hash, "proposal-a");
+  EXPECT_TRUE(evidence.signature_verified);
+  EXPECT_EQ(evidence.active_weight_root, "old-root");
+  EXPECT_EQ(evidence.weight_version, 7);
 }
 
 TEST(TdHotstuffReputationAdapterTest,

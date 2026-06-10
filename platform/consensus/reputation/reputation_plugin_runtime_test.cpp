@@ -65,6 +65,20 @@ SignedProposalEvidence ProposalEvidence(int view, int leader,
   return evidence;
 }
 
+SignedVoteEvidence VoteEvidence(int view, int signer,
+                                const std::string& hash) {
+  SignedVoteEvidence evidence;
+  evidence.protocol_id = "td_hotstuff";
+  evidence.signer_id = signer;
+  evidence.view_or_round = view;
+  evidence.slot_or_height = 0;
+  evidence.proposal_hash = hash;
+  evidence.signature_verified = true;
+  evidence.active_weight_root = WeightRootHex({100, 100, 100, 100});
+  evidence.weight_version = 0;
+  return evidence;
+}
+
 ReputationRuntimeOptions StrongFaultRuntimeOptions() {
   ReputationRuntimeOptions options = RuntimeOptions();
   options.initial_weights = {100, 100, 100, 100};
@@ -72,6 +86,13 @@ ReputationRuntimeOptions StrongFaultRuntimeOptions() {
   options.config.strong_fault_enabled = true;
   options.config.double_proposal_detection_enabled = true;
   options.config.strong_fault_target_weight = 1;
+  return options;
+}
+
+ReputationRuntimeOptions DoubleVoteRuntimeOptions() {
+  ReputationRuntimeOptions options = StrongFaultRuntimeOptions();
+  options.config.double_proposal_detection_enabled = false;
+  options.config.double_vote_detection_enabled = true;
   return options;
 }
 
@@ -210,6 +231,50 @@ TEST(ReputationPluginRuntimeTest, DuplicateSameHashProposalIsIgnored) {
   EXPECT_EQ(candidates[0].event_count, 1);
   EXPECT_TRUE(candidates[0].strong_faults.empty());
   EXPECT_EQ(candidates[0].next_weights[0], 100);
+}
+
+TEST(ReputationPluginRuntimeTest,
+     NormalSignedVotesAreNotRetainedAsStrongFaultEvidence) {
+  ReputationPluginRuntime runtime(DoubleVoteRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
+  EXPECT_TRUE(runtime.RecordSignedVoteEvidence(
+      VoteEvidence(1, /*signer=*/1, "proposal-a")));
+  EXPECT_TRUE(runtime.RecordSignedVoteEvidence(
+      VoteEvidence(2, /*signer=*/1, "proposal-b")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  EXPECT_TRUE(candidates[0].strong_faults.empty());
+  EXPECT_EQ(candidates[0].next_weights[0], 100);
+}
+
+TEST(ReputationPluginRuntimeTest, ConflictingSignedVotesAreRetained) {
+  ReputationPluginRuntime runtime(DoubleVoteRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordSignedVoteEvidence(
+      VoteEvidence(1, /*signer=*/3, "proposal-a")));
+  EXPECT_TRUE(runtime.RecordSignedVoteEvidence(
+      VoteEvidence(1, /*signer=*/3, "proposal-b")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 2);
+  ASSERT_EQ(candidates[0].strong_faults.size(), 1);
+  EXPECT_EQ(candidates[0].strong_faults[0].type,
+            StrongFaultType::kDoubleVote);
+  EXPECT_EQ(candidates[0].strong_faults[0].validator_id, 3);
+  EXPECT_EQ(candidates[0].next_weights[0], 100);
+  EXPECT_EQ(candidates[0].next_weights[1], 100);
+  EXPECT_EQ(candidates[0].next_weights[2], 1);
+  EXPECT_EQ(candidates[0].next_weights[3], 100);
 }
 
 TEST(ReputationPluginRuntimeTest, PersistentStrongFaultKeepsTargetWeight) {

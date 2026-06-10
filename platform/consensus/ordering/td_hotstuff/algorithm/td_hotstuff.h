@@ -75,6 +75,8 @@ class HotStuff : public common::ProtocolBase {
   bool MaybeMakeSignedProposalEvidenceSnapshotLocked(
       const Proposal& proposal,
       TdHotstuffSignedProposalEvidenceSnapshot* snapshot);
+  bool MaybeMakeSignedVoteEvidenceSnapshotLocked(
+      const Certificate& cert, TdHotstuffSignedVoteEvidenceSnapshot* snapshot);
   bool MaybeMakeQcEvidenceSnapshotLocked(const QC& qc,
                                           TdHotstuffQcEvidenceSnapshot* snapshot);
   bool MaybeFormQcLocked(int view, const std::string& hash);
@@ -94,8 +96,11 @@ class HotStuff : public common::ProtocolBase {
   bool ApplyTimeoutCertLocked(const TimeoutCert& cert);
   bool IsSilentLeaderForExperiment() const;
   bool IsDoubleProposalForExperiment() const;
+  bool IsDoubleVoteForExperiment() const;
   std::unique_ptr<Proposal> MakeConflictingProposalForExperiment(
       const Proposal& proposal);
+  std::unique_ptr<Certificate> MakeConflictingCertificateForExperiment(
+      const Certificate& cert);
   std::vector<std::unique_ptr<Transaction>> TakeTransactionsForView(
       int view, int max_count);
   void MarkTransactionCommitted(const Transaction& txn);
