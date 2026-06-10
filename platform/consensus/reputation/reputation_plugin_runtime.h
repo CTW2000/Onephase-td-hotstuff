@@ -108,6 +108,7 @@ class ReputationPluginRuntime {
   bool RecordLeaderOutcome(LeaderOutcomeEvidenceRecord evidence);
   bool RecordSignedProposalEvidence(SignedProposalEvidence evidence);
   bool RecordSignedVoteEvidence(SignedVoteEvidence evidence);
+  bool RecordInvalidQcProposalEvidence(InvalidQcProposalEvidence evidence);
   bool AdvanceWatermark(int view_or_round);
   void UpdateActiveWeights(ReputationWeightSnapshot snapshot);
 
@@ -131,6 +132,7 @@ class ReputationPluginRuntime {
   void ProcessLeaderOutcome(LeaderOutcomeEvidenceRecord evidence);
   void ProcessSignedProposalEvidence(SignedProposalEvidence evidence);
   void ProcessSignedVoteEvidence(SignedVoteEvidence evidence);
+  void ProcessInvalidQcProposalEvidence(InvalidQcProposalEvidence evidence);
   void ProcessWatermark(int view_or_round);
   void FinalizeWindow(const WindowKey& key, WindowBuffer* buffer);
   void ApplyPersistentStrongFaults(ReputationCandidate* candidate);
@@ -147,6 +149,8 @@ class ReputationPluginRuntime {
       const SignedProposalEvidence& evidence) const;
   ReputationWeightSnapshot SnapshotForSignedVote(
       const SignedVoteEvidence& evidence) const;
+  ReputationWeightSnapshot SnapshotForInvalidQcProposal(
+      const InvalidQcProposalEvidence& evidence) const;
   std::vector<uint64_t> ScheduledLeaderCountsForWindow(
       int start_view, int end_view,
       const ReputationWeightSnapshot& snapshot) const;

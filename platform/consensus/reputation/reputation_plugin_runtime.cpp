@@ -194,6 +194,7 @@ struct ReputationPluginRuntime::RuntimeEvent {
     kLeaderOutcomeEvidence,
     kSignedProposalEvidence,
     kSignedVoteEvidence,
+    kInvalidQcProposalEvidence,
     kWatermark
   };
   Type type = Type::kCertifiedSignerEvidence;
@@ -201,6 +202,7 @@ struct ReputationPluginRuntime::RuntimeEvent {
   LeaderOutcomeEvidenceRecord leader_outcome;
   SignedProposalEvidence signed_proposal;
   SignedVoteEvidence signed_vote;
+  InvalidQcProposalEvidence invalid_qc_proposal;
   int watermark = 0;
 };
 
@@ -224,6 +226,7 @@ struct ReputationPluginRuntime::WindowBuffer {
   std::vector<LeaderOutcomeEvidenceRecord> leader_outcomes;
   std::vector<SignedProposalEvidence> signed_proposals;
   std::vector<SignedVoteEvidence> signed_votes;
+  std::vector<InvalidQcProposalEvidence> invalid_qc_proposals;
   std::map<std::tuple<int, int, int>, SignedProposalEvidence>
       first_signed_proposal_by_key;
   std::map<std::tuple<int, int, int>, SignedVoteEvidence>
@@ -232,6 +235,8 @@ struct ReputationPluginRuntime::WindowBuffer {
   std::set<std::tuple<int, int, std::string>> seen_leader_outcomes;
   std::set<std::tuple<int, int, int, std::string>> seen_signed_proposals;
   std::set<std::tuple<int, int, int, std::string>> seen_signed_votes;
+  std::set<std::tuple<std::string, uint64_t, int, int, int, std::string>>
+      seen_invalid_qc_proposals;
   std::set<std::tuple<int, int, int>> emitted_signed_proposal_conflicts;
   std::set<std::tuple<int, int, int>> emitted_signed_vote_conflicts;
 };
@@ -357,6 +362,14 @@ bool ReputationPluginRuntime::RecordSignedVoteEvidence(
   return Enqueue(std::move(event));
 }
 
+bool ReputationPluginRuntime::RecordInvalidQcProposalEvidence(
+    InvalidQcProposalEvidence evidence) {
+  RuntimeEvent event;
+  event.type = RuntimeEvent::Type::kInvalidQcProposalEvidence;
+  event.invalid_qc_proposal = std::move(evidence);
+  return Enqueue(std::move(event));
+}
+
 bool ReputationPluginRuntime::AdvanceWatermark(int view_or_round) {
   RuntimeEvent event;
   event.type = RuntimeEvent::Type::kWatermark;
@@ -446,6 +459,8 @@ void ReputationPluginRuntime::WorkerLoop() {
         ProcessSignedProposalEvidence(std::move(event.signed_proposal));
       } else if (event.type == RuntimeEvent::Type::kSignedVoteEvidence) {
         ProcessSignedVoteEvidence(std::move(event.signed_vote));
+      } else if (event.type == RuntimeEvent::Type::kInvalidQcProposalEvidence) {
+        ProcessInvalidQcProposalEvidence(std::move(event.invalid_qc_proposal));
       } else {
         ProcessWatermark(event.watermark);
       }
@@ -509,6 +524,12 @@ ReputationWeightSnapshot ReputationPluginRuntime::SnapshotForSignedVote(
                             /*weights=*/{});
 }
 
+ReputationWeightSnapshot ReputationPluginRuntime::SnapshotForInvalidQcProposal(
+    const InvalidQcProposalEvidence& evidence) const {
+  return SnapshotFromFields(evidence.active_weight_root, evidence.weight_version,
+                            /*weights=*/{});
+}
+
 std::vector<uint64_t> ReputationPluginRuntime::ScheduledLeaderCountsForWindow(
     int start_view, int end_view, const ReputationWeightSnapshot& snapshot) const {
   std::vector<uint64_t> counts(std::max(options_.total_replicas, 0), 0);
@@ -565,6 +586,7 @@ void ReputationPluginRuntime::ProcessEvidence(
   WindowBuffer& buffer = windows_[key];
   if (buffer.evidence.empty() && buffer.leader_outcomes.empty() &&
       buffer.signed_proposals.empty() && buffer.signed_votes.empty() &&
+      buffer.invalid_qc_proposals.empty() &&
       buffer.first_signed_proposal_by_key.empty() &&
       buffer.first_signed_vote_by_key.empty()) {
     buffer.start_view = window_start;
@@ -601,6 +623,7 @@ void ReputationPluginRuntime::ProcessLeaderOutcome(
   WindowBuffer& buffer = windows_[key];
   if (buffer.evidence.empty() && buffer.leader_outcomes.empty() &&
       buffer.signed_proposals.empty() && buffer.signed_votes.empty() &&
+      buffer.invalid_qc_proposals.empty() &&
       buffer.first_signed_proposal_by_key.empty() &&
       buffer.first_signed_vote_by_key.empty()) {
     buffer.start_view = window_start;
@@ -637,6 +660,7 @@ void ReputationPluginRuntime::ProcessSignedProposalEvidence(
   WindowBuffer& buffer = windows_[key];
   if (buffer.evidence.empty() && buffer.leader_outcomes.empty() &&
       buffer.signed_proposals.empty() && buffer.signed_votes.empty() &&
+      buffer.invalid_qc_proposals.empty() &&
       buffer.first_signed_proposal_by_key.empty() &&
       buffer.first_signed_vote_by_key.empty()) {
     buffer.start_view = window_start;
@@ -689,6 +713,7 @@ void ReputationPluginRuntime::ProcessSignedVoteEvidence(
   WindowBuffer& buffer = windows_[key];
   if (buffer.evidence.empty() && buffer.leader_outcomes.empty() &&
       buffer.signed_proposals.empty() && buffer.signed_votes.empty() &&
+      buffer.invalid_qc_proposals.empty() &&
       buffer.first_signed_proposal_by_key.empty() &&
       buffer.first_signed_vote_by_key.empty()) {
     buffer.start_view = window_start;
@@ -718,6 +743,46 @@ void ReputationPluginRuntime::ProcessSignedVoteEvidence(
   buffer.signed_votes.push_back(std::move(evidence));
 }
 
+void ReputationPluginRuntime::ProcessInvalidQcProposalEvidence(
+    InvalidQcProposalEvidence evidence) {
+  if (evidence.view_or_round < 0 || evidence.leader_id <= 0 ||
+      evidence.protocol_id.empty() || evidence.proposal_hash.empty() ||
+      !evidence.proposal_signature_verified || evidence.qc_verified) {
+    return;
+  }
+  const uint64_t window_index =
+      static_cast<uint64_t>(evidence.view_or_round) / options_.window_size_views;
+  const int window_start =
+      static_cast<int>(window_index * options_.window_size_views);
+  const int window_end =
+      static_cast<int>(window_start + options_.window_size_views);
+  ReputationWeightSnapshot snapshot = SnapshotForInvalidQcProposal(evidence);
+  WindowKey key;
+  key.window_index = window_index;
+  key.weight_root_hex = snapshot.weight_root_hex;
+  key.weight_version = snapshot.weight_version;
+
+  std::lock_guard<std::mutex> lk(mutex_);
+  WindowBuffer& buffer = windows_[key];
+  if (buffer.evidence.empty() && buffer.leader_outcomes.empty() &&
+      buffer.signed_proposals.empty() && buffer.signed_votes.empty() &&
+      buffer.invalid_qc_proposals.empty() &&
+      buffer.first_signed_proposal_by_key.empty() &&
+      buffer.first_signed_vote_by_key.empty()) {
+    buffer.start_view = window_start;
+    buffer.end_view = window_end;
+    buffer.snapshot = std::move(snapshot);
+  }
+  const auto dedupe_key =
+      std::make_tuple(evidence.protocol_id, evidence.weight_version,
+                      evidence.leader_id, evidence.view_or_round,
+                      evidence.slot_or_height, evidence.proposal_hash);
+  if (!buffer.seen_invalid_qc_proposals.insert(dedupe_key).second) {
+    return;
+  }
+  buffer.invalid_qc_proposals.push_back(std::move(evidence));
+}
+
 void ReputationPluginRuntime::ProcessWatermark(int view_or_round) {
   std::vector<std::pair<WindowKey, WindowBuffer>> ready;
   {
@@ -740,7 +805,8 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
                                              WindowBuffer* buffer) {
   if (buffer == nullptr ||
       (buffer->evidence.empty() && buffer->leader_outcomes.empty() &&
-       buffer->signed_proposals.empty() && buffer->signed_votes.empty())) {
+       buffer->signed_proposals.empty() && buffer->signed_votes.empty() &&
+       buffer->invalid_qc_proposals.empty())) {
     return;
   }
   std::sort(buffer->evidence.begin(), buffer->evidence.end(),
@@ -775,6 +841,17 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
                      std::tie(rhs.signer_id, rhs.view_or_round,
                               rhs.slot_or_height, rhs.proposal_hash);
             });
+  std::sort(buffer->invalid_qc_proposals.begin(),
+            buffer->invalid_qc_proposals.end(),
+            [](const InvalidQcProposalEvidence& lhs,
+               const InvalidQcProposalEvidence& rhs) {
+              return std::tie(lhs.leader_id, lhs.view_or_round,
+                              lhs.slot_or_height, lhs.proposal_hash,
+                              lhs.invalid_reason) <
+                     std::tie(rhs.leader_id, rhs.view_or_round,
+                              rhs.slot_or_height, rhs.proposal_hash,
+                              rhs.invalid_reason);
+            });
 
   ReputationWindowInput input;
   input.total_replicas = options_.total_replicas;
@@ -806,6 +883,7 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
   }
   input.signed_proposal_evidence = buffer->signed_proposals;
   input.signed_vote_evidence = buffer->signed_votes;
+  input.invalid_qc_proposal_evidence = buffer->invalid_qc_proposals;
   input.scheduled_leader_counts = ScheduledLeaderCountsForWindow(
       buffer->start_view, buffer->end_view, buffer->snapshot);
 
@@ -819,7 +897,8 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
   candidate.event_count = input.certified_signer_evidence.size() +
                           input.leader_outcome_evidence.size() +
                           input.signed_proposal_evidence.size() +
-                          input.signed_vote_evidence.size();
+                          input.signed_vote_evidence.size() +
+                          input.invalid_qc_proposal_evidence.size();
   ApplyPersistentStrongFaults(&candidate);
   RecomputeReputationCandidateRoots(&candidate);
   WriteAudit(candidate);

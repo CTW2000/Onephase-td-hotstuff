@@ -90,6 +90,23 @@ TdHotstuffSignedVoteEvidenceSnapshot VoteSnapshot(int view, int signer,
   return snapshot;
 }
 
+TdHotstuffInvalidQcProposalEvidenceSnapshot InvalidQcSnapshot(
+    int view, int leader, const std::string& hash) {
+  TdHotstuffInvalidQcProposalEvidenceSnapshot snapshot;
+  snapshot.local_node_id = 1;
+  snapshot.total_replicas = 4;
+  snapshot.view = view;
+  snapshot.slot = 0;
+  snapshot.leader_id = leader;
+  snapshot.proposal_hash = hash;
+  snapshot.proposal_signature_verified = true;
+  snapshot.qc_verified = false;
+  snapshot.invalid_reason = "qc signer bitmap mismatch";
+  snapshot.active_weight_root = "old-root";
+  snapshot.active_weight_version = 7;
+  return snapshot;
+}
+
 std::vector<resdb::consensus::reputation::ReputationCandidate>
 WaitForCandidates(TdHotstuffReputationAdapter* adapter, size_t count) {
   for (int i = 0; i < 200; ++i) {
@@ -171,6 +188,28 @@ TEST(TdHotstuffReputationAdapterTest,
   unsetenv("TD_HS_DOUBLE_VOTE_DETECT_ENABLE");
 }
 
+TEST(TdHotstuffReputationAdapterTest,
+     InvalidQcEvidenceIsGatedByInvalidQcDetection) {
+  unsetenv("TD_HS_STRONG_FAULT_ENABLE");
+  unsetenv("TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE");
+  setenv("TD_HS_REPUTATION_ENABLE", "1", 1);
+  TdHotstuffReputationAdapterOptions options =
+      TdHotstuffReputationAdapter::OptionsFromEnv();
+  EXPECT_FALSE(options.invalid_qc_proposal_evidence_enabled);
+
+  setenv("TD_HS_STRONG_FAULT_ENABLE", "1", 1);
+  options = TdHotstuffReputationAdapter::OptionsFromEnv();
+  EXPECT_FALSE(options.invalid_qc_proposal_evidence_enabled);
+
+  setenv("TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE", "1", 1);
+  options = TdHotstuffReputationAdapter::OptionsFromEnv();
+  EXPECT_TRUE(options.invalid_qc_proposal_evidence_enabled);
+
+  unsetenv("TD_HS_REPUTATION_ENABLE");
+  unsetenv("TD_HS_STRONG_FAULT_ENABLE");
+  unsetenv("TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE");
+}
+
 TEST(TdHotstuffReputationAdapterTest, ConvertsQcSnapshotToCertifiedEvidence) {
   const TdHotstuffQcEvidenceSnapshot snapshot =
       Snapshot(/*view=*/7, /*leader=*/4, {1, 2, 3}, {1, 2, 3, 4});
@@ -212,6 +251,55 @@ TEST(TdHotstuffReputationAdapterTest, ConvertsVoteSnapshotToSignedVoteEvidence) 
   EXPECT_TRUE(evidence.signature_verified);
   EXPECT_EQ(evidence.active_weight_root, "old-root");
   EXPECT_EQ(evidence.weight_version, 7);
+}
+
+TEST(TdHotstuffReputationAdapterTest,
+     ConvertsInvalidQcSnapshotToInvalidQcEvidence) {
+  const TdHotstuffInvalidQcProposalEvidenceSnapshot snapshot =
+      InvalidQcSnapshot(/*view=*/9, /*leader=*/3, "proposal-a");
+
+  const auto evidence = ToInvalidQcProposalEvidence(snapshot);
+
+  EXPECT_EQ(evidence.protocol_id, "td_hotstuff");
+  EXPECT_EQ(evidence.leader_id, 3);
+  EXPECT_EQ(evidence.view_or_round, 9);
+  EXPECT_EQ(evidence.slot_or_height, 0);
+  EXPECT_EQ(evidence.proposal_hash, "proposal-a");
+  EXPECT_TRUE(evidence.proposal_signature_verified);
+  EXPECT_FALSE(evidence.qc_verified);
+  EXPECT_EQ(evidence.invalid_reason, "qc signer bitmap mismatch");
+  EXPECT_EQ(evidence.active_weight_root, "old-root");
+  EXPECT_EQ(evidence.weight_version, 7);
+}
+
+TEST(TdHotstuffReputationAdapterTest,
+     InvalidQcEvidenceReachesRuntimeAndPenalizesLeader) {
+  TdHotstuffReputationAdapterOptions options = TestOptions(/*window_size=*/4);
+  options.initial_weights = {100, 100, 100, 100};
+  options.initial_weight_root =
+      resdb::consensus::reputation::WeightRootHex(options.initial_weights);
+  options.reputation_config.strong_fault_enabled = true;
+  options.reputation_config.invalid_qc_proposal_detection_enabled = true;
+  options.reputation_config.strong_fault_target_weight = 1;
+  options.invalid_qc_proposal_evidence_enabled = true;
+  TdHotstuffReputationAdapter adapter(/*local_node_id=*/1, /*total_replicas=*/4,
+                                      options);
+  adapter.Start();
+
+  ASSERT_TRUE(adapter.TryRecordInvalidQcProposal(
+      InvalidQcSnapshot(/*view=*/1, /*leader=*/3, "proposal-invalid-qc")));
+  ASSERT_TRUE(adapter.AdvanceWatermark(4));
+
+  auto candidates = WaitForCandidates(&adapter, 1);
+  adapter.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  ASSERT_EQ(candidates[0].strong_faults.size(), 1);
+  EXPECT_EQ(candidates[0].strong_faults[0].type,
+            resdb::consensus::reputation::StrongFaultType::kInvalidQcProposal);
+  EXPECT_EQ(candidates[0].next_weights,
+            (std::vector<int64_t>{100, 100, 1, 100}));
 }
 
 TEST(TdHotstuffReputationAdapterTest,

@@ -79,6 +79,23 @@ SignedVoteEvidence VoteEvidence(int view, int signer,
   return evidence;
 }
 
+InvalidQcProposalEvidence InvalidQcEvidence(
+    int view, int leader, const std::string& hash,
+    bool proposal_signature_verified = true, bool qc_verified = false) {
+  InvalidQcProposalEvidence evidence;
+  evidence.protocol_id = "td_hotstuff";
+  evidence.leader_id = leader;
+  evidence.view_or_round = view;
+  evidence.slot_or_height = 0;
+  evidence.proposal_hash = hash;
+  evidence.proposal_signature_verified = proposal_signature_verified;
+  evidence.qc_verified = qc_verified;
+  evidence.invalid_reason = "qc signer bitmap mismatch";
+  evidence.active_weight_root = WeightRootHex({100, 100, 100, 100});
+  evidence.weight_version = 0;
+  return evidence;
+}
+
 ReputationRuntimeOptions StrongFaultRuntimeOptions() {
   ReputationRuntimeOptions options = RuntimeOptions();
   options.initial_weights = {100, 100, 100, 100};
@@ -93,6 +110,13 @@ ReputationRuntimeOptions DoubleVoteRuntimeOptions() {
   ReputationRuntimeOptions options = StrongFaultRuntimeOptions();
   options.config.double_proposal_detection_enabled = false;
   options.config.double_vote_detection_enabled = true;
+  return options;
+}
+
+ReputationRuntimeOptions InvalidQcRuntimeOptions() {
+  ReputationRuntimeOptions options = StrongFaultRuntimeOptions();
+  options.config.double_proposal_detection_enabled = false;
+  options.config.invalid_qc_proposal_detection_enabled = true;
   return options;
 }
 
@@ -275,6 +299,51 @@ TEST(ReputationPluginRuntimeTest, ConflictingSignedVotesAreRetained) {
   EXPECT_EQ(candidates[0].next_weights[1], 100);
   EXPECT_EQ(candidates[0].next_weights[2], 1);
   EXPECT_EQ(candidates[0].next_weights[3], 100);
+}
+
+TEST(ReputationPluginRuntimeTest, InvalidQcEvidenceRejectsUnauthenticatedArtifacts) {
+  ReputationPluginRuntime runtime(InvalidQcRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
+  EXPECT_TRUE(runtime.RecordInvalidQcProposalEvidence(InvalidQcEvidence(
+      1, /*leader=*/2, "proposal-bad-signature",
+      /*proposal_signature_verified=*/false, /*qc_verified=*/false)));
+  EXPECT_TRUE(runtime.RecordInvalidQcProposalEvidence(InvalidQcEvidence(
+      2, /*leader=*/3, "proposal-valid-qc",
+      /*proposal_signature_verified=*/true, /*qc_verified=*/true)));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  EXPECT_TRUE(candidates[0].strong_faults.empty());
+  EXPECT_EQ(candidates[0].next_weights, (std::vector<int64_t>{100, 100, 100, 100}));
+}
+
+TEST(ReputationPluginRuntimeTest, InvalidQcEvidencePenalizesLeaderOnce) {
+  ReputationPluginRuntime runtime(InvalidQcRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordInvalidQcProposalEvidence(
+      InvalidQcEvidence(1, /*leader=*/4, "proposal-invalid-qc")));
+  EXPECT_TRUE(runtime.RecordInvalidQcProposalEvidence(
+      InvalidQcEvidence(1, /*leader=*/4, "proposal-invalid-qc")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  ASSERT_EQ(candidates[0].strong_faults.size(), 1);
+  EXPECT_EQ(candidates[0].strong_faults[0].type,
+            StrongFaultType::kInvalidQcProposal);
+  EXPECT_EQ(candidates[0].strong_faults[0].validator_id, 4);
+  EXPECT_EQ(candidates[0].next_weights[0], 100);
+  EXPECT_EQ(candidates[0].next_weights[1], 100);
+  EXPECT_EQ(candidates[0].next_weights[2], 100);
+  EXPECT_EQ(candidates[0].next_weights[3], 1);
 }
 
 TEST(ReputationPluginRuntimeTest, PersistentStrongFaultKeepsTargetWeight) {

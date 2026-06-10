@@ -188,6 +188,10 @@ bool ProposalManager::VerifyQcForEvidence(const QC& qc) {
   return VerifyQC(qc);
 }
 
+bool ProposalManager::VerifyQcForEvidence(const QC& qc, std::string* error) {
+  return certificate_verifier_.VerifyQC(qc, error);
+}
+
 bool ProposalManager::SafeNode(const Proposal& proposal){
   if(proposal.header().qc().view() > lock_qc_.view()){
     return true;
@@ -196,37 +200,77 @@ bool ProposalManager::SafeNode(const Proposal& proposal){
   return false;
 }
 
-bool ProposalManager::Verify(const Proposal& proposal) {
-  if( !VerifyHash(proposal)){
-    LOG(ERROR)<<"hash not match:";
-    return false;
+ProposalValidationResult ProposalManager::ValidateProposal(
+    const Proposal& proposal) {
+  ProposalValidationResult result;
+  if (!VerifyHash(proposal)) {
+    LOG(ERROR) << "hash not match:";
+    result.error_code = ProposalValidationErrorCode::kHashMismatch;
+    result.error_message = "hash mismatch";
+    return result;
   }
+  result.proposal_hash_verified = true;
 
   if (!VerifyProposalSignature(proposal)) {
-    return false;
+    result.error_code = ProposalValidationErrorCode::kBadProposalSignature;
+    result.error_message = "bad proposal signature";
+    return result;
   }
+  result.proposal_signature_verified = true;
 
   if (!VerifyLeader(proposal)) {
-    return false;
+    result.error_code = ProposalValidationErrorCode::kLeaderMismatch;
+    result.error_message = "proposal leader mismatch";
+    return result;
   }
+  result.leader_verified = true;
 
   if (!VerifyLeaderContext(proposal)) {
-    return false;
+    result.error_code = ProposalValidationErrorCode::kLeaderContextMismatch;
+    result.error_message = "proposal leader context mismatch";
+    return result;
   }
+  result.leader_context_verified = true;
 
   if (proposal.header().has_timeout_cert() &&
       !VerifyTimeoutCert(proposal.header().timeout_cert())) {
-    return false;
+    result.error_code = ProposalValidationErrorCode::kInvalidTimeoutCert;
+    result.error_message = "invalid timeout cert";
+    return result;
   }
 
-  if(proposal.header().view() == 1){
-    return true;
+  if (proposal.header().view() == 1) {
+    result.valid = true;
+    return result;
   }
 
+  const QC& qc = proposal.header().qc();
+  result.qc_present = !qc.hash().empty();
   if (SafeNode(proposal)) {
-    return VerifyQC(proposal.header().qc());
+    std::string qc_error;
+    if (!VerifyQcForEvidence(qc, &qc_error)) {
+      LOG(ERROR) << "qc invalid: " << qc_error;
+      result.error_code = ProposalValidationErrorCode::kInvalidQc;
+      result.error_message = qc_error;
+      return result;
+    }
+    result.qc_verified = true;
+    result.valid = true;
+    return result;
   }
-  return VerifyTimeoutJustification(proposal);
+
+  if (!VerifyTimeoutJustification(proposal)) {
+    result.error_code = ProposalValidationErrorCode::kInvalidTimeoutJustification;
+    result.error_message = "invalid timeout justification";
+    return result;
+  }
+  result.qc_verified = true;
+  result.valid = true;
+  return result;
+}
+
+bool ProposalManager::Verify(const Proposal& proposal) {
+  return ValidateProposal(proposal).valid;
 }
 
 bool ProposalManager::VerifyEnvelopeForEvidence(const Proposal& proposal) {

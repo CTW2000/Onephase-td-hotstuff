@@ -248,6 +248,10 @@ bool HotStuff::IsDoubleVoteForExperiment() const {
   return EnvFlagEnabled("TD_HS_DOUBLE_VOTE");
 }
 
+bool HotStuff::IsInvalidQcForExperiment() const {
+  return EnvFlagEnabled("TD_HS_INVALID_QC");
+}
+
 std::unique_ptr<Proposal> HotStuff::MakeConflictingProposalForExperiment(
     const Proposal& proposal) {
   if (verifier_ == nullptr) {
@@ -267,6 +271,28 @@ std::unique_ptr<Proposal> HotStuff::MakeConflictingProposalForExperiment(
   }
   *conflicting->mutable_signature() = *signature_or;
   return conflicting;
+}
+
+std::unique_ptr<Proposal> HotStuff::MakeInvalidQcProposalForExperiment(
+    const Proposal& proposal) {
+  if (verifier_ == nullptr || proposal.header().qc().hash().empty() ||
+      proposal.header().qc().signer_bitmap().empty()) {
+    return nullptr;
+  }
+  std::unique_ptr<Proposal> invalid = std::make_unique<Proposal>(proposal);
+  std::string forged_bitmap = invalid->header().qc().signer_bitmap();
+  forged_bitmap[0] = static_cast<char>(forged_bitmap[0] ^ 0x01);
+  invalid->mutable_header()->mutable_qc()->set_signer_bitmap(forged_bitmap);
+  invalid->clear_signature();
+  invalid->set_hash(ProposalHashForExperiment(*invalid));
+  auto signature_or = verifier_->SignMessage(ProposalSignaturePayload(*invalid));
+  if (!signature_or.ok()) {
+    LOG(ERROR) << "failed to sign TD-Hotstuff invalid-QC proposal view:"
+               << invalid->header().view();
+    return nullptr;
+  }
+  *invalid->mutable_signature() = *signature_or;
+  return invalid;
 }
 
 std::unique_ptr<Certificate> HotStuff::MakeConflictingCertificateForExperiment(
@@ -478,6 +504,13 @@ void HotStuff::AsyncSend() {
           }
           has_sent_ = true;
           MarkTimeoutProgressLocked();
+          if (proposal != nullptr && IsInvalidQcForExperiment()) {
+            std::unique_ptr<Proposal> invalid_qc_proposal =
+                MakeInvalidQcProposalForExperiment(*proposal);
+            if (invalid_qc_proposal != nullptr) {
+              proposal = std::move(invalid_qc_proposal);
+            }
+          }
           if (proposal != nullptr && IsDoubleProposalForExperiment()) {
             conflicting_proposal =
                 MakeConflictingProposalForExperiment(*proposal);
@@ -748,6 +781,38 @@ bool HotStuff::MaybeMakeSignedVoteEvidenceSnapshotLocked(
   snapshot->signer_id = cert.signer();
   snapshot->proposal_hash = cert.hash();
   snapshot->signature_verified = true;
+  snapshot->active_weight_root =
+      weight_schedule_->WeightRootForView(snapshot->view);
+  snapshot->active_weight_version =
+      weight_schedule_->WeightVersionForView(snapshot->view);
+  return true;
+}
+
+bool HotStuff::MaybeMakeInvalidQcProposalEvidenceSnapshotLocked(
+    const Proposal& proposal, const ProposalValidationResult& validation,
+    TdHotstuffInvalidQcProposalEvidenceSnapshot* snapshot) {
+  if (snapshot == nullptr || reputation_adapter_ == nullptr ||
+      !reputation_adapter_->WantsInvalidQcProposalEvidence() ||
+      weight_schedule_ == nullptr || proposal.hash().empty() ||
+      validation.valid ||
+      validation.error_code != ProposalValidationErrorCode::kInvalidQc ||
+      !validation.proposal_hash_verified ||
+      !validation.proposal_signature_verified || !validation.leader_verified ||
+      !validation.leader_context_verified || !validation.qc_present ||
+      validation.qc_verified) {
+    return false;
+  }
+  snapshot->local_node_id = id_;
+  snapshot->total_replicas = total_num_;
+  snapshot->view = proposal.header().view();
+  snapshot->slot = proposal.header().slot();
+  snapshot->leader_id = proposal.sender();
+  snapshot->proposal_hash = proposal.hash();
+  snapshot->proposal_signature_verified = true;
+  snapshot->qc_verified = false;
+  snapshot->invalid_reason = validation.error_message.empty()
+                                 ? "invalid_qc"
+                                 : validation.error_message;
   snapshot->active_weight_root =
       weight_schedule_->WeightRootForView(snapshot->view);
   snapshot->active_weight_version =
@@ -1217,8 +1282,10 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   std::unique_ptr<Certificate> conflicting_cert;
   TdHotstuffQcEvidenceSnapshot proposal_qc_snapshot;
   TdHotstuffSignedProposalEvidenceSnapshot signed_proposal_snapshot;
+  TdHotstuffInvalidQcProposalEvidenceSnapshot invalid_qc_snapshot;
   bool has_proposal_qc_snapshot = false;
   bool has_signed_proposal_snapshot = false;
+  bool has_invalid_qc_snapshot = false;
   bool proposal_valid = true;
   bool stale_proposal = false;
   int next_leader = 0;
@@ -1236,10 +1303,18 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     if (view < local_current_view) {
       stale_proposal = true;
       proposal_valid = false;
-    } else if (!proposal_manager_->Verify(*proposal)) {
-      LOG(ERROR) << "proposal invalid";
-      proposal_valid = false;
     } else {
+      const ProposalValidationResult validation =
+          proposal_manager_->ValidateProposal(*proposal);
+      if (!validation.valid) {
+        LOG(ERROR) << "proposal invalid";
+        has_invalid_qc_snapshot = MaybeMakeInvalidQcProposalEvidenceSnapshotLocked(
+            *proposal, validation, &invalid_qc_snapshot);
+        proposal_valid = false;
+      }
+    }
+
+    if (proposal_valid) {
       if (reputation_adapter_ != nullptr &&
           reputation_adapter_->WantsSignedProposalEvidence()) {
         has_signed_proposal_snapshot =
@@ -1295,6 +1370,10 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     return true;
   }
   if (!proposal_valid || cert == nullptr) {
+    if (has_invalid_qc_snapshot && reputation_adapter_ != nullptr) {
+      reputation_adapter_->TryRecordInvalidQcProposal(
+          std::move(invalid_qc_snapshot));
+    }
     if (has_signed_proposal_snapshot && reputation_adapter_ != nullptr) {
       reputation_adapter_->TryRecordSignedProposal(
           std::move(signed_proposal_snapshot));

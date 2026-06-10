@@ -120,6 +120,23 @@ resdb::consensus::reputation::SignedVoteEvidence ToSignedVoteEvidence(
   return evidence;
 }
 
+resdb::consensus::reputation::InvalidQcProposalEvidence
+ToInvalidQcProposalEvidence(
+    const TdHotstuffInvalidQcProposalEvidenceSnapshot& snapshot) {
+  resdb::consensus::reputation::InvalidQcProposalEvidence evidence;
+  evidence.protocol_id = "td_hotstuff";
+  evidence.leader_id = snapshot.leader_id;
+  evidence.view_or_round = snapshot.view;
+  evidence.slot_or_height = snapshot.slot;
+  evidence.proposal_hash = snapshot.proposal_hash;
+  evidence.proposal_signature_verified = snapshot.proposal_signature_verified;
+  evidence.qc_verified = snapshot.qc_verified;
+  evidence.invalid_reason = snapshot.invalid_reason;
+  evidence.active_weight_root = snapshot.active_weight_root;
+  evidence.weight_version = snapshot.active_weight_version;
+  return evidence;
+}
+
 TdHotstuffReputationAdapterOptions
 TdHotstuffReputationAdapter::OptionsFromEnv() {
   TdHotstuffReputationAdapterOptions options;
@@ -176,6 +193,9 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.signed_vote_evidence_enabled =
       options.reputation_config.strong_fault_enabled &&
       options.reputation_config.double_vote_detection_enabled;
+  options.invalid_qc_proposal_evidence_enabled =
+      options.reputation_config.strong_fault_enabled &&
+      options.reputation_config.invalid_qc_proposal_detection_enabled;
   options.audit_jsonl_enabled =
       EnvFlagEnabled("TD_HS_REPUTATION_AUDIT_JSONL_ENABLE");
   const char* audit_path = std::getenv("TD_HS_REPUTATION_AUDIT_JSONL_PATH");
@@ -194,6 +214,8 @@ TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
           options.enabled) {
   signed_proposal_evidence_enabled_ = options.signed_proposal_evidence_enabled;
   signed_vote_evidence_enabled_ = options.signed_vote_evidence_enabled;
+  invalid_qc_proposal_evidence_enabled_ =
+      options.invalid_qc_proposal_evidence_enabled;
 }
 
 TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
@@ -206,6 +228,7 @@ TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
       enabled_(enabled),
       signed_proposal_evidence_enabled_(false),
       signed_vote_evidence_enabled_(false),
+      invalid_qc_proposal_evidence_enabled_(false),
       runtime_(std::move(runtime)) {}
 
 TdHotstuffReputationAdapter::~TdHotstuffReputationAdapter() { Stop(); }
@@ -308,6 +331,21 @@ bool TdHotstuffReputationAdapter::TryRecordSignedVote(
   return runtime_->RecordSignedVoteEvidence(ToSignedVoteEvidence(snapshot));
 }
 
+bool TdHotstuffReputationAdapter::TryRecordInvalidQcProposal(
+    TdHotstuffInvalidQcProposalEvidenceSnapshot snapshot) {
+  if (!WantsInvalidQcProposalEvidence() || runtime_ == nullptr) {
+    return false;
+  }
+  if (snapshot.total_replicas <= 0) {
+    snapshot.total_replicas = total_replicas_;
+  }
+  if (snapshot.local_node_id <= 0) {
+    snapshot.local_node_id = local_node_id_;
+  }
+  return runtime_->RecordInvalidQcProposalEvidence(
+      ToInvalidQcProposalEvidence(snapshot));
+}
+
 bool TdHotstuffReputationAdapter::AdvanceWatermark(int view) {
   return enabled_ && runtime_ != nullptr && runtime_->AdvanceWatermark(view);
 }
@@ -347,6 +385,10 @@ bool TdHotstuffReputationAdapter::WantsSignedProposalEvidence() const {
 
 bool TdHotstuffReputationAdapter::WantsSignedVoteEvidence() const {
   return enabled_ && signed_vote_evidence_enabled_;
+}
+
+bool TdHotstuffReputationAdapter::WantsInvalidQcProposalEvidence() const {
+  return enabled_ && invalid_qc_proposal_evidence_enabled_;
 }
 
 uint64_t TdHotstuffReputationAdapter::queued_count() const {

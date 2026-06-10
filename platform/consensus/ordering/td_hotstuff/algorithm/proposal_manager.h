@@ -26,6 +26,29 @@ std::string BuildSignerBitmap(const std::vector<int>& signers, int total_num);
 bool SignerBitmapMatchesSignatures(const QC& qc, int total_num);
 int DefaultLeaderForView(int view, int total_replicas);
 
+enum class ProposalValidationErrorCode {
+  kNone,
+  kHashMismatch,
+  kBadProposalSignature,
+  kLeaderMismatch,
+  kLeaderContextMismatch,
+  kInvalidTimeoutCert,
+  kInvalidQc,
+  kInvalidTimeoutJustification,
+};
+
+struct ProposalValidationResult {
+  bool valid = false;
+  bool proposal_hash_verified = false;
+  bool proposal_signature_verified = false;
+  bool leader_verified = false;
+  bool leader_context_verified = false;
+  bool qc_present = false;
+  bool qc_verified = false;
+  ProposalValidationErrorCode error_code = ProposalValidationErrorCode::kNone;
+  std::string error_message;
+};
+
 class ProposalManager {
  public:
   ProposalManager(int32_t id, int limit_count, SignatureVerifier* verifier,
@@ -37,9 +60,11 @@ class ProposalManager {
 
   std::unique_ptr<Proposal> GenerateProposal(
       const std::vector<std::unique_ptr<Transaction>>& txns);
+  ProposalValidationResult ValidateProposal(const Proposal& proposal);
   bool Verify(const Proposal& proposal);
   bool VerifyEnvelopeForEvidence(const Proposal& proposal);
   bool VerifyQcForEvidence(const QC& qc);
+  bool VerifyQcForEvidence(const QC& qc, std::string* error);
   bool VerifyCert(const Certificate& cert);
   bool RecordVote(const Proposal& proposal, std::string* error = nullptr);
 

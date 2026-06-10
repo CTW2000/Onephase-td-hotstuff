@@ -63,6 +63,20 @@ struct TdHotstuffSignedVoteEvidenceSnapshot {
   uint64_t active_weight_version = 0;
 };
 
+struct TdHotstuffInvalidQcProposalEvidenceSnapshot {
+  int local_node_id = 0;
+  int total_replicas = 0;
+  int view = 0;
+  int slot = 0;
+  int leader_id = 0;
+  std::string proposal_hash;
+  bool proposal_signature_verified = false;
+  bool qc_verified = false;
+  std::string invalid_reason;
+  std::string active_weight_root;
+  uint64_t active_weight_version = 0;
+};
+
 struct TdHotstuffReputationAdapterOptions {
   bool enabled = false;
   size_t window_size = 4096;
@@ -80,6 +94,7 @@ struct TdHotstuffReputationAdapterOptions {
   resdb::consensus::reputation::ReputationConfig reputation_config;
   bool signed_proposal_evidence_enabled = false;
   bool signed_vote_evidence_enabled = false;
+  bool invalid_qc_proposal_evidence_enabled = false;
 };
 
 resdb::consensus::reputation::CertifiedSignerEvidence
@@ -97,6 +112,10 @@ resdb::consensus::reputation::SignedProposalEvidence ToSignedProposalEvidence(
 
 resdb::consensus::reputation::SignedVoteEvidence ToSignedVoteEvidence(
     const TdHotstuffSignedVoteEvidenceSnapshot& snapshot);
+
+resdb::consensus::reputation::InvalidQcProposalEvidence
+ToInvalidQcProposalEvidence(
+    const TdHotstuffInvalidQcProposalEvidenceSnapshot& snapshot);
 
 class TdHotstuffReputationAdapter {
  public:
@@ -124,6 +143,8 @@ class TdHotstuffReputationAdapter {
   bool TryRecordSignedProposal(
       TdHotstuffSignedProposalEvidenceSnapshot snapshot);
   bool TryRecordSignedVote(TdHotstuffSignedVoteEvidenceSnapshot snapshot);
+  bool TryRecordInvalidQcProposal(
+      TdHotstuffInvalidQcProposalEvidenceSnapshot snapshot);
   bool AdvanceWatermark(int view);
   void UpdateActiveWeights(
       resdb::consensus::reputation::ReputationWeightSnapshot snapshot);
@@ -139,6 +160,7 @@ class TdHotstuffReputationAdapter {
   bool enabled() const { return enabled_; }
   bool WantsSignedProposalEvidence() const;
   bool WantsSignedVoteEvidence() const;
+  bool WantsInvalidQcProposalEvidence() const;
   uint64_t queued_count() const;
   uint64_t dropped_count() const;
   uint64_t computed_window_count() const;
@@ -153,6 +175,7 @@ class TdHotstuffReputationAdapter {
   bool enabled_ = false;
   bool signed_proposal_evidence_enabled_ = false;
   bool signed_vote_evidence_enabled_ = false;
+  bool invalid_qc_proposal_evidence_enabled_ = false;
   std::shared_ptr<resdb::consensus::reputation::ReputationPluginRuntime>
       runtime_;
 };

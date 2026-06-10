@@ -58,6 +58,28 @@ TimeoutVote TimeoutVoteFor(int view, int signer, const QC& high_qc) {
   return vote;
 }
 
+class TestProposalManager : public ProposalManager {
+ public:
+  TestProposalManager(int32_t id, SignatureVerifier* verifier)
+      : ProposalManager(id, /*limit_count=*/0, verifier, /*total_num=*/4,
+                        /*non_responsive_num=*/0, /*fork_tail_num=*/0) {}
+
+  std::string HashForTesting(const Proposal& proposal) {
+    return GetHash(proposal);
+  }
+};
+
+Proposal ProposalWithQc(const QC& qc, TestProposalManager* manager) {
+  Proposal proposal;
+  proposal.set_sender(4);
+  proposal.mutable_header()->set_view(7);
+  proposal.mutable_header()->set_slot(0);
+  *proposal.mutable_header()->mutable_qc() = qc;
+  proposal.set_hash(manager->HashForTesting(proposal));
+  *proposal.mutable_signature() = SignatureFrom(4);
+  return proposal;
+}
+
 TEST(CertificateVerifierTest, VotePayloadBindsSignerViewSlotAndHash) {
   const Certificate base = VoteFor(/*view=*/7, /*signer=*/2, "hash-a", 0);
   Certificate changed_signer = base;
@@ -118,6 +140,29 @@ TEST(CertificateVerifierTest, RejectsQcWithDuplicateSigner) {
 
   CertificateVerifier certificate_verifier(/*total_replicas=*/4, &verifier);
   EXPECT_FALSE(certificate_verifier.VerifyQC(qc));
+}
+
+TEST(CertificateVerifierTest,
+     ProposalValidationReportsForgedQcSignerBitmap) {
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+  TestProposalManager manager(/*id=*/1, &verifier);
+
+  QC qc = QcFor({1, 2, 3}, /*view=*/6, "proposal-hash");
+  qc.set_signer_bitmap(BuildSignerBitmap({1, 2, 4}, 4));
+  Proposal proposal = ProposalWithQc(qc, &manager);
+
+  const ProposalValidationResult result = manager.ValidateProposal(proposal);
+
+  EXPECT_FALSE(result.valid);
+  EXPECT_TRUE(result.proposal_hash_verified);
+  EXPECT_TRUE(result.proposal_signature_verified);
+  EXPECT_TRUE(result.leader_verified);
+  EXPECT_TRUE(result.leader_context_verified);
+  EXPECT_TRUE(result.qc_present);
+  EXPECT_FALSE(result.qc_verified);
+  EXPECT_EQ(result.error_code, ProposalValidationErrorCode::kInvalidQc);
+  EXPECT_EQ(result.error_message, "qc signer bitmap mismatch");
 }
 
 TEST(CertificateVerifierTest, TimeoutCertVerifiesHighQcThroughSameQcVerifier) {
