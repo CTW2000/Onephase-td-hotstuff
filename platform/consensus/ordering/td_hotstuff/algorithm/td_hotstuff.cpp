@@ -123,6 +123,19 @@ std::string TransactionDedupKey(const Transaction& txn) {
   return std::string("d:") + SignatureVerifier::CalculateHash(txn.data());
 }
 
+std::string ProposalHashForExperiment(const Proposal& proposal) {
+  std::string data;
+  for (const auto& txn : proposal.transactions()) {
+    std::string serialized;
+    txn.SerializeToString(&serialized);
+    data += serialized;
+  }
+  std::string header_data;
+  proposal.header().SerializeToString(&header_data);
+  data += header_data;
+  return SignatureVerifier::CalculateHash(data);
+}
+
 }  // namespace
 
 HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
@@ -224,6 +237,32 @@ bool HotStuff::IsLeader(int view) { return LeaderForView(view) == id_; }
 bool HotStuff::IsSilentLeaderForExperiment() const {
   return EnvFlagEnabled("TD_HS_SILENT_LEADER") ||
          EnvListContainsId("TD_HS_SILENT_LEADER_IDS", id_);
+}
+
+bool HotStuff::IsDoubleProposalForExperiment() const {
+  return EnvFlagEnabled("TD_HS_DOUBLE_PROPOSAL") ||
+         EnvListContainsId("TD_HS_DOUBLE_PROPOSAL_IDS", id_);
+}
+
+std::unique_ptr<Proposal> HotStuff::MakeConflictingProposalForExperiment(
+    const Proposal& proposal) {
+  if (verifier_ == nullptr) {
+    return nullptr;
+  }
+  std::unique_ptr<Proposal> conflicting = std::make_unique<Proposal>(proposal);
+  conflicting->mutable_header()->set_proposal_id(
+      proposal.header().proposal_id() + 1000000 + id_);
+  conflicting->clear_signature();
+  conflicting->set_hash(ProposalHashForExperiment(*conflicting));
+  auto signature_or =
+      verifier_->SignMessage(ProposalSignaturePayload(*conflicting));
+  if (!signature_or.ok()) {
+    LOG(ERROR) << "failed to sign TD-Hotstuff conflicting proposal view:"
+               << conflicting->header().view();
+    return nullptr;
+  }
+  *conflicting->mutable_signature() = *signature_or;
+  return conflicting;
 }
 
 void HotStuff::MarkTimeoutProgressLocked() {
@@ -387,6 +426,7 @@ void HotStuff::AsyncSend() {
     }
 
     std::unique_ptr<Proposal> proposal;
+    std::unique_ptr<Proposal> conflicting_proposal;
     bool silent_leader = false;
     bool no_transactions_ready = false;
     {
@@ -411,6 +451,10 @@ void HotStuff::AsyncSend() {
           }
           has_sent_ = true;
           MarkTimeoutProgressLocked();
+          if (proposal != nullptr && IsDoubleProposalForExperiment()) {
+            conflicting_proposal =
+                MakeConflictingProposalForExperiment(*proposal);
+          }
         }
       }
     }
@@ -427,6 +471,9 @@ void HotStuff::AsyncSend() {
         continue;
       }
       broadcast_call_(MessageType::NewProposal, *proposal);
+      if (conflicting_proposal != nullptr) {
+        broadcast_call_(MessageType::NewProposal, *conflicting_proposal);
+      }
       continue;
     }
     if (silent_leader || no_transactions_ready) {
@@ -636,6 +683,28 @@ std::vector<int> HotStuff::CertificateSigners(
     }
   }
   return signers;
+}
+
+bool HotStuff::MaybeMakeSignedProposalEvidenceSnapshotLocked(
+    const Proposal& proposal,
+    TdHotstuffSignedProposalEvidenceSnapshot* snapshot) {
+  if (snapshot == nullptr || reputation_adapter_ == nullptr ||
+      !reputation_adapter_->WantsSignedProposalEvidence() ||
+      proposal.hash().empty() || weight_schedule_ == nullptr) {
+    return false;
+  }
+  snapshot->local_node_id = id_;
+  snapshot->total_replicas = total_num_;
+  snapshot->view = proposal.header().view();
+  snapshot->slot = proposal.header().slot();
+  snapshot->leader_id = proposal.sender();
+  snapshot->proposal_hash = proposal.hash();
+  snapshot->signature_verified = true;
+  snapshot->active_weight_root =
+      weight_schedule_->WeightRootForView(snapshot->view);
+  snapshot->active_weight_version =
+      weight_schedule_->WeightVersionForView(snapshot->view);
+  return true;
 }
 
 bool HotStuff::MaybeMakeQcEvidenceSnapshotLocked(
@@ -1092,7 +1161,9 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   const int view = proposal->header().view();
   std::unique_ptr<Certificate> cert;
   TdHotstuffQcEvidenceSnapshot proposal_qc_snapshot;
+  TdHotstuffSignedProposalEvidenceSnapshot signed_proposal_snapshot;
   bool has_proposal_qc_snapshot = false;
+  bool has_signed_proposal_snapshot = false;
   bool proposal_valid = true;
   bool stale_proposal = false;
   int next_leader = 0;
@@ -1115,13 +1186,19 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
       proposal_valid = false;
     } else {
       if (reputation_adapter_ != nullptr &&
+          reputation_adapter_->WantsSignedProposalEvidence()) {
+        has_signed_proposal_snapshot =
+            MaybeMakeSignedProposalEvidenceSnapshotLocked(
+                *proposal, &signed_proposal_snapshot);
+      }
+      if (reputation_adapter_ != nullptr &&
           !proposal->header().qc().hash().empty()) {
         has_proposal_qc_snapshot = MaybeMakeQcEvidenceSnapshotLocked(
             proposal->header().qc(), &proposal_qc_snapshot);
       }
       std::string safety_error;
       if (!proposal_manager_->RecordVote(*proposal, &safety_error)) {
-        LOG(ERROR) << "proposal vote safety rejected: " << safety_error;
+        LOG_EVERY_N(WARNING, 1000) << "proposal vote safety rejected: " << safety_error;
         proposal_valid = false;
       }
     }
@@ -1160,9 +1237,17 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     return true;
   }
   if (!proposal_valid || cert == nullptr) {
+    if (has_signed_proposal_snapshot && reputation_adapter_ != nullptr) {
+      reputation_adapter_->TryRecordSignedProposal(
+          std::move(signed_proposal_snapshot));
+    }
     return false;
   }
   const int send_result = SendMessage(MessageType::Vote, *cert, next_leader);
+  if (has_signed_proposal_snapshot && reputation_adapter_ != nullptr) {
+    reputation_adapter_->TryRecordSignedProposal(
+        std::move(signed_proposal_snapshot));
+  }
   if (has_proposal_qc_snapshot && reputation_adapter_ != nullptr) {
     reputation_adapter_->TryRecordCertifiedQc(std::move(proposal_qc_snapshot));
   }

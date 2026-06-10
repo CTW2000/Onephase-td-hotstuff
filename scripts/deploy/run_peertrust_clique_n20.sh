@@ -171,8 +171,6 @@ generate_performance_server_conf($N)
   export TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE=1
   export TD_HS_EVIDENCE_ENABLE=0
   export TD_HS_TIMEOUT_ENABLE=0
-  export TD_HS_QC_DIVERSITY_ENABLE=1
-  export TD_HS_QC_SIGNER_COOLDOWN_ROUNDS=8
   export TD_HS_BAD_NODE_COUNT="$num_bad"
   export TD_HS_BAD_NODE_IDS="$bad_node_ids"
   if [ "$num_bad" -gt 0 ]; then
@@ -189,7 +187,7 @@ generate_performance_server_conf($N)
   for((i=1;;i++)); do
     cf=$PWD/config_out/client${i}.config
     if [ ! -f "$cf" ]; then break; fi
-    env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_UNFAIR_LEADER_IDS \
+    env -u TD_HS_SILENT_LEADER_IDS \
         -u TD_HS_PEERTRUST_CLIQUE_IDS \
         -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS \
         -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS \

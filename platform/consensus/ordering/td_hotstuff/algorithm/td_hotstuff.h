@@ -72,6 +72,9 @@ class HotStuff : public common::ProtocolBase {
   std::vector<int> CertificateSigners(
       const std::map<int, std::unique_ptr<Certificate>>& certs,
       int view) const;
+  bool MaybeMakeSignedProposalEvidenceSnapshotLocked(
+      const Proposal& proposal,
+      TdHotstuffSignedProposalEvidenceSnapshot* snapshot);
   bool MaybeMakeQcEvidenceSnapshotLocked(const QC& qc,
                                           TdHotstuffQcEvidenceSnapshot* snapshot);
   bool MaybeFormQcLocked(int view, const std::string& hash);
@@ -90,6 +93,9 @@ class HotStuff : public common::ProtocolBase {
   void MaybeActivateReadyWeightUpdatesAfterViewAdvance();
   bool ApplyTimeoutCertLocked(const TimeoutCert& cert);
   bool IsSilentLeaderForExperiment() const;
+  bool IsDoubleProposalForExperiment() const;
+  std::unique_ptr<Proposal> MakeConflictingProposalForExperiment(
+      const Proposal& proposal);
   std::vector<std::unique_ptr<Transaction>> TakeTransactionsForView(
       int view, int max_count);
   void MarkTransactionCommitted(const Transaction& txn);

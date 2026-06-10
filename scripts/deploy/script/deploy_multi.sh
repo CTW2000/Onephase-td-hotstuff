@@ -24,7 +24,7 @@ server_path=${server_path:1}
 server_name=`echo "$server" | awk -F':' '{print $NF}'`
 server_bin=${server_name}
 
-local_server_env=(env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_UNFAIR_LEADER_IDS -u TD_HS_PEERTRUST_CLIQUE_IDS -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS -u TD_HS_SYBIL_GRAPH_ATTACK_IDS -u TD_HS_SYBIL_GRAPH_REVIEWER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS -u TD_HS_INVALID_TC_PROPOSAL_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT)
+local_server_env=(env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_PEERTRUST_CLIQUE_IDS -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS -u TD_HS_SYBIL_GRAPH_ATTACK_IDS -u TD_HS_SYBIL_GRAPH_REVIEWER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS -u TD_HS_INVALID_TC_PROPOSAL_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT)
 remote_server_env=""
 td_env_names=(
   TD_HS_WEIGHTS
@@ -81,7 +81,6 @@ td_env_names=(
   TD_HS_QC_SIGNER_COOLDOWN_ROUNDS
   TD_HS_QC_DIVERSITY_GRACE_US
   TD_HS_TIMEOUT_ENABLE
-  TD_HS_UNFAIR_LEADER_SIGNER_GROUP_SIZE
   TD_HS_TIMEOUT_MS
   TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS
 )
@@ -100,12 +99,6 @@ fi
 is_silent_leader_node() {
   local node_id="$1"
   local raw_ids=",${TD_HS_SILENT_LEADER_IDS:-},"
-  [[ "$raw_ids" == *",${node_id},"* ]]
-}
-
-is_unfair_leader_node() {
-  local node_id="$1"
-  local raw_ids=",${TD_HS_UNFAIR_LEADER_IDS:-},"
   [[ "$raw_ids" == *",${node_id},"* ]]
 }
 
@@ -165,13 +158,6 @@ remote_env_for_node() {
       env_prefix="${env_prefix}TD_HS_SILENT_LEADER=1 "
     else
       env_prefix="env TD_HS_SILENT_LEADER=1 "
-    fi
-  fi
-  if is_unfair_leader_node "$node_id"; then
-    if [ -n "${env_prefix}" ]; then
-      env_prefix="${env_prefix}TD_HS_UNFAIR_LEADER=1 "
-    else
-      env_prefix="env TD_HS_UNFAIR_LEADER=1 "
     fi
   fi
   if is_peertrust_clique_node "$node_id"; then
@@ -339,12 +325,6 @@ echo "Phase 3: Start nodes..."
             node_local_env=(env)
           fi
           node_local_env+=("TD_HS_SILENT_LEADER=1")
-        fi
-        if is_unfair_leader_node "$n"; then
-          if [ ${#node_local_env[@]} -eq 0 ]; then
-            node_local_env=(env)
-          fi
-          node_local_env+=("TD_HS_UNFAIR_LEADER=1")
         fi
         if is_peertrust_clique_node "$n"; then
           if [ ${#node_local_env[@]} -eq 0 ]; then

@@ -92,6 +92,20 @@ ToLeaderOutcomeEvidenceRecord(
   return record;
 }
 
+resdb::consensus::reputation::SignedProposalEvidence ToSignedProposalEvidence(
+    const TdHotstuffSignedProposalEvidenceSnapshot& snapshot) {
+  resdb::consensus::reputation::SignedProposalEvidence evidence;
+  evidence.protocol_id = "td_hotstuff";
+  evidence.leader_id = snapshot.leader_id;
+  evidence.view_or_round = snapshot.view;
+  evidence.slot_or_height = snapshot.slot;
+  evidence.proposal_hash = snapshot.proposal_hash;
+  evidence.signature_verified = snapshot.signature_verified;
+  evidence.active_weight_root = snapshot.active_weight_root;
+  evidence.weight_version = snapshot.active_weight_version;
+  return evidence;
+}
+
 TdHotstuffReputationAdapterOptions
 TdHotstuffReputationAdapter::OptionsFromEnv() {
   TdHotstuffReputationAdapterOptions options;
@@ -123,6 +137,28 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.leader_selection_enabled = EnvFlagEnabled("TD_HS_LEADER_SELECTION_ENABLE");
   options.reputation_config.leader_recovery_enabled =
       EnvFlagEnabled("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE");
+  options.reputation_config.strong_fault_enabled =
+      EnvFlagEnabled("TD_HS_STRONG_FAULT_ENABLE");
+  options.reputation_config.double_proposal_detection_enabled =
+      EnvFlagEnabled("TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE");
+  options.reputation_config.double_vote_detection_enabled =
+      EnvFlagEnabled("TD_HS_DOUBLE_VOTE_DETECT_ENABLE");
+  options.reputation_config.invalid_qc_proposal_detection_enabled =
+      EnvFlagEnabled("TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE");
+  options.reputation_config.weight_update_vote_equivocation_detection_enabled =
+      EnvFlagEnabled("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE");
+  options.reputation_config.timeout_vote_equivocation_detection_enabled =
+      EnvFlagEnabled("TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE");
+  options.reputation_config.invalid_tc_proposal_detection_enabled =
+      EnvFlagEnabled("TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE");
+  options.reputation_config.conflicting_qc_detection_enabled =
+      EnvFlagEnabled("TD_HS_CONFLICTING_QC_DETECT_ENABLE");
+  options.reputation_config.strong_fault_target_weight = PositiveIntFromEnv(
+      "TD_HS_STRONG_FAULT_TARGET_WEIGHT",
+      options.reputation_config.strong_fault_target_weight);
+  options.signed_proposal_evidence_enabled =
+      options.reputation_config.strong_fault_enabled &&
+      options.reputation_config.double_proposal_detection_enabled;
   options.audit_jsonl_enabled =
       EnvFlagEnabled("TD_HS_REPUTATION_AUDIT_JSONL_ENABLE");
   const char* audit_path = std::getenv("TD_HS_REPUTATION_AUDIT_JSONL_PATH");
@@ -138,7 +174,9 @@ TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
     : TdHotstuffReputationAdapter(
           local_node_id, total_replicas,
           RuntimeFromOptions(local_node_id, total_replicas, options),
-          options.enabled) {}
+          options.enabled) {
+  signed_proposal_evidence_enabled_ = options.signed_proposal_evidence_enabled;
+}
 
 TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
     int local_node_id, int total_replicas,
@@ -148,6 +186,7 @@ TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
     : local_node_id_(local_node_id),
       total_replicas_(total_replicas),
       enabled_(enabled),
+      signed_proposal_evidence_enabled_(false),
       runtime_(std::move(runtime)) {}
 
 TdHotstuffReputationAdapter::~TdHotstuffReputationAdapter() { Stop(); }
@@ -221,6 +260,21 @@ bool TdHotstuffReputationAdapter::TryRecordLeaderOutcome(
       ToLeaderOutcomeEvidenceRecord(snapshot));
 }
 
+bool TdHotstuffReputationAdapter::TryRecordSignedProposal(
+    TdHotstuffSignedProposalEvidenceSnapshot snapshot) {
+  if (!WantsSignedProposalEvidence() || runtime_ == nullptr) {
+    return false;
+  }
+  if (snapshot.total_replicas <= 0) {
+    snapshot.total_replicas = total_replicas_;
+  }
+  if (snapshot.local_node_id <= 0) {
+    snapshot.local_node_id = local_node_id_;
+  }
+  return runtime_->RecordSignedProposalEvidence(
+      ToSignedProposalEvidence(snapshot));
+}
+
 bool TdHotstuffReputationAdapter::AdvanceWatermark(int view) {
   return enabled_ && runtime_ != nullptr && runtime_->AdvanceWatermark(view);
 }
@@ -252,6 +306,10 @@ TdHotstuffReputationAdapter::FindLocalCandidate(
     return std::nullopt;
   }
   return runtime_->FindLocalCandidate(key);
+}
+
+bool TdHotstuffReputationAdapter::WantsSignedProposalEvidence() const {
+  return enabled_ && signed_proposal_evidence_enabled_;
 }
 
 uint64_t TdHotstuffReputationAdapter::queued_count() const {

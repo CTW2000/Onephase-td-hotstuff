@@ -111,6 +111,29 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   unsetenv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT");
 }
 
+
+TEST(TdHotstuffReputationAdapterTest,
+     SignedProposalEvidenceIsGatedByDoubleProposalDetection) {
+  unsetenv("TD_HS_STRONG_FAULT_ENABLE");
+  unsetenv("TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE");
+  setenv("TD_HS_REPUTATION_ENABLE", "1", 1);
+  TdHotstuffReputationAdapterOptions options =
+      TdHotstuffReputationAdapter::OptionsFromEnv();
+  EXPECT_FALSE(options.signed_proposal_evidence_enabled);
+
+  setenv("TD_HS_STRONG_FAULT_ENABLE", "1", 1);
+  options = TdHotstuffReputationAdapter::OptionsFromEnv();
+  EXPECT_FALSE(options.signed_proposal_evidence_enabled);
+
+  setenv("TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE", "1", 1);
+  options = TdHotstuffReputationAdapter::OptionsFromEnv();
+  EXPECT_TRUE(options.signed_proposal_evidence_enabled);
+
+  unsetenv("TD_HS_REPUTATION_ENABLE");
+  unsetenv("TD_HS_STRONG_FAULT_ENABLE");
+  unsetenv("TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE");
+}
+
 TEST(TdHotstuffReputationAdapterTest, ConvertsQcSnapshotToCertifiedEvidence) {
   const TdHotstuffQcEvidenceSnapshot snapshot =
       Snapshot(/*view=*/7, /*leader=*/4, {1, 2, 3}, {1, 2, 3, 4});

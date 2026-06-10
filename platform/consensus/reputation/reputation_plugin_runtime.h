@@ -106,6 +106,7 @@ class ReputationPluginRuntime {
 
   bool RecordEvidence(CertifiedSignerEvidenceRecord evidence);
   bool RecordLeaderOutcome(LeaderOutcomeEvidenceRecord evidence);
+  bool RecordSignedProposalEvidence(SignedProposalEvidence evidence);
   bool AdvanceWatermark(int view_or_round);
   void UpdateActiveWeights(ReputationWeightSnapshot snapshot);
 
@@ -127,8 +128,10 @@ class ReputationPluginRuntime {
   void WorkerLoop();
   void ProcessEvidence(CertifiedSignerEvidenceRecord evidence);
   void ProcessLeaderOutcome(LeaderOutcomeEvidenceRecord evidence);
+  void ProcessSignedProposalEvidence(SignedProposalEvidence evidence);
   void ProcessWatermark(int view_or_round);
   void FinalizeWindow(const WindowKey& key, WindowBuffer* buffer);
+  void ApplyPersistentStrongFaults(ReputationCandidate* candidate);
   void PushCompleted(ReputationCandidate candidate);
   void WriteAudit(const ReputationCandidate& candidate);
   ReputationWeightSnapshot SnapshotFromFields(
@@ -138,6 +141,8 @@ class ReputationPluginRuntime {
       const CertifiedSignerEvidenceRecord& evidence) const;
   ReputationWeightSnapshot SnapshotForLeaderOutcome(
       const LeaderOutcomeEvidenceRecord& evidence) const;
+  ReputationWeightSnapshot SnapshotForSignedProposal(
+      const SignedProposalEvidence& evidence) const;
   std::vector<uint64_t> ScheduledLeaderCountsForWindow(
       int start_view, int end_view,
       const ReputationWeightSnapshot& snapshot) const;
@@ -158,6 +163,7 @@ class ReputationPluginRuntime {
   std::map<WindowKey, WindowBuffer> windows_;
   std::map<uint64_t, ReputationCandidate> completed_by_version_;
   std::map<ReputationCandidateKey, ReputationCandidate> completed_index_;
+  std::set<int> persistent_strong_fault_validators_;
   std::ofstream audit_file_;
 
   std::atomic<uint64_t> queued_count_{0};

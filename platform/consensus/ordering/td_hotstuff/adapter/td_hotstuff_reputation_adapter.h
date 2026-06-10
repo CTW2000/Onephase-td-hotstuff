@@ -39,6 +39,18 @@ struct TdHotstuffLeaderOutcomeEvidenceSnapshot {
   uint64_t active_weight_version = 0;
 };
 
+struct TdHotstuffSignedProposalEvidenceSnapshot {
+  int local_node_id = 0;
+  int total_replicas = 0;
+  int view = 0;
+  int slot = 0;
+  int leader_id = 0;
+  std::string proposal_hash;
+  bool signature_verified = false;
+  std::string active_weight_root;
+  uint64_t active_weight_version = 0;
+};
+
 struct TdHotstuffReputationAdapterOptions {
   bool enabled = false;
   size_t window_size = 4096;
@@ -54,6 +66,7 @@ struct TdHotstuffReputationAdapterOptions {
   std::string initial_leader_weight_root;
   uint64_t initial_leader_weight_version = 0;
   resdb::consensus::reputation::ReputationConfig reputation_config;
+  bool signed_proposal_evidence_enabled = false;
 };
 
 resdb::consensus::reputation::CertifiedSignerEvidence
@@ -65,6 +78,9 @@ ToCertifiedSignerEvidenceRecord(const TdHotstuffQcEvidenceSnapshot& snapshot);
 resdb::consensus::reputation::LeaderOutcomeEvidenceRecord
 ToLeaderOutcomeEvidenceRecord(
     const TdHotstuffLeaderOutcomeEvidenceSnapshot& snapshot);
+
+resdb::consensus::reputation::SignedProposalEvidence ToSignedProposalEvidence(
+    const TdHotstuffSignedProposalEvidenceSnapshot& snapshot);
 
 class TdHotstuffReputationAdapter {
  public:
@@ -89,6 +105,8 @@ class TdHotstuffReputationAdapter {
 
   bool TryRecordCertifiedQc(TdHotstuffQcEvidenceSnapshot snapshot);
   bool TryRecordLeaderOutcome(TdHotstuffLeaderOutcomeEvidenceSnapshot snapshot);
+  bool TryRecordSignedProposal(
+      TdHotstuffSignedProposalEvidenceSnapshot snapshot);
   bool AdvanceWatermark(int view);
   void UpdateActiveWeights(
       resdb::consensus::reputation::ReputationWeightSnapshot snapshot);
@@ -102,6 +120,7 @@ class TdHotstuffReputationAdapter {
       const resdb::consensus::reputation::ReputationCandidateKey& key) const;
 
   bool enabled() const { return enabled_; }
+  bool WantsSignedProposalEvidence() const;
   uint64_t queued_count() const;
   uint64_t dropped_count() const;
   uint64_t computed_window_count() const;
@@ -114,6 +133,7 @@ class TdHotstuffReputationAdapter {
   const int local_node_id_;
   const int total_replicas_;
   bool enabled_ = false;
+  bool signed_proposal_evidence_enabled_ = false;
   std::shared_ptr<resdb::consensus::reputation::ReputationPluginRuntime>
       runtime_;
 };

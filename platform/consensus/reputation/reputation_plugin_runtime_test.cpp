@@ -51,6 +51,30 @@ CertifiedSignerEvidenceRecord Evidence(int view, const std::string& digest) {
   return record;
 }
 
+SignedProposalEvidence ProposalEvidence(int view, int leader,
+                                        const std::string& hash) {
+  SignedProposalEvidence evidence;
+  evidence.protocol_id = "td_hotstuff";
+  evidence.leader_id = leader;
+  evidence.view_or_round = view;
+  evidence.slot_or_height = 0;
+  evidence.proposal_hash = hash;
+  evidence.signature_verified = true;
+  evidence.active_weight_root = WeightRootHex({100, 100, 100, 100});
+  evidence.weight_version = 0;
+  return evidence;
+}
+
+ReputationRuntimeOptions StrongFaultRuntimeOptions() {
+  ReputationRuntimeOptions options = RuntimeOptions();
+  options.initial_weights = {100, 100, 100, 100};
+  options.initial_weight_root = WeightRootHex(options.initial_weights);
+  options.config.strong_fault_enabled = true;
+  options.config.double_proposal_detection_enabled = true;
+  options.config.strong_fault_target_weight = 1;
+  return options;
+}
+
 std::vector<ReputationCandidate> WaitForCandidates(
     ReputationPluginRuntime* runtime, size_t count) {
   for (int i = 0; i < 100; ++i) {
@@ -125,6 +149,90 @@ TEST(ReputationPluginRuntimeTest, FindLocalCandidateReturnsCompletedCandidate) {
 
   ASSERT_TRUE(found.has_value());
   EXPECT_EQ(found->candidate_digest_hex, candidates[0].candidate_digest_hex);
+}
+
+
+TEST(ReputationPluginRuntimeTest,
+     NormalSignedProposalsAreNotRetainedAsStrongFaultEvidence) {
+  ReputationPluginRuntime runtime(StrongFaultRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
+  EXPECT_TRUE(runtime.RecordSignedProposalEvidence(
+      ProposalEvidence(0, /*leader=*/1, "proposal-0")));
+  EXPECT_TRUE(runtime.RecordSignedProposalEvidence(
+      ProposalEvidence(1, /*leader=*/2, "proposal-1")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  EXPECT_TRUE(candidates[0].strong_faults.empty());
+  EXPECT_EQ(candidates[0].next_weights[0], 100);
+}
+
+TEST(ReputationPluginRuntimeTest, ConflictingSignedProposalsAreRetained) {
+  ReputationPluginRuntime runtime(StrongFaultRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordSignedProposalEvidence(
+      ProposalEvidence(1, /*leader=*/1, "proposal-a")));
+  EXPECT_TRUE(runtime.RecordSignedProposalEvidence(
+      ProposalEvidence(1, /*leader=*/1, "proposal-b")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 2);
+  ASSERT_EQ(candidates[0].strong_faults.size(), 1);
+  EXPECT_EQ(candidates[0].strong_faults[0].type,
+            StrongFaultType::kDoubleProposal);
+  EXPECT_EQ(candidates[0].next_weights[0], 1);
+  EXPECT_EQ(candidates[0].next_weights[1], 100);
+}
+
+TEST(ReputationPluginRuntimeTest, DuplicateSameHashProposalIsIgnored) {
+  ReputationPluginRuntime runtime(StrongFaultRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
+  EXPECT_TRUE(runtime.RecordSignedProposalEvidence(
+      ProposalEvidence(1, /*leader=*/1, "proposal-a")));
+  EXPECT_TRUE(runtime.RecordSignedProposalEvidence(
+      ProposalEvidence(1, /*leader=*/1, "proposal-a")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  EXPECT_TRUE(candidates[0].strong_faults.empty());
+  EXPECT_EQ(candidates[0].next_weights[0], 100);
+}
+
+TEST(ReputationPluginRuntimeTest, PersistentStrongFaultKeepsTargetWeight) {
+  ReputationPluginRuntime runtime(StrongFaultRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordSignedProposalEvidence(
+      ProposalEvidence(1, /*leader=*/1, "proposal-a")));
+  EXPECT_TRUE(runtime.RecordSignedProposalEvidence(
+      ProposalEvidence(1, /*leader=*/1, "proposal-b")));
+  runtime.AdvanceWatermark(4);
+  auto first_candidates = WaitForCandidates(&runtime, 1);
+  ASSERT_EQ(first_candidates.size(), 1);
+  EXPECT_EQ(first_candidates[0].next_weights[0], 1);
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(4, "qc-4")));
+  runtime.AdvanceWatermark(8);
+  auto second_candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(second_candidates.size(), 1);
+  EXPECT_TRUE(second_candidates[0].strong_faults.empty());
+  EXPECT_EQ(second_candidates[0].next_weights[0], 1);
 }
 
 TEST(ReputationPluginRuntimeTest,
