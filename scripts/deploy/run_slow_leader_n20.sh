@@ -31,7 +31,8 @@ else
   SLOW_COUNTS=(0 1 4 6)
 fi
 N=20
-TIMER=100
+TIMER="${SLOW_LEADER_TIMER_MS:-100}"
+export TD_HS_TIMEOUT_MS="$TIMER"
 
 CONFIG_FILES_TO_RESTORE=(
   "config/hs1.config"
@@ -66,6 +67,58 @@ derive_bad_node_ids() {
     ids="${ids}${bad_id}"
   done
   echo "$ids"
+}
+
+configure_td_hotstuff_reputation_pipeline() {
+  export TD_HS_REPUTATION_ENABLE=1
+  export TD_HS_WEIGHT_UPDATE_ENABLE=1
+  export TD_HS_STRONG_FAULT_ENABLE=1
+  export TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE=1
+  export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=1
+  export TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE=1
+  export TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE=1
+  export TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE=1
+  export TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE=1
+  export TD_HS_CONFLICTING_QC_DETECT_ENABLE=1
+  export TD_HS_STRONG_FAULT_TARGET_WEIGHT=1
+  # Soft-fault experiments need to converge inside one benchmark run. Good
+  # validators recover the full decay; low-score leaders/voters drop quickly.
+  export TD_HS_REPUTATION_DECAY_PER_EPOCH=99
+  export TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH=99
+  export TD_HS_REPUTATION_BONUS_PER_EPOCH=0
+  export TD_HS_REPUTATION_WINDOW_SIZE=64
+  export TD_HS_REPUTATION_MIN_CANDIDATE_QCS=16
+  export TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS=64
+  export TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY=1
+  export TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS=32
+  export TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS="${TD_HS_SLOW_LEADER_EMPTY_PROPOSAL_VIEWS:-20}"
+  export TD_HS_LEADER_SELECTION_ENABLE=1
+  export TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT=10
+  export TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=1
+  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1
+}
+
+clear_td_hotstuff_reputation_pipeline() {
+  unset TD_HS_REPUTATION_ENABLE TD_HS_WEIGHT_UPDATE_ENABLE
+  unset TD_HS_STRONG_FAULT_ENABLE TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE
+  unset TD_HS_DOUBLE_VOTE_DETECT_ENABLE
+  unset TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE
+  unset TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE
+  unset TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE
+  unset TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE
+  unset TD_HS_CONFLICTING_QC_DETECT_ENABLE
+  unset TD_HS_STRONG_FAULT_TARGET_WEIGHT
+  unset TD_HS_REPUTATION_DECAY_PER_EPOCH
+  unset TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH
+  unset TD_HS_REPUTATION_BONUS_PER_EPOCH
+  unset TD_HS_REPUTATION_WINDOW_SIZE TD_HS_REPUTATION_MIN_CANDIDATE_QCS
+  unset TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS
+  unset TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY
+  unset TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS
+  unset TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS
+  unset TD_HS_LEADER_SELECTION_ENABLE TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT
+  unset TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE
+  unset TD_HS_REPUTATION_AUDIT_JSONL_ENABLE
 }
 
 cleanup_all() {
@@ -200,10 +253,13 @@ for num_slow in "${SLOW_COUNTS[@]}"; do
 
     config_non_responsive_num=$num_slow
     if [[ "$proto" == "TD-Hotstuff" || "$proto" == "TD-HotStuff" || "$proto" == "TD-HS" ]]; then
+      configure_td_hotstuff_reputation_pipeline
       # TD-Hotstuff silent-leader experiments use per-node
       # TD_HS_SILENT_LEADER=1 injection. Keep generic network-delay replicas
       # disabled so the benchmark measures only silent leaders, not slow voters.
       config_non_responsive_num=0
+    else
+      clear_td_hotstuff_reputation_pipeline
     fi
 
     python3 -c "

@@ -86,6 +86,32 @@ CandidateWeightUpdate CandidateMessage(
 }
 
 
+TEST(WeightUpdateControllerTest,
+     ConflictingWeightUpdateVotePreservesScopeAndSignsDifferentDigest) {
+  WeightUpdateVote vote;
+  vote.set_signer(2);
+  vote.set_old_weight_root("old-root");
+  vote.set_old_weight_version(7);
+  vote.set_activation_view(64);
+  vote.set_candidate_digest("candidate-a");
+  *vote.mutable_signature() = SignatureFor(2);
+
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(_)).WillOnce(Return(SignatureFor(2)));
+
+  std::unique_ptr<WeightUpdateVote> conflicting =
+      MakeConflictingWeightUpdateVoteForExperiment(vote, /*node_id=*/2,
+                                                   &verifier);
+
+  ASSERT_NE(conflicting, nullptr);
+  EXPECT_EQ(conflicting->signer(), vote.signer());
+  EXPECT_EQ(conflicting->old_weight_root(), vote.old_weight_root());
+  EXPECT_EQ(conflicting->old_weight_version(), vote.old_weight_version());
+  EXPECT_EQ(conflicting->activation_view(), vote.activation_view());
+  EXPECT_NE(conflicting->candidate_digest(), vote.candidate_digest());
+  EXPECT_EQ(conflicting->signature().node_id(), 2);
+}
+
 TEST(WeightUpdateControllerTest, IgnoresNoOpLocalCandidate) {
   auto schedule = std::make_shared<WeightSchedule>(4, std::vector<int64_t>{1, 1, 1, 1});
   MockSignatureVerifier verifier;

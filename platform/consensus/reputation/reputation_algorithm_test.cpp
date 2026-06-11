@@ -121,10 +121,12 @@ ReputationCandidate ComputeCandidate(
         {},
     const std::vector<int>& prior_peertrust_leader_debt = {},
     const std::vector<int>& prior_sybil_graph_debt = {},
-    const std::vector<uint64_t>& scheduled_leader_counts = {}) {
+    const std::vector<uint64_t>& scheduled_leader_counts = {},
+    const std::vector<int64_t>& current_leader_weights = {}) {
   ReputationWindowInput input = BuildWindowInput(
       node_id, total_replicas, window_index, evidence, current_weights,
       old_weight_root_hex, old_weight_version, activation_view);
+  input.current_leader_weights = current_leader_weights;
   input.signed_proposal_evidence = signed_proposal_evidence;
   input.signed_vote_evidence = signed_vote_evidence;
   input.invalid_qc_proposal_evidence = invalid_qc_proposal_evidence;
@@ -385,6 +387,7 @@ TEST(ReputationAlgorithmTest, LeaderWeightsStayRoundRobinWhenEveryoneEligible) {
 
 TEST(ReputationAlgorithmTest, LeaderWeightsPreserveBelowThresholdForExclusion) {
   ReputationConfig config = TestConfig();
+  config.leader_recovery_enabled = false;
   config.leader_eligible_min_weight = 10;
 
   const ReputationCandidate candidate = ComputeCandidate(
@@ -397,6 +400,7 @@ TEST(ReputationAlgorithmTest, LeaderWeightsPreserveBelowThresholdForExclusion) {
 
 TEST(ReputationAlgorithmTest, LeaderWeightsDropThresholdBoundaryFromLeaderSet) {
   ReputationConfig config = TestConfig();
+  config.leader_recovery_enabled = false;
   config.leader_eligible_min_weight = 10;
 
   std::vector<TestEvidence> evidence;
@@ -429,6 +433,45 @@ TEST(ReputationAlgorithmTest, SlowVoterLosesRecoveryWithoutDirectSlash) {
   EXPECT_LT(candidate.validators[4].vote_score, 30);
   EXPECT_LT(candidate.validators[4].next_weight, 30);
   EXPECT_EQ(candidate.validators[0].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest,
+     SlowVoterDecayDoesNotReduceLeaderWeightWhenLeaderScoreHealthy) {
+  ReputationConfig config = TestConfig();
+  config.leader_eligible_min_weight = 10;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 10; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 5) + 1,
+                                   Bitmap({1, 2, 3, 4}, 5)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 5, 1, evidence, {11, 11, 11, 11, 11}, config, "old-root", 0, 64);
+
+  EXPECT_LT(candidate.validators[4].next_weight,
+            config.leader_eligible_min_weight);
+  EXPECT_EQ(candidate.validators[4].leader_score, 100);
+  EXPECT_EQ(candidate.leader_weights[4], 100);
+}
+
+TEST(ReputationAlgorithmTest,
+     CurrentLeaderIneligibilityPersistsWithoutLeaderReentryEvidence) {
+  ReputationConfig config = TestConfig();
+  config.leader_eligible_min_weight = 10;
+  config.min_leader_opportunities = 3;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, 2, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {1, 100, 100, 100}, config, "old-root", 1, 64,
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {1, 100, 100, 100});
+
+  EXPECT_EQ(candidate.validators[0].leader_opportunity_count, 0);
+  EXPECT_EQ(candidate.validators[0].next_weight, 1);
+  EXPECT_EQ(candidate.leader_weights[0], 1);
 }
 
 TEST(ReputationAlgorithmTest, SingleTransientTimeoutDoesNotReduceLeaderRecovery) {
@@ -501,6 +544,26 @@ TEST(ReputationAlgorithmTest,
   EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
   EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 3);
   EXPECT_LT(candidate.validators[1].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest,
+     RepeatedLeaderTimeoutsDoNotReduceRecovery) {
+  ReputationConfig config = TestConfig();
+  config.min_leader_opportunities = 8;
+  config.leader_recovery_enabled = true;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 3; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+    evidence.push_back(TimeoutEvidence(view + 10, 2));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
+  EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 0);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
 }
 
 TEST(ReputationAlgorithmTest,

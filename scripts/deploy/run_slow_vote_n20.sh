@@ -61,6 +61,58 @@ cleanup_all() {
   sleep 1
 }
 
+configure_td_hotstuff_reputation_pipeline() {
+  export TD_HS_REPUTATION_ENABLE=1
+  export TD_HS_WEIGHT_UPDATE_ENABLE=1
+  export TD_HS_STRONG_FAULT_ENABLE=1
+  export TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE=1
+  export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=1
+  export TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE=1
+  export TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE=1
+  export TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE=1
+  export TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE=1
+  export TD_HS_CONFLICTING_QC_DETECT_ENABLE=1
+  export TD_HS_STRONG_FAULT_TARGET_WEIGHT=1
+  # Soft-fault experiments need to converge inside one benchmark run. Good
+  # validators recover the full decay; low-score leaders/voters drop quickly.
+  export TD_HS_REPUTATION_DECAY_PER_EPOCH=99
+  export TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH=99
+  export TD_HS_REPUTATION_BONUS_PER_EPOCH=0
+  export TD_HS_REPUTATION_WINDOW_SIZE=64
+  export TD_HS_REPUTATION_MIN_CANDIDATE_QCS=16
+  export TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS=64
+  export TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY=1
+  export TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS=32
+  export TD_HS_SLOW_VOTE_DELAY_US="${TD_HS_SLOW_VOTE_DELAY_US:-$((MEAN_DELAY_MS * 1000))}"
+  export TD_HS_LEADER_SELECTION_ENABLE=1
+  export TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT=10
+  export TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=1
+  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1
+}
+
+clear_td_hotstuff_reputation_pipeline() {
+  unset TD_HS_REPUTATION_ENABLE TD_HS_WEIGHT_UPDATE_ENABLE
+  unset TD_HS_STRONG_FAULT_ENABLE TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE
+  unset TD_HS_DOUBLE_VOTE_DETECT_ENABLE
+  unset TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE
+  unset TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE
+  unset TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE
+  unset TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE
+  unset TD_HS_CONFLICTING_QC_DETECT_ENABLE
+  unset TD_HS_STRONG_FAULT_TARGET_WEIGHT
+  unset TD_HS_REPUTATION_DECAY_PER_EPOCH
+  unset TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH
+  unset TD_HS_REPUTATION_BONUS_PER_EPOCH
+  unset TD_HS_REPUTATION_WINDOW_SIZE TD_HS_REPUTATION_MIN_CANDIDATE_QCS
+  unset TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS
+  unset TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY
+  unset TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS
+  unset TD_HS_SLOW_VOTE_DELAY_US
+  unset TD_HS_LEADER_SELECTION_ENABLE TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT
+  unset TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE
+  unset TD_HS_REPUTATION_AUDIT_JSONL_ENABLE
+}
+
 collect_logs() {
   rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
   for ip in $SERVERS; do
@@ -112,7 +164,8 @@ run_single_experiment() {
   for((i=1;;i++)); do
     cf=$PWD/config_out/client${i}.config
     if [ ! -f "$cf" ]; then break; fi
-    env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS \
+    env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_SLOW_VOTE_IDS \
+        -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS \
         -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
         -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS \
         -u TD_HS_INVALID_TC_PROPOSAL_IDS \
@@ -178,26 +231,42 @@ for num_slow in "${SLOW_VOTE_COUNTS[@]}"; do
       "TD-Hotstuff"|"TD-HotStuff"|"TD-HS") mpt=5; cfg="td_hotstuff";;
     esac
 
+    if [[ "$proto" == "TD-Hotstuff" || "$proto" == "TD-HotStuff" || "$proto" == "TD-HS" ]]; then
+      configure_td_hotstuff_reputation_pipeline
+      config_network_delay_num=0
+      if [ "$num_slow" -gt 0 ]; then
+        export TD_HS_SLOW_VOTE_IDS="$(seq -s, 1 "$num_slow")"
+      else
+        unset TD_HS_SLOW_VOTE_IDS
+      fi
+    else
+      clear_td_hotstuff_reputation_pipeline
+      unset TD_HS_SLOW_VOTE_IDS
+      config_network_delay_num=$num_slow
+    fi
+
     python3 -c "
 from network_delay_experiment import generate_config, generate_performance_server_conf
 generate_config(config_path='./config/${cfg}.config',
                 max_process_txn=$mpt,
-                network_delay_num=$num_slow,
+                network_delay_num=$config_network_delay_num,
                 mean_network_delay=$MEAN_DELAY_MS)
 generate_performance_server_conf($N)
 "
     actual_ndn=$(grep network_delay_num ./config/${cfg}.config | grep -o '[0-9]\+')
-    if [ "$actual_ndn" != "$num_slow" ]; then
-      echo "ERROR: ${cfg}.config has network_delay_num=$actual_ndn, expected $num_slow — ABORTING"
+    if [ "$actual_ndn" != "$config_network_delay_num" ]; then
+      echo "ERROR: ${cfg}.config has network_delay_num=$actual_ndn, expected $config_network_delay_num — ABORTING"
       exit 1
     fi
 
     result_file="$RESULT_DIR/${proto}_slowvote${num_slow}.txt"
     run_single_experiment "$proto" "SlowVote num=$num_slow mean=${MEAN_DELAY_MS}ms n=$N" "$result_file" "./config/performance.conf"
+    unset TD_HS_SLOW_VOTE_IDS
   done
 done
 
 cleanup_all
+unset TD_HS_SLOW_VOTE_IDS
 echo ""
 echo "======================================================================"
 echo "  SLOW VOTE EXPERIMENTS COMPLETE (n=$N)"

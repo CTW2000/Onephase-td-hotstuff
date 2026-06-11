@@ -80,6 +80,11 @@ class HotStuff : public common::ProtocolBase {
   bool MaybeMakeInvalidQcProposalEvidenceSnapshotLocked(
       const Proposal& proposal, const ProposalValidationResult& validation,
       TdHotstuffInvalidQcProposalEvidenceSnapshot* snapshot);
+  bool MaybeMakeSignedWeightUpdateVoteEvidenceSnapshot(
+      const WeightUpdateVote& vote,
+      TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot* snapshot) const;
+  void MaybeBroadcastConflictingWeightUpdateVoteForExperiment(
+      const WeightUpdateVote& vote);
   bool MaybeMakeQcEvidenceSnapshotLocked(const QC& qc,
                                           TdHotstuffQcEvidenceSnapshot* snapshot);
   bool MaybeFormQcLocked(int view, const std::string& hash);
@@ -100,7 +105,10 @@ class HotStuff : public common::ProtocolBase {
   bool IsSilentLeaderForExperiment() const;
   bool IsDoubleProposalForExperiment() const;
   bool IsDoubleVoteForExperiment() const;
+  bool IsSlowVoteForExperiment() const;
+  void MaybeDelayVoteForExperiment() const;
   bool IsInvalidQcForExperiment() const;
+  bool IsWeightUpdateVoteEquivocationForExperiment() const;
   std::unique_ptr<Proposal> MakeConflictingProposalForExperiment(
       const Proposal& proposal);
   std::unique_ptr<Proposal> MakeInvalidQcProposalForExperiment(

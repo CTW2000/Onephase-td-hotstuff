@@ -583,25 +583,30 @@ def print_final_weight_summary(final_weights_by_log, final_leader_weights_by_log
     if not final_weights_by_log:
         return
     final_weights = final_weights_by_log[-1]
+    has_bad_nodes = bool(bad_node_ids) or bad_node_count > 0
     if bad_node_ids:
         bad_indexes = [node_id - 1 for node_id in bad_node_ids
                        if 1 <= node_id <= len(final_weights)]
-    else:
+    elif has_bad_nodes:
         bad_indexes = list(range(min(bad_node_count, len(final_weights))))
+    else:
+        bad_indexes = []
     bad_index_set = set(bad_indexes)
     bad_weights = [final_weights[i] for i in bad_indexes]
     honest_weights = [weight for i, weight in enumerate(final_weights)
                       if i not in bad_index_set]
     print("final active weights:", ",".join(str(v) for v in final_weights))
-    print("bad node final weights:", ",".join(str(v) for v in bad_weights))
+    if has_bad_nodes:
+        print("bad node final weights:", ",".join(str(v) for v in bad_weights))
     if final_leader_weights_by_log:
         final_leader_weights = final_leader_weights_by_log[-1]
         print("final active leader weights:",
               ",".join(str(v) for v in final_leader_weights))
-        leader_bad_weights = [final_leader_weights[i] for i in bad_indexes
-                              if i < len(final_leader_weights)]
-        print("bad node final leader weights:",
-              ",".join(str(v) for v in leader_bad_weights))
+        if has_bad_nodes:
+            leader_bad_weights = [final_leader_weights[i] for i in bad_indexes
+                                  if i < len(final_leader_weights)]
+            print("bad node final leader weights:",
+                  ",".join(str(v) for v in leader_bad_weights))
     if honest_weights:
         honest_avg = sum(honest_weights) / len(honest_weights)
         print("honest final weights min/avg/max:", min(honest_weights),
@@ -692,6 +697,10 @@ if __name__ == '__main__':
                                    final_leader_weights_by_log,
                                    bad_node_count, bad_node_ids)
         print_reputation_summary(files, bad_node_ids)
+    else:
+        print_final_weight_summary(final_weights_by_log,
+                                   final_leader_weights_by_log,
+                                   bad_node_count, bad_node_ids)
     max_raw_lat, avg_raw_lat = cal_lat(lat, len(files) / 2, "raw")
     print("warmup latency samples:", len(warmup_lat))
     max_lat, avg_lat = cal_lat(stable_lat, 0, "stable")

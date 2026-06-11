@@ -20,6 +20,8 @@ namespace td_hotstuff {
 CandidateWeightUpdate ToCandidateWeightUpdate(
     const resdb::consensus::reputation::ReputationCandidate& candidate);
 std::string WeightUpdateVotePayload(const WeightUpdateVote& vote);
+std::unique_ptr<WeightUpdateVote> MakeConflictingWeightUpdateVoteForExperiment(
+    const WeightUpdateVote& vote, int node_id, SignatureVerifier* verifier);
 
 class WeightUpdateController {
  public:

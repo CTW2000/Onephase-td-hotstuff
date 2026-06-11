@@ -61,6 +61,7 @@ struct ReputationRuntimeOptions {
   int total_replicas = 0;
   size_t window_size_views = 4096;
   size_t queue_capacity = 65536;
+  size_t min_candidate_events = 1;
   int activation_delay_windows = 1;
   std::vector<int64_t> initial_weights;
   std::string initial_weight_root;
@@ -108,6 +109,8 @@ class ReputationPluginRuntime {
   bool RecordLeaderOutcome(LeaderOutcomeEvidenceRecord evidence);
   bool RecordSignedProposalEvidence(SignedProposalEvidence evidence);
   bool RecordSignedVoteEvidence(SignedVoteEvidence evidence);
+  bool RecordSignedWeightUpdateVoteEvidence(
+      SignedWeightUpdateVoteEvidence evidence);
   bool RecordInvalidQcProposalEvidence(InvalidQcProposalEvidence evidence);
   bool AdvanceWatermark(int view_or_round);
   void UpdateActiveWeights(ReputationWeightSnapshot snapshot);
@@ -132,6 +135,8 @@ class ReputationPluginRuntime {
   void ProcessLeaderOutcome(LeaderOutcomeEvidenceRecord evidence);
   void ProcessSignedProposalEvidence(SignedProposalEvidence evidence);
   void ProcessSignedVoteEvidence(SignedVoteEvidence evidence);
+  void ProcessSignedWeightUpdateVoteEvidence(
+      SignedWeightUpdateVoteEvidence evidence);
   void ProcessInvalidQcProposalEvidence(InvalidQcProposalEvidence evidence);
   void ProcessWatermark(int view_or_round);
   void FinalizeWindow(const WindowKey& key, WindowBuffer* buffer);
@@ -149,6 +154,8 @@ class ReputationPluginRuntime {
       const SignedProposalEvidence& evidence) const;
   ReputationWeightSnapshot SnapshotForSignedVote(
       const SignedVoteEvidence& evidence) const;
+  ReputationWeightSnapshot SnapshotForSignedWeightUpdateVote(
+      const SignedWeightUpdateVoteEvidence& evidence) const;
   ReputationWeightSnapshot SnapshotForInvalidQcProposal(
       const InvalidQcProposalEvidence& evidence) const;
   std::vector<uint64_t> ScheduledLeaderCountsForWindow(

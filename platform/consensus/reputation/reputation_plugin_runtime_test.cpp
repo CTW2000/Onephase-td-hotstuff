@@ -51,6 +51,18 @@ CertifiedSignerEvidenceRecord Evidence(int view, const std::string& digest) {
   return record;
 }
 
+LeaderOutcomeEvidenceRecord TimeoutOutcome(int view, int leader) {
+  LeaderOutcomeEvidenceRecord record;
+  record.view_or_round = view;
+  record.leader_id = leader;
+  record.outcome_class = OutcomeClass::kTimeoutOrViewChange;
+  record.artifact_digest = "timeout-" + std::to_string(view);
+  record.weight_root_hex = WeightRootHex({100, 100, 100, 100});
+  record.weight_version = 0;
+  record.active_weights = {100, 100, 100, 100};
+  return record;
+}
+
 SignedProposalEvidence ProposalEvidence(int view, int leader,
                                         const std::string& hash) {
   SignedProposalEvidence evidence;
@@ -96,6 +108,22 @@ InvalidQcProposalEvidence InvalidQcEvidence(
   return evidence;
 }
 
+SignedWeightUpdateVoteEvidence WeightUpdateVoteEvidence(
+    int activation_view, int validator, const std::string& candidate_digest,
+    bool signature_verified = true) {
+  SignedWeightUpdateVoteEvidence evidence;
+  evidence.protocol_id = "td_hotstuff";
+  evidence.validator_id = validator;
+  evidence.old_weight_root = WeightRootHex({100, 100, 100, 100});
+  evidence.old_weight_version = 0;
+  evidence.activation_view = activation_view;
+  evidence.candidate_digest = candidate_digest;
+  evidence.signature_verified = signature_verified;
+  evidence.active_weight_root = evidence.old_weight_root;
+  evidence.weight_version = evidence.old_weight_version;
+  return evidence;
+}
+
 ReputationRuntimeOptions StrongFaultRuntimeOptions() {
   ReputationRuntimeOptions options = RuntimeOptions();
   options.initial_weights = {100, 100, 100, 100};
@@ -117,6 +145,13 @@ ReputationRuntimeOptions InvalidQcRuntimeOptions() {
   ReputationRuntimeOptions options = StrongFaultRuntimeOptions();
   options.config.double_proposal_detection_enabled = false;
   options.config.invalid_qc_proposal_detection_enabled = true;
+  return options;
+}
+
+ReputationRuntimeOptions WeightUpdateVoteRuntimeOptions() {
+  ReputationRuntimeOptions options = StrongFaultRuntimeOptions();
+  options.config.double_proposal_detection_enabled = false;
+  options.config.weight_update_vote_equivocation_detection_enabled = true;
   return options;
 }
 
@@ -151,6 +186,40 @@ TEST(ReputationPluginRuntimeTest, FinalizesOnlyAfterWatermarkReachesWindowEnd) {
   EXPECT_EQ(candidates[0].end_view, 4);
   EXPECT_EQ(candidates[0].event_count, 2);
   EXPECT_EQ(candidates[0].activation_view, 8);
+}
+
+TEST(ReputationPluginRuntimeTest, SkipsSoftOnlyPartialWindowBelowMinimumEvents) {
+  ReputationRuntimeOptions options = RuntimeOptions();
+  options.min_candidate_events = 2;
+  ReputationPluginRuntime runtime(options);
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  EXPECT_TRUE(candidates.empty());
+  EXPECT_EQ(runtime.computed_window_count(), 0);
+}
+
+TEST(ReputationPluginRuntimeTest, StrongFaultEvidenceBypassesMinimumEvents) {
+  ReputationRuntimeOptions options = StrongFaultRuntimeOptions();
+  options.min_candidate_events = 16;
+  ReputationPluginRuntime runtime(options);
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordSignedProposalEvidence(
+      ProposalEvidence(1, 2, "proposal-a")));
+  EXPECT_TRUE(runtime.RecordSignedProposalEvidence(
+      ProposalEvidence(1, 2, "proposal-b")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 2);
+  EXPECT_EQ(candidates[0].validators[1].next_weight, 1);
 }
 
 TEST(ReputationPluginRuntimeTest, DedupesAndSortsEquivalentEvidence) {
@@ -346,6 +415,80 @@ TEST(ReputationPluginRuntimeTest, InvalidQcEvidencePenalizesLeaderOnce) {
   EXPECT_EQ(candidates[0].next_weights[3], 1);
 }
 
+TEST(ReputationPluginRuntimeTest,
+     NormalWeightUpdateVotesAreNotRetainedAsStrongFaultEvidence) {
+  ReputationPluginRuntime runtime(WeightUpdateVoteRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/1, /*validator=*/1,
+                               "candidate-a")));
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/2, /*validator=*/1,
+                               "candidate-b")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  EXPECT_TRUE(candidates[0].strong_faults.empty());
+  EXPECT_EQ(candidates[0].next_weights[0], 100);
+}
+
+TEST(ReputationPluginRuntimeTest,
+     ConflictingWeightUpdateVotesAreRetainedAndPenalizeValidator) {
+  ReputationPluginRuntime runtime(WeightUpdateVoteRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/1, /*validator=*/2,
+                               "candidate-a")));
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/1, /*validator=*/2,
+                               "candidate-b")));
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/1, /*validator=*/2,
+                               "candidate-b")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 2);
+  ASSERT_EQ(candidates[0].strong_faults.size(), 1);
+  EXPECT_EQ(candidates[0].strong_faults[0].type,
+            StrongFaultType::kWeightUpdateVoteEquivocation);
+  EXPECT_EQ(candidates[0].strong_faults[0].validator_id, 2);
+  EXPECT_EQ(candidates[0].next_weights,
+            (std::vector<int64_t>{100, 1, 100, 100}));
+}
+
+TEST(ReputationPluginRuntimeTest,
+     WeightUpdateVoteEvidenceRejectsUnverifiedArtifacts) {
+  ReputationPluginRuntime runtime(WeightUpdateVoteRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordEvidence(Evidence(0, "qc-0")));
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/1, /*validator=*/2,
+                               "candidate-a")));
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/1, /*validator=*/2,
+                               "candidate-b",
+                               /*signature_verified=*/false)));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  EXPECT_TRUE(candidates[0].strong_faults.empty());
+  EXPECT_EQ(candidates[0].next_weights,
+            (std::vector<int64_t>{100, 100, 100, 100}));
+}
+
 TEST(ReputationPluginRuntimeTest, PersistentStrongFaultKeepsTargetWeight) {
   ReputationPluginRuntime runtime(StrongFaultRuntimeOptions());
   runtime.Start();
@@ -390,6 +533,31 @@ TEST(ReputationPluginRuntimeTest,
   EXPECT_EQ(candidates[0].validators[1].leader_opportunity_count, 1);
   EXPECT_EQ(candidates[0].validators[1].leader_certified_count, 0);
   EXPECT_LT(candidates[0].validators[1].leader_score, 100);
+}
+
+TEST(ReputationPluginRuntimeTest,
+     ExplicitTimeoutOutcomeDoesNotAddLeaderOpportunity) {
+  ReputationRuntimeOptions options = RuntimeOptions();
+  options.window_size_views = 1;
+  options.initial_weights = {100, 100, 100, 100};
+  options.initial_weight_root = WeightRootHex(options.initial_weights);
+  options.config.min_leader_opportunities = 1;
+  options.config.leader_recovery_enabled = true;
+  ReputationPluginRuntime runtime(options);
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordLeaderOutcome(TimeoutOutcome(5, 3)));
+  runtime.AdvanceWatermark(6);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 1);
+  ASSERT_EQ(candidates[0].validators.size(), 4);
+  EXPECT_EQ(candidates[0].validators[1].leader_opportunity_count, 1);
+  EXPECT_EQ(candidates[0].validators[2].leader_opportunity_count, 0);
+  EXPECT_EQ(candidates[0].validators[2].leader_certified_count, 0);
+  EXPECT_EQ(candidates[0].validators[2].leader_score, 100);
 }
 
 TEST(ReputationPluginRuntimeTest,

@@ -248,8 +248,25 @@ bool HotStuff::IsDoubleVoteForExperiment() const {
   return EnvFlagEnabled("TD_HS_DOUBLE_VOTE");
 }
 
+bool HotStuff::IsSlowVoteForExperiment() const {
+  return EnvFlagEnabled("TD_HS_SLOW_VOTE");
+}
+
+void HotStuff::MaybeDelayVoteForExperiment() const {
+  if (!IsSlowVoteForExperiment()) {
+    return;
+  }
+  const int delay_us =
+      PositiveIntFromEnv("TD_HS_SLOW_VOTE_DELAY_US", 10000);
+  std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
+}
+
 bool HotStuff::IsInvalidQcForExperiment() const {
   return EnvFlagEnabled("TD_HS_INVALID_QC");
+}
+
+bool HotStuff::IsWeightUpdateVoteEquivocationForExperiment() const {
+  return EnvFlagEnabled("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION");
 }
 
 std::unique_ptr<Proposal> HotStuff::MakeConflictingProposalForExperiment(
@@ -788,6 +805,45 @@ bool HotStuff::MaybeMakeSignedVoteEvidenceSnapshotLocked(
   return true;
 }
 
+bool HotStuff::MaybeMakeSignedWeightUpdateVoteEvidenceSnapshot(
+    const WeightUpdateVote& vote,
+    TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot* snapshot) const {
+  if (snapshot == nullptr || reputation_adapter_ == nullptr ||
+      !reputation_adapter_->WantsSignedWeightUpdateVoteEvidence() ||
+      verifier_ == nullptr || vote.signer() <= 0 ||
+      vote.old_weight_root().empty() || vote.activation_view() <= 0 ||
+      vote.candidate_digest().empty() ||
+      !verifier_->VerifyMessage(WeightUpdateVotePayload(vote),
+                                vote.signature())) {
+    return false;
+  }
+  snapshot->local_node_id = id_;
+  snapshot->total_replicas = total_num_;
+  snapshot->validator_id = vote.signer();
+  snapshot->old_weight_root = vote.old_weight_root();
+  snapshot->old_weight_version = vote.old_weight_version();
+  snapshot->activation_view = vote.activation_view();
+  snapshot->candidate_digest = vote.candidate_digest();
+  snapshot->signature_verified = true;
+  snapshot->active_weight_root = vote.old_weight_root();
+  snapshot->active_weight_version = vote.old_weight_version();
+  return true;
+}
+
+void HotStuff::MaybeBroadcastConflictingWeightUpdateVoteForExperiment(
+    const WeightUpdateVote& vote) {
+  if (!IsWeightUpdateVoteEquivocationForExperiment()) {
+    return;
+  }
+  std::unique_ptr<WeightUpdateVote> conflicting =
+      MakeConflictingWeightUpdateVoteForExperiment(vote, id_, verifier_);
+  if (conflicting == nullptr) {
+    LOG(ERROR) << "failed to build TD-Hotstuff conflicting weight update vote";
+    return;
+  }
+  BroadcastWeightUpdateVote(*conflicting);
+}
+
 bool HotStuff::MaybeMakeInvalidQcProposalEvidenceSnapshotLocked(
     const Proposal& proposal, const ProposalValidationResult& validation,
     TdHotstuffInvalidQcProposalEvidenceSnapshot* snapshot) {
@@ -1118,6 +1174,7 @@ void HotStuff::DrainCompletedWeightCandidates() {
     std::unique_ptr<WeightUpdateCert> cert =
         weight_update_controller_->HandleVote(*vote);
     BroadcastWeightUpdateVote(*vote);
+    MaybeBroadcastConflictingWeightUpdateVoteForExperiment(*vote);
     if (cert != nullptr) {
       weight_update_controller_->HandleCert(*cert);
       RefreshPendingWeightActivationView();
@@ -1211,12 +1268,20 @@ bool HotStuff::ReceiveCandidateWeightUpdate(
     return false;
   }
   BroadcastWeightUpdateVote(*vote);
+  MaybeBroadcastConflictingWeightUpdateVoteForExperiment(*vote);
   return true;
 }
 
 bool HotStuff::ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote) {
   if (vote == nullptr || weight_update_controller_ == nullptr) {
     return false;
+  }
+  TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot evidence_snapshot;
+  const bool has_evidence_snapshot =
+      MaybeMakeSignedWeightUpdateVoteEvidenceSnapshot(*vote, &evidence_snapshot);
+  if (has_evidence_snapshot && reputation_adapter_ != nullptr) {
+    reputation_adapter_->TryRecordSignedWeightUpdateVote(
+        std::move(evidence_snapshot));
   }
   std::unique_ptr<WeightUpdateCert> cert =
       weight_update_controller_->HandleVote(*vote);
@@ -1380,6 +1445,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     }
     return false;
   }
+  MaybeDelayVoteForExperiment();
   const int send_result = SendMessage(MessageType::Vote, *cert, next_leader);
   if (conflicting_cert != nullptr) {
     SendMessage(MessageType::Vote, *conflicting_cert, next_leader);

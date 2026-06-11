@@ -120,6 +120,22 @@ resdb::consensus::reputation::SignedVoteEvidence ToSignedVoteEvidence(
   return evidence;
 }
 
+resdb::consensus::reputation::SignedWeightUpdateVoteEvidence
+ToSignedWeightUpdateVoteEvidence(
+    const TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot& snapshot) {
+  resdb::consensus::reputation::SignedWeightUpdateVoteEvidence evidence;
+  evidence.protocol_id = "td_hotstuff";
+  evidence.validator_id = snapshot.validator_id;
+  evidence.old_weight_root = snapshot.old_weight_root;
+  evidence.old_weight_version = snapshot.old_weight_version;
+  evidence.activation_view = snapshot.activation_view;
+  evidence.candidate_digest = snapshot.candidate_digest;
+  evidence.signature_verified = snapshot.signature_verified;
+  evidence.active_weight_root = snapshot.active_weight_root;
+  evidence.weight_version = snapshot.active_weight_version;
+  return evidence;
+}
+
 resdb::consensus::reputation::InvalidQcProposalEvidence
 ToInvalidQcProposalEvidence(
     const TdHotstuffInvalidQcProposalEvidenceSnapshot& snapshot) {
@@ -148,6 +164,8 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
       "TD_HS_REPUTATION_ADAPTER_QUEUE_CAPACITY",
       PositiveSizeFromEnv("TD_HS_REPUTATION_QUEUE_CAPACITY",
                           kDefaultQueueCapacity));
+  options.min_candidate_events = PositiveSizeFromEnv(
+      "TD_HS_REPUTATION_MIN_CANDIDATE_QCS", options.min_candidate_events);
   options.activation_delay_windows = PositiveIntFromEnv(
       "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY", 1);
   options.reputation_config.decay_per_epoch = PositiveIntFromEnv(
@@ -159,6 +177,15 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.reputation_config.bonus_per_epoch = PositiveIntFromEnv(
       "TD_HS_REPUTATION_BONUS_PER_EPOCH",
       options.reputation_config.bonus_per_epoch);
+  options.reputation_config.min_weight = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_MIN_WEIGHT",
+      options.reputation_config.min_weight);
+  options.reputation_config.max_weight = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_MAX_WEIGHT",
+      options.reputation_config.max_weight);
+  options.reputation_config.min_decay_opportunities = PositiveSizeFromEnv(
+      "TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES",
+      options.reputation_config.min_decay_opportunities);
   options.reputation_config.leader_eligible_min_weight = PositiveIntFromEnv(
       "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT",
       options.reputation_config.leader_eligible_min_weight);
@@ -193,6 +220,10 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.signed_vote_evidence_enabled =
       options.reputation_config.strong_fault_enabled &&
       options.reputation_config.double_vote_detection_enabled;
+  options.signed_weight_update_vote_evidence_enabled =
+      options.reputation_config.strong_fault_enabled &&
+      options.reputation_config
+          .weight_update_vote_equivocation_detection_enabled;
   options.invalid_qc_proposal_evidence_enabled =
       options.reputation_config.strong_fault_enabled &&
       options.reputation_config.invalid_qc_proposal_detection_enabled;
@@ -214,6 +245,8 @@ TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
           options.enabled) {
   signed_proposal_evidence_enabled_ = options.signed_proposal_evidence_enabled;
   signed_vote_evidence_enabled_ = options.signed_vote_evidence_enabled;
+  signed_weight_update_vote_evidence_enabled_ =
+      options.signed_weight_update_vote_evidence_enabled;
   invalid_qc_proposal_evidence_enabled_ =
       options.invalid_qc_proposal_evidence_enabled;
 }
@@ -228,6 +261,7 @@ TdHotstuffReputationAdapter::TdHotstuffReputationAdapter(
       enabled_(enabled),
       signed_proposal_evidence_enabled_(false),
       signed_vote_evidence_enabled_(false),
+      signed_weight_update_vote_evidence_enabled_(false),
       invalid_qc_proposal_evidence_enabled_(false),
       runtime_(std::move(runtime)) {}
 
@@ -242,6 +276,7 @@ TdHotstuffReputationAdapter::RuntimeFromOptions(
   runtime_options.total_replicas = total_replicas;
   runtime_options.window_size_views = options.window_size;
   runtime_options.queue_capacity = options.queue_capacity;
+  runtime_options.min_candidate_events = options.min_candidate_events;
   runtime_options.activation_delay_windows = options.activation_delay_windows;
   runtime_options.initial_weights = options.initial_weights;
   runtime_options.initial_weight_root = options.initial_weight_root;
@@ -331,6 +366,21 @@ bool TdHotstuffReputationAdapter::TryRecordSignedVote(
   return runtime_->RecordSignedVoteEvidence(ToSignedVoteEvidence(snapshot));
 }
 
+bool TdHotstuffReputationAdapter::TryRecordSignedWeightUpdateVote(
+    TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot snapshot) {
+  if (!WantsSignedWeightUpdateVoteEvidence() || runtime_ == nullptr) {
+    return false;
+  }
+  if (snapshot.total_replicas <= 0) {
+    snapshot.total_replicas = total_replicas_;
+  }
+  if (snapshot.local_node_id <= 0) {
+    snapshot.local_node_id = local_node_id_;
+  }
+  return runtime_->RecordSignedWeightUpdateVoteEvidence(
+      ToSignedWeightUpdateVoteEvidence(snapshot));
+}
+
 bool TdHotstuffReputationAdapter::TryRecordInvalidQcProposal(
     TdHotstuffInvalidQcProposalEvidenceSnapshot snapshot) {
   if (!WantsInvalidQcProposalEvidence() || runtime_ == nullptr) {
@@ -385,6 +435,10 @@ bool TdHotstuffReputationAdapter::WantsSignedProposalEvidence() const {
 
 bool TdHotstuffReputationAdapter::WantsSignedVoteEvidence() const {
   return enabled_ && signed_vote_evidence_enabled_;
+}
+
+bool TdHotstuffReputationAdapter::WantsSignedWeightUpdateVoteEvidence() const {
+  return enabled_ && signed_weight_update_vote_evidence_enabled_;
 }
 
 bool TdHotstuffReputationAdapter::WantsInvalidQcProposalEvidence() const {

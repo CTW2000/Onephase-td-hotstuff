@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "platform/consensus/reputation/reputation_roots.h"
+#include "platform/consensus/reputation/reputation_utils.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -100,6 +101,32 @@ std::string WeightUpdateVotePayload(const WeightUpdateVote& vote) {
       << vote.old_weight_root() << '|' << vote.old_weight_version() << '|'
       << vote.activation_view() << '|' << vote.candidate_digest();
   return out.str();
+}
+
+std::unique_ptr<WeightUpdateVote> MakeConflictingWeightUpdateVoteForExperiment(
+    const WeightUpdateVote& vote, int node_id, SignatureVerifier* verifier) {
+  if (verifier == nullptr || vote.candidate_digest().empty()) {
+    return nullptr;
+  }
+  std::unique_ptr<WeightUpdateVote> conflicting =
+      std::make_unique<WeightUpdateVote>(vote);
+  const std::string material =
+      vote.candidate_digest() + "|td_hotstuff_weight_update_vote_equivocation|" +
+      std::to_string(node_id) + "|" + std::to_string(vote.old_weight_version()) +
+      "|" + std::to_string(vote.activation_view());
+  std::string digest =
+      resdb::consensus::reputation::HashHex(material);
+  if (digest == vote.candidate_digest()) {
+    digest = resdb::consensus::reputation::HashHex(material + "|retry");
+  }
+  conflicting->set_candidate_digest(digest);
+  conflicting->clear_signature();
+  auto signature_or = verifier->SignMessage(WeightUpdateVotePayload(*conflicting));
+  if (!signature_or.ok()) {
+    return nullptr;
+  }
+  *conflicting->mutable_signature() = *signature_or;
+  return conflicting;
 }
 
 WeightUpdateController::WeightUpdateController(

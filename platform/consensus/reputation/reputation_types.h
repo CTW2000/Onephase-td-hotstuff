@@ -197,6 +197,7 @@ struct ReputationWindowInput {
   int total_replicas = 0;
   uint64_t window_index = 0;
   std::vector<int64_t> current_weights;
+  std::vector<int64_t> current_leader_weights;
   std::string old_weight_root_hex;
   uint64_t old_weight_version = 0;
   int activation_view = 0;

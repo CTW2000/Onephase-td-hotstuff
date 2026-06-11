@@ -1,5 +1,8 @@
 ## Project operation philosophy
 
+- Before changing code, read `DevelopPhilosophy.md` and preserve those framework rules.
+- In particular, timeout certificates and view changes must never be used as silent-leader punishment. Silent leaders lose recovery only through leader score from successful proposals.
+
 - Treat the server checkout as the source of truth for this project unless the user explicitly asks otherwise.
 - Do not let a local Codex checkout become a parallel working tree. If a local copy is used only for inspection, immediately sync the server checkout and verify file hashes before running experiments.
 - Before every experiment, verify the server-side code/config version and baseline experiment config from the server checkout. Do not rely on local state when judging performance.

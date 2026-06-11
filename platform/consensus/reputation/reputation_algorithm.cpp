@@ -72,25 +72,70 @@ int CoreRecoveryCreditForScore(int score, int max_recovery_per_epoch) {
                        kFullRecoveryAt - kNoRecoveryBelow);
 }
 
+bool HasLeaderRecoveryEvidence(const ValidatorReputation& validator,
+                               const ReputationConfig& config) {
+  if (!config.leader_recovery_enabled) {
+    return false;
+  }
+  const bool has_repeated_uncertified_leader_opportunities =
+      validator.leader_opportunity_count >= kMinNoCertifiedLeaderOpportunities &&
+      validator.leader_certified_count == 0 && validator.leader_score < 50;
+  return validator.leader_score < 95 &&
+         (validator.leader_opportunity_count >= config.min_leader_opportunities ||
+          has_repeated_uncertified_leader_opportunities);
+}
+
+bool IsLeaderWeightIneligible(const ValidatorReputation& validator,
+                              const ReputationConfig& config,
+                              int64_t current_leader_weight) {
+  if (validator.strong_fault_count > 0) {
+    return true;
+  }
+  if (!config.leader_recovery_enabled) {
+    return validator.next_weight <= config.leader_eligible_min_weight;
+  }
+  const bool has_good_leader_reentry_evidence =
+      validator.leader_opportunity_count >= config.min_leader_opportunities &&
+      validator.leader_score >= 95;
+  if (current_leader_weight <= config.leader_eligible_min_weight &&
+      !has_good_leader_reentry_evidence) {
+    return true;
+  }
+  return HasLeaderRecoveryEvidence(validator, config) &&
+         validator.next_weight <= config.leader_eligible_min_weight;
+}
+
 std::vector<int64_t> LeaderWeightsForCandidate(
     const std::vector<ValidatorReputation>& validators,
-    const ReputationConfig& config) {
+    const ReputationConfig& config,
+    const std::vector<int64_t>& current_leader_weights) {
   std::vector<int64_t> leader_weights;
   leader_weights.reserve(validators.size());
   bool all_validators_eligible = !validators.empty();
-  for (const ValidatorReputation& validator : validators) {
-    if (validator.next_weight <= config.leader_eligible_min_weight) {
+  for (size_t i = 0; i < validators.size(); ++i) {
+    const ValidatorReputation& validator = validators[i];
+    const int64_t current_leader_weight =
+        i < current_leader_weights.size() ? current_leader_weights[i]
+                                          : config.max_weight;
+    if (IsLeaderWeightIneligible(validator, config, current_leader_weight)) {
       all_validators_eligible = false;
       break;
     }
   }
   const int64_t equal_leader_weight = ClampWeight(config.max_weight, config);
   const int64_t ineligible_leader_weight = ClampWeight(config.min_weight, config);
-  for (const ValidatorReputation& validator : validators) {
+  for (size_t i = 0; i < validators.size(); ++i) {
+    const ValidatorReputation& validator = validators[i];
+    const int64_t current_leader_weight =
+        i < current_leader_weights.size() ? current_leader_weights[i]
+                                          : config.max_weight;
     if (all_validators_eligible) {
       leader_weights.push_back(equal_leader_weight);
-    } else if (validator.next_weight <= config.leader_eligible_min_weight) {
+    } else if (IsLeaderWeightIneligible(validator, config,
+                                        current_leader_weight)) {
       leader_weights.push_back(ineligible_leader_weight);
+    } else if (config.leader_recovery_enabled) {
+      leader_weights.push_back(equal_leader_weight);
     } else {
       leader_weights.push_back(validator.next_weight);
     }
@@ -444,7 +489,8 @@ ReputationCandidate ComputeReputationCandidate(
     ComputeCoreOnlyReputation(ordered_events, weights, config,
                               !has_scheduled_leader_counts, &candidate);
     candidate.leader_weights =
-        LeaderWeightsForCandidate(candidate.validators, config);
+        LeaderWeightsForCandidate(candidate.validators, config,
+                                  input.current_leader_weights);
     candidate.leader_selection_version = 1;
     candidate.leader_eligible_min_weight = config.leader_eligible_min_weight;
     RecomputeReputationCandidateRoots(&candidate);
@@ -1233,7 +1279,8 @@ ReputationCandidate ComputeReputationCandidate(
     }
   }
 
-  candidate.leader_weights = LeaderWeightsForCandidate(candidate.validators, config);
+  candidate.leader_weights = LeaderWeightsForCandidate(
+      candidate.validators, config, input.current_leader_weights);
   candidate.leader_selection_version = 1;
   candidate.leader_eligible_min_weight = config.leader_eligible_min_weight;
 

@@ -244,6 +244,35 @@ class CalculateResultTest(unittest.TestCase):
         self.assertEqual(samples.before_threshold_tps, [100])
         self.assertEqual(samples.after_threshold_tps, [300])
 
+    def test_prints_final_weights_without_bad_nodes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_path = pathlib.Path(temp_dir) / "node.log"
+            log_path.write_text(
+                "\n".join(
+                    [
+                        "txn:100 time:5",
+                        "activated TD-Hotstuff weight update version:3 view:1536 "
+                        "active_weights:[100,99,100,100] "
+                        "leader_weights:[100,100,100,100] "
+                        "leader_profile_activation_view:2048",
+                        "txn:300 time:10",
+                    ]
+                )
+                + "\n"
+            )
+
+            output = subprocess.check_output(
+                [sys.executable, str(MODULE_PATH), str(log_path)],
+                text=True,
+            )
+
+        self.assertIn("final active weights: 100,99,100,100", output)
+        self.assertIn("final active leader weights: 100,100,100,100", output)
+        self.assertIn("honest final weights min/avg/max: 99 99.75 100",
+                      output)
+        self.assertNotIn("bad node final weights:", output)
+        self.assertNotIn("bad-node threshold split:", output)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -63,6 +63,19 @@ struct TdHotstuffSignedVoteEvidenceSnapshot {
   uint64_t active_weight_version = 0;
 };
 
+struct TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot {
+  int local_node_id = 0;
+  int total_replicas = 0;
+  int validator_id = 0;
+  std::string old_weight_root;
+  uint64_t old_weight_version = 0;
+  int activation_view = 0;
+  std::string candidate_digest;
+  bool signature_verified = false;
+  std::string active_weight_root;
+  uint64_t active_weight_version = 0;
+};
+
 struct TdHotstuffInvalidQcProposalEvidenceSnapshot {
   int local_node_id = 0;
   int total_replicas = 0;
@@ -81,6 +94,7 @@ struct TdHotstuffReputationAdapterOptions {
   bool enabled = false;
   size_t window_size = 4096;
   size_t queue_capacity = 65536;
+  size_t min_candidate_events = 1;
   int activation_delay_windows = 1;
   bool audit_jsonl_enabled = false;
   std::string audit_jsonl_path;
@@ -94,6 +108,7 @@ struct TdHotstuffReputationAdapterOptions {
   resdb::consensus::reputation::ReputationConfig reputation_config;
   bool signed_proposal_evidence_enabled = false;
   bool signed_vote_evidence_enabled = false;
+  bool signed_weight_update_vote_evidence_enabled = false;
   bool invalid_qc_proposal_evidence_enabled = false;
 };
 
@@ -112,6 +127,10 @@ resdb::consensus::reputation::SignedProposalEvidence ToSignedProposalEvidence(
 
 resdb::consensus::reputation::SignedVoteEvidence ToSignedVoteEvidence(
     const TdHotstuffSignedVoteEvidenceSnapshot& snapshot);
+
+resdb::consensus::reputation::SignedWeightUpdateVoteEvidence
+ToSignedWeightUpdateVoteEvidence(
+    const TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot& snapshot);
 
 resdb::consensus::reputation::InvalidQcProposalEvidence
 ToInvalidQcProposalEvidence(
@@ -143,6 +162,8 @@ class TdHotstuffReputationAdapter {
   bool TryRecordSignedProposal(
       TdHotstuffSignedProposalEvidenceSnapshot snapshot);
   bool TryRecordSignedVote(TdHotstuffSignedVoteEvidenceSnapshot snapshot);
+  bool TryRecordSignedWeightUpdateVote(
+      TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot snapshot);
   bool TryRecordInvalidQcProposal(
       TdHotstuffInvalidQcProposalEvidenceSnapshot snapshot);
   bool AdvanceWatermark(int view);
@@ -160,6 +181,7 @@ class TdHotstuffReputationAdapter {
   bool enabled() const { return enabled_; }
   bool WantsSignedProposalEvidence() const;
   bool WantsSignedVoteEvidence() const;
+  bool WantsSignedWeightUpdateVoteEvidence() const;
   bool WantsInvalidQcProposalEvidence() const;
   uint64_t queued_count() const;
   uint64_t dropped_count() const;
@@ -175,6 +197,7 @@ class TdHotstuffReputationAdapter {
   bool enabled_ = false;
   bool signed_proposal_evidence_enabled_ = false;
   bool signed_vote_evidence_enabled_ = false;
+  bool signed_weight_update_vote_evidence_enabled_ = false;
   bool invalid_qc_proposal_evidence_enabled_ = false;
   std::shared_ptr<resdb::consensus::reputation::ReputationPluginRuntime>
       runtime_;
