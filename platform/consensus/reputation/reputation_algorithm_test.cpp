@@ -509,6 +509,28 @@ TEST(ReputationAlgorithmTest, SilentLeaderLosesLeaderRecovery) {
   EXPECT_LT(candidate.validators[1].next_weight, candidate.validators[0].next_weight);
 }
 
+TEST(ReputationAlgorithmTest,
+     PeerTrustDoesNotClampScheduledSilentLeaderRecovery) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {67, 67, 67, 67}, config, "old-root", 0, 64,
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
+
+  EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
+  EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 4);
+  EXPECT_EQ(candidate.validators[1].peertrust_score, 100);
+  EXPECT_EQ(candidate.validators[1].peertrust_leader_debt, 0);
+  EXPECT_LT(candidate.validators[1].next_weight,
+            config.peertrust_soft_min_weight);
+}
+
 TEST(ReputationAlgorithmTest, OneScheduledLeaderMissDoesNotReduceRecovery) {
   ReputationConfig config = TestConfig();
   config.min_leader_opportunities = 8;
@@ -819,7 +841,7 @@ TEST(ReputationAlgorithmTest,
 }
 
 TEST(ReputationAlgorithmTest,
-     PeerTrustSoftFloorStopsHealthyCarryoverDecayNearFloor) {
+     PeerTrustSoftFloorDoesNotMaskNonPeerTrustCarryoverDecay) {
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = true;
   std::vector<int64_t> weights(20, 100);
@@ -829,8 +851,31 @@ TEST(ReputationAlgorithmTest,
       1, 20, 1, {}, weights, config, "old-root", 0, 64);
 
   EXPECT_EQ(candidate.validators[0].vote_score, 50);
+  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt, 0);
   EXPECT_EQ(candidate.validators[0].decay_applied, config.decay_per_epoch);
-  EXPECT_GE(candidate.validators[0].next_weight, 67);
+  EXPECT_LT(candidate.validators[0].next_weight,
+            config.peertrust_soft_min_weight);
+  EXPECT_EQ(candidate.validators[0].strong_fault_count, 0);
+  EXPECT_EQ(candidate.validators[0].penalty_points, 0);
+}
+
+TEST(ReputationAlgorithmTest,
+     PeerTrustSoftFloorStopsDebtCarryoverDecayNearFloor) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  std::vector<int64_t> weights(20, 100);
+  weights[0] = 67;
+  std::vector<int> prior_peertrust_debt(20, 0);
+  prior_peertrust_debt[0] = 20;
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, {}, weights, config, "old-root", 0, 64,
+      {}, {}, {}, {}, {}, {}, {}, prior_peertrust_debt);
+
+  EXPECT_EQ(candidate.validators[0].vote_score, 50);
+  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt, 20);
+  EXPECT_EQ(candidate.validators[0].decay_applied, config.decay_per_epoch);
+  EXPECT_GE(candidate.validators[0].next_weight, config.peertrust_soft_min_weight);
   EXPECT_EQ(candidate.validators[0].strong_fault_count, 0);
   EXPECT_EQ(candidate.validators[0].penalty_points, 0);
 }

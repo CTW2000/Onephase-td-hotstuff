@@ -1266,6 +1266,9 @@ ReputationCandidate ComputeReputationCandidate(
         validator.current_weight - validator.decay_applied +
             validator.recovery_credit + validator.bonus_credit,
         config);
+    const bool peertrust_floor_applies =
+        low_peertrust || validator.peertrust_leader_debt > 0 ||
+        previous_peertrust_debt > 0;
     const bool peertrust_soft_floor_eligible =
         config.peertrust_enabled &&
         validator.vote_score >= kHealthyCatchUpScore &&
@@ -1275,7 +1278,7 @@ ReputationCandidate ComputeReputationCandidate(
         validator.next_weight > peertrust_soft_floor) {
       validator.next_weight = peertrust_soft_floor;
     }
-    if (peertrust_soft_floor_eligible &&
+    if (peertrust_floor_applies && peertrust_soft_floor_eligible &&
         validator.current_weight + validator.decay_applied >=
             peertrust_soft_floor &&
         validator.next_weight < peertrust_soft_floor) {
