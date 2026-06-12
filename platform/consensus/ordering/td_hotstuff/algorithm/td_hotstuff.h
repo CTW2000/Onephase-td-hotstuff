@@ -107,6 +107,7 @@ class HotStuff : public common::ProtocolBase {
   bool IsDoubleVoteForExperiment() const;
   bool IsSlowVoteForExperiment() const;
   void MaybeDelayVoteForExperiment() const;
+  bool ShouldUsePeerTrustCliqueForView(int view) const;
   bool IsInvalidQcForExperiment() const;
   bool IsWeightUpdateVoteEquivocationForExperiment() const;
   std::unique_ptr<Proposal> MakeConflictingProposalForExperiment(

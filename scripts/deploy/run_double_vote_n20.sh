@@ -122,7 +122,11 @@ generate_performance_server_conf($N)
   export TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE=0
   export TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE=0
   export TD_HS_CONFLICTING_QC_DETECT_ENABLE=0
-  export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=1
+  if [ "${TD_HS_ALL_DETECTORS_ENABLE:-0}" = "1" ]; then
+    td_hs_enable_all_detectors
+  else
+    export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=1
+  fi
   export TD_HS_STRONG_FAULT_TARGET_WEIGHT=1
   # Strong-fault experiments should punish only authenticated equivocation
   # evidence. Keep soft decay inactive to avoid unrelated honest-node drift.

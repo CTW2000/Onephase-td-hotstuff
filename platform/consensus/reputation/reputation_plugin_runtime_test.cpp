@@ -51,6 +51,23 @@ CertifiedSignerEvidenceRecord Evidence(int view, const std::string& digest) {
   return record;
 }
 
+CertifiedSignerEvidenceRecord PeerTrustEvidence(
+    int view, int leader, const std::string& digest,
+    const std::string& signer_bitmap, const std::string& available_bitmap,
+    const std::vector<int64_t>& weights, uint64_t weight_version) {
+  CertifiedSignerEvidenceRecord record;
+  record.view_or_round = view;
+  record.slot_or_height = 0;
+  record.leader_id = leader;
+  record.artifact_digest = digest;
+  record.signer_bitmap = signer_bitmap;
+  record.available_signer_bitmap = available_bitmap;
+  record.weight_root_hex = WeightRootHex(weights);
+  record.weight_version = weight_version;
+  record.active_weights = weights;
+  return record;
+}
+
 LeaderOutcomeEvidenceRecord TimeoutOutcome(int view, int leader) {
   LeaderOutcomeEvidenceRecord record;
   record.view_or_round = view;
@@ -327,6 +344,25 @@ TEST(ReputationPluginRuntimeTest, DuplicateSameHashProposalIsIgnored) {
 }
 
 TEST(ReputationPluginRuntimeTest,
+     SameQcDigestWithDifferentSignerBitmapIsRetained) {
+  ReputationPluginRuntime runtime(RuntimeOptions());
+  runtime.Start();
+
+  CertifiedSignerEvidenceRecord first = Evidence(0, "qc-0");
+  CertifiedSignerEvidenceRecord second = Evidence(0, "qc-0");
+  second.signer_bitmap = Bitmap({1, 2, 4}, 4);
+
+  EXPECT_TRUE(runtime.RecordEvidence(first));
+  EXPECT_TRUE(runtime.RecordEvidence(second));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 2);
+}
+
+TEST(ReputationPluginRuntimeTest,
      NormalSignedVotesAreNotRetainedAsStrongFaultEvidence) {
   ReputationPluginRuntime runtime(DoubleVoteRuntimeOptions());
   runtime.Start();
@@ -510,6 +546,130 @@ TEST(ReputationPluginRuntimeTest, PersistentStrongFaultKeepsTargetWeight) {
   ASSERT_EQ(second_candidates.size(), 1);
   EXPECT_TRUE(second_candidates[0].strong_faults.empty());
   EXPECT_EQ(second_candidates[0].next_weights[0], 1);
+}
+
+TEST(ReputationPluginRuntimeTest,
+     PeerTrustDebtCarriesAcrossActivatedSnapshots) {
+  ReputationRuntimeOptions options = RuntimeOptions();
+  options.window_size_views = 16;
+  options.queue_capacity = 64;
+  options.initial_weights = {100, 100, 100, 100};
+  options.initial_weight_root = WeightRootHex(options.initial_weights);
+  options.initial_leader_weights = {100, 100, 100, 100};
+  options.leader_selection_enabled = true;
+  options.config.peertrust_enabled = true;
+  options.config.decay_per_epoch = 5;
+  options.config.max_recovery_per_epoch = 5;
+  options.config.bonus_per_epoch = 0;
+  ReputationPluginRuntime runtime(options);
+  runtime.Start();
+
+  const std::string narrow = Bitmap({1, 2, 3}, 4);
+  const std::string broad = Bitmap({1, 2, 3, 4}, 4);
+  for (int view = 0; view < 8; ++view) {
+    EXPECT_TRUE(runtime.RecordEvidence(PeerTrustEvidence(
+        view, /*leader=*/1, "narrow-0-" + std::to_string(view), narrow,
+        broad, options.initial_weights, /*weight_version=*/0)));
+  }
+  for (int view = 8; view < 16; ++view) {
+    EXPECT_TRUE(runtime.RecordEvidence(PeerTrustEvidence(
+        view, /*leader=*/2, "broad-0-" + std::to_string(view), broad,
+        broad, options.initial_weights, /*weight_version=*/0)));
+  }
+  runtime.AdvanceWatermark(16);
+  auto first = WaitForCandidates(&runtime, 1);
+  ASSERT_EQ(first.size(), 1);
+  ASSERT_EQ(first[0].validators.size(), 4);
+  EXPECT_EQ(first[0].validators[0].peertrust_leader_debt, 20);
+  EXPECT_EQ(first[0].leader_weights[0], first[0].leader_weights[1]);
+
+  ReputationWeightSnapshot snapshot;
+  snapshot.weights = first[0].next_weights;
+  snapshot.weight_root_hex = first[0].next_weight_root_hex;
+  snapshot.weight_version = first[0].old_weight_version + 1;
+  snapshot.leader_selection_enabled = true;
+  snapshot.leader_weights = first[0].leader_weights;
+  snapshot.leader_weight_root_hex = first[0].leader_weight_root_hex;
+  snapshot.leader_weight_version = snapshot.weight_version;
+  snapshot.leader_eligible_min_weight = first[0].leader_eligible_min_weight;
+  runtime.UpdateActiveWeights(snapshot);
+
+  for (int view = 16; view < 24; ++view) {
+    EXPECT_TRUE(runtime.RecordEvidence(PeerTrustEvidence(
+        view, /*leader=*/1, "narrow-1-" + std::to_string(view), narrow,
+        broad, snapshot.weights, snapshot.weight_version)));
+  }
+  for (int view = 24; view < 32; ++view) {
+    EXPECT_TRUE(runtime.RecordEvidence(PeerTrustEvidence(
+        view, /*leader=*/2, "broad-1-" + std::to_string(view), broad,
+        broad, snapshot.weights, snapshot.weight_version)));
+  }
+  runtime.AdvanceWatermark(32);
+  auto second = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(second.size(), 1);
+  ASSERT_EQ(second[0].validators.size(), 4);
+  EXPECT_EQ(second[0].old_weight_version, snapshot.weight_version);
+  EXPECT_EQ(second[0].validators[0].peertrust_leader_debt, 40);
+  EXPECT_EQ(second[0].validators[0].peertrust_debt_delta, 20);
+  EXPECT_EQ(first[0].validators[0].next_weight,
+            options.config.peertrust_soft_min_weight);
+  EXPECT_EQ(second[0].validators[0].next_weight,
+            options.config.peertrust_soft_min_weight);
+  EXPECT_EQ(second[0].leader_weights[0], first[0].leader_weights[0]);
+}
+
+TEST(ReputationPluginRuntimeTest,
+     PeerTrustDebtCarriesAcrossSameVersionWindows) {
+  ReputationRuntimeOptions options = RuntimeOptions();
+  options.window_size_views = 16;
+  options.queue_capacity = 64;
+  options.initial_weights = {100, 100, 100, 100};
+  options.initial_weight_root = WeightRootHex(options.initial_weights);
+  options.config.peertrust_enabled = true;
+  options.config.decay_per_epoch = 5;
+  options.config.max_recovery_per_epoch = 5;
+  options.config.bonus_per_epoch = 0;
+  ReputationPluginRuntime runtime(options);
+  runtime.Start();
+
+  const std::string narrow = Bitmap({1, 2, 3}, 4);
+  const std::string broad = Bitmap({1, 2, 3, 4}, 4);
+  for (int view = 0; view < 8; ++view) {
+    EXPECT_TRUE(runtime.RecordEvidence(PeerTrustEvidence(
+        view, /*leader=*/1, "same-version-0-" + std::to_string(view),
+        narrow, broad, options.initial_weights, /*weight_version=*/0)));
+  }
+  for (int view = 8; view < 16; ++view) {
+    EXPECT_TRUE(runtime.RecordEvidence(PeerTrustEvidence(
+        view, /*leader=*/2, "same-version-broad-0-" + std::to_string(view),
+        broad, broad, options.initial_weights, /*weight_version=*/0)));
+  }
+  runtime.AdvanceWatermark(16);
+  auto first = WaitForCandidates(&runtime, 1);
+  ASSERT_EQ(first.size(), 1);
+  EXPECT_EQ(first[0].old_weight_version, 0);
+  EXPECT_EQ(first[0].validators[0].peertrust_leader_debt, 20);
+
+  for (int view = 16; view < 24; ++view) {
+    EXPECT_TRUE(runtime.RecordEvidence(PeerTrustEvidence(
+        view, /*leader=*/1, "same-version-1-" + std::to_string(view),
+        narrow, broad, options.initial_weights, /*weight_version=*/0)));
+  }
+  for (int view = 24; view < 32; ++view) {
+    EXPECT_TRUE(runtime.RecordEvidence(PeerTrustEvidence(
+        view, /*leader=*/2, "same-version-broad-1-" + std::to_string(view),
+        broad, broad, options.initial_weights, /*weight_version=*/0)));
+  }
+  runtime.AdvanceWatermark(32);
+  auto second = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(second.size(), 1);
+  EXPECT_EQ(second[0].old_weight_version, 0);
+  EXPECT_EQ(second[0].validators[0].peertrust_leader_debt, 40);
+  EXPECT_EQ(second[0].validators[0].peertrust_debt_delta, 20);
 }
 
 TEST(ReputationPluginRuntimeTest,

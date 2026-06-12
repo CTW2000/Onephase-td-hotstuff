@@ -47,6 +47,7 @@ struct ReputationConfig {
   int peertrust_debt_recovery = 5;
   int peertrust_debt_max = 95;
   int peertrust_debt_trigger_score = 67;
+  int64_t peertrust_soft_min_weight = 67;
   bool sybil_graph_enabled = false;
   int sybil_graph_iterations = 0;
   int sybil_graph_max_discount = 40;

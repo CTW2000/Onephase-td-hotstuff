@@ -24,7 +24,7 @@ server_path=${server_path:1}
 server_name=`echo "$server" | awk -F':' '{print $NF}'`
 server_bin=${server_name}
 
-local_server_env=(env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_SLOW_VOTE_IDS -u TD_HS_PEERTRUST_CLIQUE_IDS -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS -u TD_HS_SYBIL_GRAPH_ATTACK_IDS -u TD_HS_SYBIL_GRAPH_REVIEWER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS -u TD_HS_INVALID_TC_PROPOSAL_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT)
+local_server_env=(env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_SLOW_VOTE_IDS -u TD_HS_PEERTRUST_CLIQUE_IDS -u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS -u TD_HS_SYBIL_GRAPH_ATTACK_IDS -u TD_HS_SYBIL_GRAPH_REVIEWER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS -u TD_HS_INVALID_TC_PROPOSAL_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT)
 remote_server_env=""
 td_env_names=(
   TD_HS_WEIGHTS
@@ -80,6 +80,7 @@ td_env_names=(
   TD_HS_QC_DIVERSITY_ENABLE
   TD_HS_QC_SIGNER_COOLDOWN_ROUNDS
   TD_HS_QC_DIVERSITY_GRACE_US
+  TD_HS_PEERTRUST_QC_TRACE
   TD_HS_TIMEOUT_ENABLE
   TD_HS_TIMEOUT_MS
   TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS
@@ -183,6 +184,10 @@ remote_env_for_node() {
     if [ -n "${TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS:-}" ]; then
       signer_ids_escaped=$(printf "%q" "${TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS}")
       env_prefix="${env_prefix}TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS=${signer_ids_escaped} "
+    fi
+    if [ -n "${TD_HS_PEERTRUST_CLIQUE_TARGET_IDS:-}" ]; then
+      target_ids_escaped=$(printf "%q" "${TD_HS_PEERTRUST_CLIQUE_TARGET_IDS}")
+      env_prefix="${env_prefix}TD_HS_PEERTRUST_CLIQUE_TARGET_IDS=${target_ids_escaped} "
     fi
   fi
   if is_sybil_graph_attack_node "$node_id"; then
@@ -353,6 +358,9 @@ echo "Phase 3: Start nodes..."
           node_local_env+=("TD_HS_PEERTRUST_CLIQUE=1")
           if [ -n "${TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS:-}" ]; then
             node_local_env+=("TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS=${TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS}")
+          fi
+          if [ -n "${TD_HS_PEERTRUST_CLIQUE_TARGET_IDS:-}" ]; then
+            node_local_env+=("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS=${TD_HS_PEERTRUST_CLIQUE_TARGET_IDS}")
           fi
         fi
         if is_sybil_graph_attack_node "$n"; then

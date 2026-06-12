@@ -334,14 +334,13 @@ def bad_node_count_from_env_or_config():
             continue
     return best
 
-def threshold_weights_for_line(line):
-    leader_weights = parse_leader_weights(line)
-    if leader_weights is not None:
-        return leader_weights
+def threshold_weights_for_line(line, weight_kind="active"):
+    if weight_kind == "leader":
+        return parse_leader_weights(line)
     return parse_active_weights(line)
 
 def find_global_threshold_time(files, bad_node_count, eligible_min_weight,
-                               bad_node_ids=None):
+                               bad_node_ids=None, weight_kind="active"):
     threshold_time = None
     for file in files:
         try:
@@ -350,7 +349,7 @@ def find_global_threshold_time(files, bad_node_count, eligible_min_weight,
             continue
         with fh:
             for line in fh:
-                weights = threshold_weights_for_line(line)
+                weights = threshold_weights_for_line(line, weight_kind)
                 if not all_bad_nodes_below_threshold(
                         weights, bad_node_count, eligible_min_weight,
                         bad_node_ids=bad_node_ids):
@@ -423,7 +422,8 @@ def split_stable_records(records, first_txn_time):
     return warmup, [value for value, _ in records], True
 
 def read_tps(file, threshold_time=None, bad_node_count=None,
-             eligible_min_weight=11, bad_node_ids=None):
+             eligible_min_weight=11, bad_node_ids=None,
+             threshold_weight_kind="active"):
     parsed = ParsedLog()
     last_timestamp = None
     first_txn_time = None
@@ -446,7 +446,8 @@ def read_tps(file, threshold_time=None, bad_node_count=None,
             if leader_weights is not None:
                 parsed.final_leader_weights = leader_weights
             threshold_reached_on_line = all_bad_nodes_below_threshold(
-                    threshold_weights_for_line(line), bad_node_count,
+                    threshold_weights_for_line(line, threshold_weight_kind),
+                    bad_node_count,
                     eligible_min_weight, bad_node_ids=bad_node_ids)
             if threshold_reached_on_line:
                 parsed.threshold_seen = True
@@ -514,8 +515,10 @@ def cal_tps(tps, tot, label=""):
     tps_sum = []
     tps_max = 0
     prefix = f"{label} " if label else ""
+    non_positive_samples = 0
     for value in tps:
         if value <= 0:
+            non_positive_samples += 1
             continue
         tps_max = max(tps_max, value)
         tps_sum.append(value)
@@ -523,6 +526,8 @@ def cal_tps(tps, tot, label=""):
     trimmed_tps = tps_sum[tot:] if tot > 0 else tps_sum
     if len(trimmed_tps) == 0 and len(tps_sum) > 0:
         trimmed_tps = tps_sum
+    print(prefix + "positive throughput samples:", len(tps_sum))
+    print(prefix + "non-positive throughput samples:", non_positive_samples)
     print(prefix + "tsp:", trimmed_tps)
     if len(trimmed_tps) == 0:
         print(prefix + "average throughput:", 0)
@@ -634,6 +639,12 @@ if __name__ == '__main__':
     steady_after_threshold_lat = []
     final_weights_by_log = []
     final_leader_weights_by_log = []
+    leader_before_threshold_tps = []
+    leader_after_threshold_tps = []
+    leader_steady_after_threshold_tps = []
+    leader_before_threshold_lat = []
+    leader_after_threshold_lat = []
+    leader_steady_after_threshold_lat = []
     threshold_seen = False
     bad_node_count = bad_node_count_from_env_or_config()
     bad_node_ids = parse_bad_node_ids(os.environ.get("TD_HS_BAD_NODE_IDS"))
@@ -643,6 +654,11 @@ if __name__ == '__main__':
         threshold_time = find_global_threshold_time(
             files, bad_node_count, eligible_min_weight,
             bad_node_ids=bad_node_ids)
+    leader_threshold_time = None
+    if bad_node_count > 0 or bad_node_ids:
+        leader_threshold_time = find_global_threshold_time(
+            files, bad_node_count, eligible_min_weight,
+            bad_node_ids=bad_node_ids, weight_kind="leader")
 
     for file in files:
         parsed = read_tps(file, threshold_time=threshold_time,
@@ -673,6 +689,23 @@ if __name__ == '__main__':
             final_leader_weights_by_log.append(parsed.final_leader_weights)
         threshold_seen = threshold_seen or parsed.threshold_seen
 
+    leader_threshold_seen = False
+    if bad_node_count > 0 or bad_node_ids:
+        for file in files:
+            parsed = read_tps(file, threshold_time=leader_threshold_time,
+                              bad_node_count=bad_node_count,
+                              eligible_min_weight=eligible_min_weight,
+                              bad_node_ids=bad_node_ids,
+                              threshold_weight_kind="leader")
+            leader_before_threshold_tps += parsed.before_threshold_tps
+            leader_after_threshold_tps += parsed.after_threshold_tps
+            leader_steady_after_threshold_tps += parsed.steady_after_threshold_tps
+            leader_before_threshold_lat += parsed.before_threshold_lat
+            leader_after_threshold_lat += parsed.after_threshold_lat
+            leader_steady_after_threshold_lat += parsed.steady_after_threshold_lat
+            leader_threshold_seen = (
+                leader_threshold_seen or parsed.threshold_seen)
+
     max_raw_tps, avg_raw_tps = cal_tps(tps, len(files), "raw")
     print("warmup throughput samples:", len(warmup_tps))
     print("stable throughput samples:", len(stable_tps))
@@ -693,6 +726,20 @@ if __name__ == '__main__':
         cal_lat(after_threshold_lat, 0, "after bad-node threshold")
         cal_lat(steady_after_threshold_lat, 0,
                 "steady after bad-node threshold")
+        if final_leader_weights_by_log:
+            print("bad-node leader threshold split: bad_node_count:",
+                  bad_node_count, "eligible_min_weight:", eligible_min_weight,
+                  "bad_node_ids:", ",".join(str(v) for v in bad_node_ids),
+                  "found:", int(leader_threshold_time is not None or
+                                  leader_threshold_seen),
+                  "threshold_time:", leader_threshold_time
+                  if leader_threshold_time is not None else "n/a")
+            cal_tps(leader_before_threshold_tps, 0,
+                    "before bad-node leader threshold")
+            cal_tps(leader_after_threshold_tps, 0,
+                    "after bad-node leader threshold")
+            cal_tps(leader_steady_after_threshold_tps, 0,
+                    "steady after bad-node leader threshold")
         print_final_weight_summary(final_weights_by_log,
                                    final_leader_weights_by_log,
                                    bad_node_count, bad_node_ids)

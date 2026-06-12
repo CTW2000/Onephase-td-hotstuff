@@ -197,6 +197,42 @@ class CalculateResultTest(unittest.TestCase):
         self.assertEqual(float(numeric_lines[-2]), 350.0)
         self.assertAlmostEqual(float(numeric_lines[-1]), 0.035)
 
+    def test_reports_non_positive_stable_window_for_post_warmup_stall(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_path = pathlib.Path(temp_dir) / "node.log"
+            log_path.write_text(
+                "\n".join(
+                    [
+                        "server call:1 txn:70000 time:5 req client latency:0.010",
+                        "server call:1 txn:69000 time:15 req client latency:0.010",
+                        "server call:1 txn:67000 time:25 req client latency:0.010",
+                        "server call:1 txn:0 time:35 req client latency:0.010",
+                        "server call:1 txn:0 time:40 req client latency:0.010",
+                    ]
+                )
+                + "\n"
+            )
+            env = os.environ.copy()
+            env["TD_HS_RESULT_WARMUP_SECONDS"] = "30"
+            env["TD_HS_RESULT_COOLDOWN_SECONDS"] = "0"
+
+            output = subprocess.check_output(
+                [sys.executable, str(MODULE_PATH), str(log_path)],
+                env=env,
+                text=True,
+            )
+
+        self.assertIn("raw positive throughput samples: 3", output)
+        self.assertIn("raw non-positive throughput samples: 2", output)
+        self.assertIn("stable throughput samples: 2", output)
+        self.assertIn("stable positive throughput samples: 0", output)
+        self.assertIn("stable non-positive throughput samples: 2", output)
+        numeric_lines = [
+            line for line in output.splitlines()
+            if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", line)
+        ]
+        self.assertEqual(float(numeric_lines[-2]), 0.0)
+
     def test_splits_throughput_after_bad_nodes_drop_below_threshold(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             log_path = pathlib.Path(temp_dir) / "node.log"
@@ -243,6 +279,37 @@ class CalculateResultTest(unittest.TestCase):
 
         self.assertEqual(samples.before_threshold_tps, [100])
         self.assertEqual(samples.after_threshold_tps, [300])
+
+    def test_voting_threshold_does_not_use_leader_weights(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_path = pathlib.Path(temp_dir) / "node.log"
+            log_path.write_text(
+                "\n".join(
+                    [
+                        "txn:100 time:5",
+                        "activated TD-Hotstuff weight update version:3 view:1536 "
+                        "active_weights:[1,1,30,30] "
+                        "leader_weights:[100,100,100,100] "
+                        "leader_profile_activation_view:2048",
+                        "txn:300 time:10",
+                    ]
+                )
+                + "\n"
+            )
+
+            voting_samples = calculate_result.read_tps(
+                str(log_path), bad_node_count=2, eligible_min_weight=10
+            )
+            leader_samples = calculate_result.read_tps(
+                str(log_path), bad_node_count=2, eligible_min_weight=10,
+                threshold_weight_kind="leader"
+            )
+
+        self.assertTrue(voting_samples.threshold_seen)
+        self.assertEqual(voting_samples.after_threshold_tps, [300])
+        self.assertFalse(leader_samples.threshold_seen)
+        self.assertEqual(leader_samples.before_threshold_tps, [100, 300])
+        self.assertEqual(leader_samples.after_threshold_tps, [])
 
     def test_prints_final_weights_without_bad_nodes(self):
         with tempfile.TemporaryDirectory() as temp_dir:

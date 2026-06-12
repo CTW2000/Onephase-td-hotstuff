@@ -1,7 +1,9 @@
 #!/bin/bash
 # TD-Hotstuff PeerTrust collusive-feedback clique experiment for n=20.
 # TD_HS_PEERTRUST_CLIQUE_IDS is used only by deploy_multi.sh to inject the
-# replica-local TD_HS_PEERTRUST_CLIQUE=1 flag into selected faulty processes.
+# replica-local TD_HS_PEERTRUST_CLIQUE=1 flag into selected QC collectors.
+# TD_HS_PEERTRUST_CLIQUE_TARGET_IDS is passed only to those injected collectors
+# and names the target leaders whose QCs should prefer the reviewer clique.
 # Clients, ordinary replicas, the adapter, and the plugin never receive the
 # ID list or fixed signer list.
 
@@ -12,7 +14,7 @@ cd "$DEPLOY_DIR"
 . ./script/env.sh
 . ./td_hotstuff_stable_env.sh
 
-RESULT_DIR="$DEPLOY_DIR/experiment_results/peertrust_clique_n20"
+RESULT_DIR="${PEERTRUST_RESULT_DIR:-$DEPLOY_DIR/experiment_results/peertrust_clique_n20}"
 mkdir -p "$RESULT_DIR"
 
 LOCAL_IP="10.10.131.205"
@@ -86,17 +88,13 @@ derive_clique_reviewer_ids() {
   local mode="${PEERTRUST_CLIQUE_REVIEWER_MODE:-clean}"
   local group_size="${TD_HS_PEERTRUST_CLIQUE_REVIEWER_GROUP_SIZE:-}"
   if [ -z "$group_size" ]; then
-    if [ "$mode" = "clean" ]; then
-      group_size=$((N - bad_count))
-    else
-      group_size=14
-    fi
+    group_size=14
   fi
   local ids=""
   local chosen=0
   local start=1
-  if [ "$mode" = "clean" ]; then
-    start=$((bad_count + 1))
+  if [ "$mode" = "clean" ] && [ "$bad_count" -gt 0 ]; then
+    start=$((bad_count + 2))
   fi
   for ((i=start; i<=N && chosen<group_size; i++)); do
     if [ -n "$ids" ]; then ids="${ids},${i}"; else ids="${i}"; fi
@@ -108,6 +106,27 @@ derive_clique_reviewer_ids() {
       chosen=$((chosen + 1))
     done
   fi
+  printf '%s' "$ids"
+}
+
+derive_clique_collector_ids() {
+  local bad_ids="$1"
+  local ids=""
+  local seen=","
+  IFS=',' read -r -a targets <<< "$bad_ids"
+  for target in "${targets[@]}"; do
+    [ -n "$target" ] || continue
+    local collector=$((target % N + 1))
+    if [[ "$seen" == *",${collector},"* ]]; then
+      continue
+    fi
+    seen="${seen}${collector},"
+    if [ -n "$ids" ]; then
+      ids="${ids},${collector}"
+    else
+      ids="${collector}"
+    fi
+  done
   printf '%s' "$ids"
 }
 
@@ -131,6 +150,8 @@ run_single_experiment() {
   bad_node_ids=$(derive_bad_node_ids "$num_bad")
   local clique_reviewer_ids
   clique_reviewer_ids=$(derive_clique_reviewer_ids "$num_bad")
+  local clique_collector_ids
+  clique_collector_ids=$(derive_clique_collector_ids "$bad_node_ids")
   local peertrust_enabled=0
   if [ "$mode" = "on" ]; then
     peertrust_enabled=1
@@ -139,7 +160,7 @@ run_single_experiment() {
 
   echo ""
   echo "======================================================================"
-  echo "  EXPERIMENT: PeerTrust=$mode clique_bad=$num_bad ids=${bad_node_ids:-none} n=$N"
+  echo "  EXPERIMENT: PeerTrust=$mode clique_bad=$num_bad targets=${bad_node_ids:-none} collectors=${clique_collector_ids:-none} reviewers=${clique_reviewer_ids:-none} n=$N"
   echo "======================================================================"
 
   cleanup_all
@@ -157,12 +178,13 @@ generate_performance_server_conf($N)
   export server=//benchmark/protocols/td_hotstuff:kv_server_performance
   export TD_HS_REPUTATION_ENABLE=1
   export TD_HS_REPUTATION_PEERTRUST_ENABLE="$peertrust_enabled"
-  export TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=1
+  export TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=0
   export TD_HS_WEIGHT_UPDATE_ENABLE=1
   export TD_HS_STRONG_FAULT_ENABLE=0
   export TD_HS_REPUTATION_WINDOW_SIZE=64
   export TD_HS_REPUTATION_MIN_CANDIDATE_QCS=16
   export TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES=1
+  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1
   export TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS=64
   export TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY=1
   export TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS=32
@@ -174,10 +196,12 @@ generate_performance_server_conf($N)
   export TD_HS_BAD_NODE_COUNT="$num_bad"
   export TD_HS_BAD_NODE_IDS="$bad_node_ids"
   if [ "$num_bad" -gt 0 ]; then
-    export TD_HS_PEERTRUST_CLIQUE_IDS="$bad_node_ids"
+    export TD_HS_PEERTRUST_CLIQUE_IDS="$clique_collector_ids"
+    export TD_HS_PEERTRUST_CLIQUE_TARGET_IDS="$bad_node_ids"
     export TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS="$clique_reviewer_ids"
   else
     unset TD_HS_PEERTRUST_CLIQUE_IDS
+    unset TD_HS_PEERTRUST_CLIQUE_TARGET_IDS
     unset TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS
   fi
 
@@ -189,6 +213,7 @@ generate_performance_server_conf($N)
     if [ ! -f "$cf" ]; then break; fi
     env -u TD_HS_SILENT_LEADER_IDS \
         -u TD_HS_PEERTRUST_CLIQUE_IDS \
+        -u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS \
         -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS \
         -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS \
         -u TD_HS_INVALID_QC_IDS \
@@ -230,7 +255,10 @@ generate_performance_server_conf($N)
   fi
 
   unset TD_HS_PEERTRUST_CLIQUE_IDS
+  unset TD_HS_PEERTRUST_CLIQUE_TARGET_IDS
   unset TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS
+  unset TD_HS_REPUTATION_PEERTRUST_ENABLE
+  unset TD_HS_REPUTATION_AUDIT_JSONL_ENABLE
 }
 
 echo "=== Building TD-Hotstuff benchmark binaries ==="

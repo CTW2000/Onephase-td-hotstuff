@@ -56,6 +56,19 @@ resdb::consensus::reputation::ReputationCandidate NoOpCandidate() {
   return candidate;
 }
 
+resdb::consensus::reputation::ReputationCandidate LeaderOnlyCandidate() {
+  auto candidate = NoOpCandidate();
+  candidate.leader_weights = {80, 100, 100, 100};
+  candidate.leader_selection_version = 1;
+  candidate.leader_eligible_min_weight = 10;
+  candidate.leader_weight_root_hex =
+      resdb::consensus::reputation::LeaderWeightRootHex(
+          candidate.leader_weights, candidate.leader_eligible_min_weight,
+          candidate.leader_selection_version);
+  resdb::consensus::reputation::RecomputeReputationCandidateRoots(&candidate);
+  return candidate;
+}
+
 resdb::consensus::reputation::ReputationCandidate CandidateWithWeights(
     const std::vector<int64_t>& current_weights,
     const std::vector<int64_t>& next_weights, uint64_t old_weight_version,
@@ -118,6 +131,21 @@ TEST(WeightUpdateControllerTest, IgnoresNoOpLocalCandidate) {
   WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
                                     schedule, &verifier);
   auto candidate = NoOpCandidate();
+
+  EXPECT_FALSE(controller.AddLocalCandidate(candidate));
+  EXPECT_EQ(controller.HandleCandidate(CandidateMessage(candidate)), nullptr);
+}
+
+TEST(WeightUpdateControllerTest, IgnoresLeaderOnlyLocalCandidate) {
+  auto schedule = std::make_shared<WeightSchedule>(
+      4, std::vector<int64_t>{1, 1, 1, 1});
+  auto leader_schedule = std::make_shared<LeaderSelectionSchedule>(
+      4, std::vector<int64_t>{100, 100, 100, 100}, /*enabled=*/true,
+      /*eligible_min_weight=*/10);
+  MockSignatureVerifier verifier;
+  WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
+                                    schedule, &verifier, leader_schedule);
+  auto candidate = LeaderOnlyCandidate();
 
   EXPECT_FALSE(controller.AddLocalCandidate(candidate));
   EXPECT_EQ(controller.HandleCandidate(CandidateMessage(candidate)), nullptr);

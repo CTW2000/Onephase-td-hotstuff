@@ -195,6 +195,8 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.leader_selection_enabled = EnvFlagEnabled("TD_HS_LEADER_SELECTION_ENABLE");
   options.reputation_config.leader_recovery_enabled =
       EnvFlagEnabled("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE");
+  options.reputation_config.peertrust_enabled =
+      EnvFlagEnabled("TD_HS_REPUTATION_PEERTRUST_ENABLE");
   options.reputation_config.strong_fault_enabled =
       EnvFlagEnabled("TD_HS_STRONG_FAULT_ENABLE");
   options.reputation_config.double_proposal_detection_enabled =

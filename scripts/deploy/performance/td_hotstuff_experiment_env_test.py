@@ -38,6 +38,8 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertNotIn("TD_HS_LEADER_SELECTION_ENABLE", values)
         self.assertNotIn("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT", values)
         self.assertNotIn("TD_HS_QC_DIVERSITY_ENABLE", values)
+        self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_SIGNERS", values)
+        self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_MIN_SIGNERS", values)
         self.assertNotIn("TD_HS_WEIGHTS", values)
         self.assertEqual(values["TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE"], "1")
         self.assertEqual(values["TD_HS_TIMEOUT_ENABLE"], "0")
@@ -71,6 +73,7 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         shared_env_block = body.split("td_env_names=(", 1)[1].split(")", 1)[0]
         self.assertNotIn("TD_HS_SILENT_LEADER_IDS", shared_env_block)
         self.assertNotIn("TD_HS_PEERTRUST_CLIQUE_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", shared_env_block)
         self.assertNotIn("TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", shared_env_block)
         self.assertNotIn("TD_HS_SYBIL_GRAPH_ATTACK_IDS", shared_env_block)
         self.assertNotIn("TD_HS_SYBIL_GRAPH_REVIEWER_IDS", shared_env_block)
@@ -82,6 +85,7 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertNotIn("TD_HS_INVALID_TC_PROPOSAL_IDS", shared_env_block)
         self.assertIn("-u TD_HS_SILENT_LEADER_IDS", body)
         self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_IDS", body)
+        self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", body)
         self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", body)
         self.assertIn("-u TD_HS_SYBIL_GRAPH_ATTACK_IDS", body)
         self.assertIn("-u TD_HS_SYBIL_GRAPH_REVIEWER_IDS", body)
@@ -95,6 +99,7 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("-u TD_HS_BAD_NODE_COUNT", body)
         self.assertIn("TD_HS_SILENT_LEADER=1", body)
         self.assertIn("TD_HS_PEERTRUST_CLIQUE=1", body)
+        self.assertIn("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS=", body)
         self.assertIn("TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS=", body)
         self.assertIn("TD_HS_SYBIL_GRAPH_ATTACK=1", body)
         self.assertIn("TD_HS_SYBIL_GRAPH_REVIEWER_IDS=", body)
@@ -108,6 +113,8 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_SYBIL_GRAPH_ENABLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_SYBIL_GRAPH_DEBT_INCREMENT", shared_env_block)
+        self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_SIGNERS", shared_env_block)
+        self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_MIN_SIGNERS", shared_env_block)
         self.assertIn("is_silent_leader_node", body)
         self.assertIn("is_peertrust_clique_node", body)
         self.assertIn("is_sybil_graph_attack_node", body)
@@ -139,18 +146,68 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
                 self.assertIn("-u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", script_body)
                 self.assertIn("-u TD_HS_INVALID_TC_PROPOSAL_IDS", script_body)
 
+    def test_strong_fault_runners_can_enable_all_detectors(self):
+        for script in [
+            "run_double_proposal_n20.sh",
+            "run_double_vote_n20.sh",
+            "run_invalid_qc_n20.sh",
+            "run_strong_fault_v2_n20.sh",
+        ]:
+            with self.subTest(script=script):
+                with open(os.path.join(REPO_ROOT, "scripts", "deploy", script)) as fp:
+                    body = fp.read()
+                self.assertIn("TD_HS_ALL_DETECTORS_ENABLE", body)
+                self.assertIn("td_hs_enable_all_detectors", body)
+
     def test_peertrust_clique_runner_isolates_attack_ids(self):
         runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_peertrust_clique_n20.sh")
         with open(runner) as fp:
             body = fp.read()
         self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE", body)
+        self.assertIn("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=0", body)
         self.assertIn("TD_HS_PEERTRUST_CLIQUE_IDS", body)
+        self.assertIn("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", body)
         self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_IDS", body)
+        self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", body)
         self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", body)
         self.assertIn("TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", body)
         self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", body)
         self.assertIn("derive_clique_reviewer_ids", body)
+        self.assertIn("derive_clique_collector_ids", body)
+        self.assertIn('export TD_HS_PEERTRUST_CLIQUE_TARGET_IDS="$bad_node_ids"', body)
+        self.assertIn('export TD_HS_PEERTRUST_CLIQUE_IDS="$clique_collector_ids"', body)
+        self.assertIn("TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1", body)
+        self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_SIGNERS=1", body)
+        self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_MIN_SIGNERS=", body)
+        self.assertIn("unset TD_HS_REPUTATION_AUDIT_JSONL_ENABLE", body)
+        self.assertNotIn("unset TD_HS_PEERTRUST_BROAD_QC_SIGNERS", body)
+        self.assertNotIn("unset TD_HS_PEERTRUST_BROAD_QC_MIN_SIGNERS", body)
+        self.assertIn("group_size=14", body)
         self.assertIn('ids="${ids},${i}"', body)
+
+    def test_peertrust_clique_hook_is_consumed_by_td_hotstuff(self):
+        td_hotstuff = os.path.join(
+            REPO_ROOT,
+            "platform",
+            "consensus",
+            "ordering",
+            "td_hotstuff",
+            "algorithm",
+            "td_hotstuff.cpp",
+        )
+        with open(td_hotstuff) as fp:
+            body = fp.read()
+        self.assertIn('EnvFlagEnabled("TD_HS_PEERTRUST_CLIQUE")', body)
+        self.assertIn('EnvListContainsId("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS"', body)
+        self.assertIn("shared_qc_metadata=public_available_set", body)
+        self.assertIn("qc->set_available_signer_bitmap", body)
+        self.assertNotIn("certs.find(reviewer_id)", body)
+        self.assertNotIn("PeerTrustCliqueEvidenceSigners(certs, view, quorum_weight)", body)
+        self.assertNotIn("PeerTrustCliqueCertificateSigners(certs, view, quorum_weight)", body)
+        self.assertNotIn('EnvFlagEnabled("TD_HS_PEERTRUST_BROAD_QC_SIGNERS")', body)
+        self.assertNotIn('PositiveIntFromEnv("TD_HS_PEERTRUST_BROAD_QC_MIN_SIGNERS"', body)
+        self.assertNotIn("available_signers.size() < static_cast<size_t>(min_signers)", body)
+        self.assertNotIn("retry_peertrust_broad_qc", body)
 
     def test_sybil_graph_runner_isolates_attack_ids(self):
         runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_sybil_graph_n20.sh")

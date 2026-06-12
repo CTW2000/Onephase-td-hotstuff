@@ -175,6 +175,26 @@ std::string AuditValidatorsJson(const std::vector<ValidatorReputation>& validato
         << ",\"leader_certified_count\":" << validator.leader_certified_count
         << ",\"leader_opportunity_count\":" << validator.leader_opportunity_count
         << ",\"leader_score\":" << validator.leader_score
+        << ",\"leader_diversity_score\":" << validator.leader_diversity_score
+        << ",\"peertrust_score\":" << validator.peertrust_score
+        << ",\"reviewer_credibility_score\":"
+        << validator.reviewer_credibility_score
+        << ",\"transaction_context_score\":"
+        << validator.transaction_context_score
+        << ",\"community_context_score\":"
+        << validator.community_context_score
+        << ",\"reviewer_entropy_score\":" << validator.reviewer_entropy_score
+        << ",\"cross_leader_independence_score\":"
+        << validator.cross_leader_independence_score
+        << ",\"reviewer_overuse_score\":"
+        << validator.reviewer_overuse_score
+        << ",\"peertrust_leader_debt\":"
+        << validator.peertrust_leader_debt
+        << ",\"peertrust_debt_delta\":"
+        << validator.peertrust_debt_delta
+        << ",\"feedback_count\":" << validator.feedback_count
+        << ",\"strong_fault_count\":" << validator.strong_fault_count
+        << ",\"penalty_points\":" << validator.penalty_points
         << ",\"reputation_score\":" << validator.reputation_score
         << ",\"decay_applied\":" << validator.decay_applied
         << ",\"recovery_credit\":" << validator.recovery_credit
@@ -237,7 +257,7 @@ struct ReputationPluginRuntime::WindowBuffer {
   std::map<std::tuple<std::string, std::string, uint64_t, int, int>,
            SignedWeightUpdateVoteEvidence>
       first_signed_weight_update_vote_by_key;
-  std::set<std::tuple<int, int, std::string>> seen;
+  std::set<std::tuple<int, int, std::string, std::string>> seen;
   std::set<std::tuple<int, int, std::string>> seen_leader_outcomes;
   std::set<std::tuple<int, int, int, std::string>> seen_signed_proposals;
   std::set<std::tuple<int, int, int, std::string>> seen_signed_votes;
@@ -627,8 +647,9 @@ void ReputationPluginRuntime::ProcessEvidence(
     buffer.end_view = window_end;
     buffer.snapshot = std::move(snapshot);
   }
-  const auto dedupe_key = std::make_tuple(
-      evidence.view_or_round, evidence.slot_or_height, evidence.artifact_digest);
+  const auto dedupe_key =
+      std::make_tuple(evidence.view_or_round, evidence.slot_or_height,
+                      evidence.artifact_digest, evidence.signer_bitmap);
   if (!buffer.seen.insert(dedupe_key).second) {
     return;
   }
@@ -1015,6 +1036,14 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
   input.invalid_qc_proposal_evidence = buffer->invalid_qc_proposals;
   input.scheduled_leader_counts = ScheduledLeaderCountsForWindow(
       buffer->start_view, buffer->end_view, buffer->snapshot);
+  if (options_.config.peertrust_enabled) {
+    std::lock_guard<std::mutex> lk(mutex_);
+    auto prior_it = prior_peertrust_leader_debt_.find(
+        {buffer->snapshot.weight_root_hex, buffer->snapshot.weight_version});
+    if (prior_it != prior_peertrust_leader_debt_.end()) {
+      input.prior_peertrust_leader_debt = prior_it->second;
+    }
+  }
 
   ReputationCandidate candidate = ComputeReputationCandidate(input, options_.config);
   candidate.window_index = key.window_index;
@@ -1031,6 +1060,26 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
                           input.invalid_qc_proposal_evidence.size();
   ApplyPersistentStrongFaults(&candidate);
   RecomputeReputationCandidateRoots(&candidate);
+  if (options_.config.peertrust_enabled) {
+    std::vector<int> peertrust_leader_debt;
+    peertrust_leader_debt.reserve(candidate.validators.size());
+    for (const ValidatorReputation& validator : candidate.validators) {
+      peertrust_leader_debt.push_back(validator.peertrust_leader_debt);
+    }
+    if (!peertrust_leader_debt.empty()) {
+      const auto current_snapshot_key =
+          std::make_pair(buffer->snapshot.weight_root_hex,
+                         buffer->snapshot.weight_version);
+      const auto next_snapshot_key =
+          std::make_pair(candidate.next_weight_root_hex,
+                         candidate.old_weight_version + 1);
+      std::lock_guard<std::mutex> lk(mutex_);
+      prior_peertrust_leader_debt_[current_snapshot_key] =
+          peertrust_leader_debt;
+      prior_peertrust_leader_debt_[next_snapshot_key] =
+          std::move(peertrust_leader_debt);
+    }
+  }
   WriteAudit(candidate);
   PushCompleted(std::move(candidate));
   computed_window_count_.fetch_add(1);

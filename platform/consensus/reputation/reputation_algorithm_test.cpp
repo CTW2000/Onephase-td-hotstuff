@@ -649,6 +649,35 @@ TEST(ReputationAlgorithmTest, PeerTrustAllGoodRotatingFeedbackStaysHigh) {
   EXPECT_EQ(candidate.validators[0].next_weight, 30);
 }
 
+TEST(ReputationAlgorithmTest,
+     PeerTrustQuorumSizedAvailabilityDoesNotCreateDebt) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  config.decay_per_epoch = 0;
+  const std::vector<int> quorum_a = {1, 2, 3, 4, 5, 6, 7,
+                                     8, 9, 10, 11, 12, 13, 14};
+  const std::vector<int> quorum_b = {2, 3, 4, 5, 6, 7, 8,
+                                     9, 10, 11, 12, 13, 14, 15};
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 5; ++view) {
+    const std::vector<int>& quorum = view % 2 == 0 ? quorum_b : quorum_a;
+    const std::string bitmap = BitmapFromVector(quorum, 20);
+    evidence.push_back(CertifiedQc(view, view, bitmap, bitmap));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 30), config,
+      "old-root", 0, 64);
+
+  for (int leader = 1; leader <= 5; ++leader) {
+    const ValidatorReputation& validator = candidate.validators[leader - 1];
+    EXPECT_EQ(validator.peertrust_score, 100);
+    EXPECT_EQ(validator.community_context_score, 100);
+    EXPECT_EQ(validator.peertrust_leader_debt, 0);
+    EXPECT_EQ(validator.next_weight, 30);
+  }
+}
+
 TEST(ReputationAlgorithmTest, PeerTrustCliqueFeedbackLowersOnlyLeaderRecovery) {
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = true;
@@ -672,6 +701,9 @@ TEST(ReputationAlgorithmTest, PeerTrustCliqueFeedbackLowersOnlyLeaderRecovery) {
             candidate.validators[1].peertrust_score);
   EXPECT_LT(candidate.validators[0].next_weight,
             candidate.validators[1].next_weight);
+  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt, 20);
+  EXPECT_EQ(candidate.validators[1].peertrust_leader_debt, 0);
+  EXPECT_EQ(candidate.leader_weights[0], candidate.leader_weights[1]);
   EXPECT_EQ(candidate.validators[3].strong_fault_count, 0);
   EXPECT_EQ(candidate.validators[3].penalty_points, 0);
   EXPECT_EQ(candidate.validators[3].next_weight, 30);
@@ -714,10 +746,93 @@ TEST(ReputationAlgorithmTest,
             legacy_candidate.validators[0].next_weight);
   EXPECT_LT(peertrust_candidate.validators[1].next_weight,
             legacy_candidate.validators[1].next_weight);
+  EXPECT_EQ(peertrust_candidate.validators[0].peertrust_leader_debt, 20);
+  EXPECT_EQ(peertrust_candidate.validators[1].peertrust_leader_debt, 20);
+  EXPECT_EQ(peertrust_candidate.leader_weights[0],
+            legacy_candidate.leader_weights[0]);
+  EXPECT_EQ(peertrust_candidate.leader_weights[1],
+            legacy_candidate.leader_weights[1]);
   EXPECT_EQ(peertrust_candidate.validators[0].strong_fault_count, 0);
   EXPECT_EQ(peertrust_candidate.validators[0].penalty_points, 0);
   EXPECT_EQ(peertrust_candidate.validators[14].next_weight, 30);
   EXPECT_EQ(peertrust_candidate.validators[15].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest,
+     PeerTrustSoftReputationDoesNotCollapseHealthyVotingWeight) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  const std::string all_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+  const std::string clique_reviewers =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 20);
+  std::vector<TestEvidence> evidence = {
+      CertifiedQc(1, 1, clique_reviewers, all_available),
+      CertifiedQc(2, 2, clique_reviewers, all_available),
+      CertifiedQc(3, 15, all_available, all_available),
+      CertifiedQc(4, 16, all_available, all_available),
+  };
+  std::vector<int64_t> weights(20, 68);
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, weights, config, "old-root", 0, 64);
+
+  EXPECT_LT(candidate.validators[0].peertrust_score,
+            candidate.validators[14].peertrust_score);
+  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt, 20);
+  EXPECT_GE(candidate.validators[0].next_weight, 67);
+  EXPECT_GE(candidate.validators[1].next_weight, 67);
+  EXPECT_EQ(candidate.validators[0].strong_fault_count, 0);
+  EXPECT_EQ(candidate.validators[0].penalty_points, 0);
+}
+
+TEST(ReputationAlgorithmTest,
+     PeerTrustLowScoreMovesHighWeightDirectlyToSoftFloor) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  const std::string all_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+  const std::string clique_reviewers =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 20);
+  std::vector<TestEvidence> evidence = {
+      CertifiedQc(1, 1, clique_reviewers, all_available),
+      CertifiedQc(2, 2, clique_reviewers, all_available),
+      CertifiedQc(3, 15, all_available, all_available),
+      CertifiedQc(4, 16, all_available, all_available),
+  };
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 100), config,
+      "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[0].peertrust_score, 0);
+  EXPECT_EQ(candidate.validators[1].peertrust_score, 0);
+  EXPECT_EQ(candidate.validators[0].next_weight,
+            config.peertrust_soft_min_weight);
+  EXPECT_EQ(candidate.validators[1].next_weight,
+            config.peertrust_soft_min_weight);
+  EXPECT_EQ(candidate.validators[14].next_weight, 100);
+}
+
+TEST(ReputationAlgorithmTest,
+     PeerTrustSoftFloorStopsHealthyCarryoverDecayNearFloor) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  std::vector<int64_t> weights(20, 100);
+  weights[0] = 67;
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, {}, weights, config, "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[0].vote_score, 50);
+  EXPECT_EQ(candidate.validators[0].decay_applied, config.decay_per_epoch);
+  EXPECT_GE(candidate.validators[0].next_weight, 67);
+  EXPECT_EQ(candidate.validators[0].strong_fault_count, 0);
+  EXPECT_EQ(candidate.validators[0].penalty_points, 0);
 }
 
 
@@ -860,7 +975,7 @@ TEST(ReputationAlgorithmTest,
   std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 5; ++view) {
     evidence.push_back(
-        CertifiedQc(view, view, clean_reviewers, clean_reviewers));
+        CertifiedQc(view, view, clean_reviewers, all_available));
   }
   for (int view = 6; view <= 20; ++view) {
     evidence.push_back(CertifiedQc(view, 20, all_available, all_available));
@@ -873,8 +988,9 @@ TEST(ReputationAlgorithmTest,
   for (int leader = 1; leader <= 5; ++leader) {
     EXPECT_LT(candidate.validators[leader - 1].community_context_score,
               candidate.validators[19].community_context_score);
-    EXPECT_LT(candidate.validators[leader - 1].next_weight,
-              candidate.validators[19].next_weight);
+    EXPECT_LT(candidate.validators[leader - 1].peertrust_score,
+              candidate.validators[19].peertrust_score);
+    EXPECT_EQ(candidate.validators[leader - 1].next_weight, 30);
   }
   EXPECT_EQ(candidate.validators[19].next_weight, 30);
 }
@@ -882,15 +998,16 @@ TEST(ReputationAlgorithmTest,
 TEST(ReputationAlgorithmTest, PeerTrustLowReviewerCredibilityReducesFeedback) {
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = true;
-  const std::string low_weight_reviewers = Bitmap({1, 2, 3, 4}, 4);
+  const std::string low_weight_reviewers = Bitmap({1, 2, 3}, 5);
+  const std::string all_available = Bitmap({1, 2, 3, 4, 5}, 5);
   std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 4; ++view) {
     evidence.push_back(CertifiedQc(view, 1, low_weight_reviewers,
-                                   low_weight_reviewers));
+                                   all_available));
   }
 
   const ReputationCandidate candidate = ComputeCandidate(
-      1, 4, 1, evidence, {5, 5, 30, 30}, config, "old-root", 0, 64);
+      1, 5, 1, evidence, {5, 5, 5, 30, 30}, config, "old-root", 0, 64);
 
   EXPECT_LT(candidate.validators[0].reviewer_credibility_score, 100);
   EXPECT_LT(candidate.validators[0].peertrust_score, 100);
@@ -946,6 +1063,7 @@ TEST(ReputationAlgorithmTest, PeerTrustDebtPersistsWithoutLeaderFeedback) {
   EXPECT_EQ(with_debt.validators[0].peertrust_leader_debt, 40);
   EXPECT_LT(with_debt.validators[0].next_weight,
             no_debt.validators[0].next_weight);
+  EXPECT_EQ(with_debt.leader_weights[0], no_debt.leader_weights[0]);
 }
 
 TEST(ReputationAlgorithmTest, PeerTrustBroadGoodLeadershipRepaysDebt) {

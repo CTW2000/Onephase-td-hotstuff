@@ -105,6 +105,18 @@ bool IsLeaderWeightIneligible(const ValidatorReputation& validator,
          validator.next_weight <= config.leader_eligible_min_weight;
 }
 
+int LeaderSelectionScore(const ValidatorReputation& validator,
+                         const ReputationConfig& config) {
+  static_cast<void>(validator);
+  static_cast<void>(config);
+  int score = 100;
+  // PeerTrust debt is intentionally audit/plugin-side state for now. Applying
+  // it directly to the active consensus leader schedule requires a synchronized
+  // activation protocol, otherwise validators can switch expected leaders at
+  // different local views.
+  return std::max(0, std::min(100, score));
+}
+
 std::vector<int64_t> LeaderWeightsForCandidate(
     const std::vector<ValidatorReputation>& validators,
     const ReputationConfig& config,
@@ -121,6 +133,10 @@ std::vector<int64_t> LeaderWeightsForCandidate(
       all_validators_eligible = false;
       break;
     }
+    if (LeaderSelectionScore(validator, config) < 100) {
+      all_validators_eligible = false;
+      break;
+    }
   }
   const int64_t equal_leader_weight = ClampWeight(config.max_weight, config);
   const int64_t ineligible_leader_weight = ClampWeight(config.min_weight, config);
@@ -134,6 +150,9 @@ std::vector<int64_t> LeaderWeightsForCandidate(
     } else if (IsLeaderWeightIneligible(validator, config,
                                         current_leader_weight)) {
       leader_weights.push_back(ineligible_leader_weight);
+    } else if (LeaderSelectionScore(validator, config) < 100) {
+      leader_weights.push_back(ClampWeight(LeaderSelectionScore(validator, config),
+                                           config));
     } else if (config.leader_recovery_enabled) {
       leader_weights.push_back(equal_leader_weight);
     } else {
@@ -528,6 +547,8 @@ ReputationCandidate ComputeReputationCandidate(
       std::max(total_replicas, 0), 100);
   std::vector<int> peertrust_community_context_scores(
       std::max(total_replicas, 0), 100);
+  std::vector<bool> peertrust_has_credible_public_choice(
+      std::max(total_replicas, 0), false);
 
   uint64_t legacy_selected_signer_slots = 0;
   uint64_t legacy_certificate_event_count = 0;
@@ -852,10 +873,25 @@ ReputationCandidate ComputeReputationCandidate(
     const bool has_broad_available_reviewer_set =
         !unique_available_signers_by_leader[idx].empty() &&
         available_coverage_score >= 95;
+    const bool selected_narrower_than_available =
+        has_broad_available_reviewer_set &&
+        signer_coverage_score + 10 < available_coverage_score;
+    peertrust_has_credible_public_choice[idx] =
+        selected_narrower_than_available;
     const int reviewer_coverage_score =
-        has_broad_available_reviewer_set
-            ? 100
-            : std::min(available_coverage_score, signer_coverage_score);
+        selected_narrower_than_available
+            ? signer_coverage_score
+            : (has_broad_available_reviewer_set
+                   ? 100
+                   : std::min(available_coverage_score,
+                              signer_coverage_score));
+    if (!peertrust_has_credible_public_choice[idx]) {
+      peertrust_reviewer_entropy_scores[idx] = 100;
+      peertrust_cross_leader_independence_scores[idx] = 100;
+      peertrust_reviewer_overuse_scores[idx] = 100;
+      peertrust_community_context_scores[idx] = 100;
+      continue;
+    }
     peertrust_reviewer_entropy_scores[idx] =
         has_broad_available_reviewer_set
             ? 100
@@ -917,9 +953,10 @@ ReputationCandidate ComputeReputationCandidate(
   if (!peertrust_community_baseline_samples.empty()) {
     std::sort(peertrust_community_baseline_samples.begin(),
               peertrust_community_baseline_samples.end());
+    // A collusive reviewer clique can occupy many leader slots, so compare
+    // against the healthiest observed community context instead of a median.
     peertrust_community_baseline_score =
-        peertrust_community_baseline_samples
-            [peertrust_community_baseline_samples.size() / 2];
+        peertrust_community_baseline_samples.back();
   }
   constexpr int kPeerTrustCommunityOutlierDeadband = 10;
 
@@ -973,14 +1010,21 @@ ReputationCandidate ComputeReputationCandidate(
     const uint64_t leader_opportunities = validator.leader_opportunity_count;
     validator.leader_score = LeaderCertifiedScore(
         validator.leader_certified_count, leader_opportunities);
+    const bool has_credible_peertrust_evidence =
+        idx >= 0 &&
+        idx < static_cast<int>(peertrust_has_credible_public_choice.size()) &&
+        peertrust_has_credible_public_choice[idx];
     if (config.peertrust_enabled && idx >= 0 &&
         idx < static_cast<int>(peertrust_feedback_count.size()) &&
         peertrust_feedback_count[idx] > 0) {
       validator.feedback_count = peertrust_feedback_count[idx];
-      validator.reviewer_credibility_score = std::max(
-          0, std::min(100,
-                      RoundedDivide(peertrust_reviewer_credibility_sum[idx],
-                                    peertrust_feedback_count[idx])));
+      validator.reviewer_credibility_score =
+          has_credible_peertrust_evidence
+              ? std::max(0, std::min(100,
+                                     RoundedDivide(
+                                         peertrust_reviewer_credibility_sum[idx],
+                                         peertrust_feedback_count[idx])))
+              : 100;
       validator.transaction_context_score = 100;
       validator.reviewer_entropy_score =
           idx >= 0 && idx < static_cast<int>(peertrust_reviewer_entropy_scores.size())
@@ -1012,18 +1056,33 @@ ReputationCandidate ComputeReputationCandidate(
                                          raw_peertrust_community_score * 100,
                                          peertrust_community_baseline_score)))
               : 100;
-      validator.community_context_score = std::min(
-          validator.leader_diversity_score, relative_peertrust_community_score);
-      validator.peertrust_score = std::max(
-          0, std::min(100,
-                      RoundedDivide(
-                          static_cast<uint64_t>(
-                              validator.reviewer_credibility_score) *
-                              static_cast<uint64_t>(
-                                  validator.transaction_context_score) *
-                              static_cast<uint64_t>(
-                                  validator.community_context_score),
-                          10000)));
+      const int relative_leader_diversity_score =
+          has_public_available_signer_evidence &&
+                  diversity_baseline_samples.size() > 1
+              ? (low_diversity_outlier && leader_diversity_baseline_score > 0
+                     ? std::max(0, std::min(100,
+                                            RoundedDivide(
+                                                raw_leader_diversity_score * 100,
+                                                leader_diversity_baseline_score)))
+                     : 100)
+              : validator.leader_diversity_score;
+      if (has_credible_peertrust_evidence) {
+        validator.community_context_score = std::min(
+            relative_leader_diversity_score, relative_peertrust_community_score);
+        validator.peertrust_score = std::max(
+            0, std::min(100,
+                        RoundedDivide(
+                            static_cast<uint64_t>(
+                                validator.reviewer_credibility_score) *
+                                static_cast<uint64_t>(
+                                    validator.transaction_context_score) *
+                                static_cast<uint64_t>(
+                                    validator.community_context_score),
+                            10000)));
+      } else {
+        validator.community_context_score = 100;
+        validator.peertrust_score = 100;
+      }
     } else {
       validator.peertrust_score = 100;
       validator.reviewer_credibility_score = 100;
@@ -1036,14 +1095,16 @@ ReputationCandidate ComputeReputationCandidate(
     }
 
     const int previous_peertrust_debt = validator.peertrust_leader_debt;
+    bool low_peertrust = false;
+    bool broad_good_peertrust = false;
     if (config.peertrust_enabled) {
       int next_peertrust_debt = previous_peertrust_debt;
       if (validator.feedback_count > 0) {
-        const bool low_peertrust =
+        low_peertrust =
             validator.peertrust_score < config.peertrust_debt_trigger_score ||
             validator.community_context_score <
                 config.peertrust_debt_trigger_score;
-        const bool broad_good_peertrust =
+        broad_good_peertrust =
             validator.peertrust_score >= 95 &&
             validator.community_context_score >= 95;
         if (low_peertrust) {
@@ -1108,14 +1169,18 @@ ReputationCandidate ComputeReputationCandidate(
       }
     }
     if (config.peertrust_enabled &&
-        (leader_opportunities >= config.min_leader_opportunities ||
+        (validator.feedback_count > 0 ||
          validator.peertrust_leader_debt > 0)) {
-      if (leader_opportunities >= config.min_leader_opportunities) {
+      if (validator.feedback_count > 0) {
         recovery_score = std::min(recovery_score, validator.peertrust_score);
       }
       const int debt_gate_score =
           std::max(0, 100 - validator.peertrust_leader_debt);
       recovery_score = std::min(recovery_score, debt_gate_score);
+      if (validator.peertrust_leader_debt > 0 &&
+          debt_gate_score < kDebtNoRecoveryBelow) {
+        recovery_score = 0;
+      }
     }
     if (config.sybil_graph_enabled &&
         (validator.graph_degree > 0 || validator.sybil_graph_debt > 0)) {
@@ -1175,8 +1240,19 @@ ReputationCandidate ComputeReputationCandidate(
         validator.leader_score >= 95;
     const bool leader_reentry_bonus_allowed =
         !at_leader_reentry_boundary || has_good_leader_reentry_evidence;
+    const int64_t peertrust_soft_floor = std::max<int64_t>(
+        config.min_weight,
+        std::min<int64_t>(config.peertrust_soft_min_weight, config.max_weight));
+    const bool peertrust_floor_recovery_guard =
+        config.peertrust_enabled &&
+        validator.current_weight <= peertrust_soft_floor &&
+        validator.current_weight + validator.decay_applied >=
+            peertrust_soft_floor &&
+        (validator.feedback_count > 0 || validator.peertrust_leader_debt > 0) &&
+        !(broad_good_peertrust && validator.leader_diversity_score >= 95);
     const bool earns_bonus =
         leader_reentry_bonus_allowed && validator_has_enough_decay_evidence &&
+        !peertrust_floor_recovery_guard &&
         below_mean_weight &&
         ((recovery_score >= 95 && validator.vote_score >= 95) ||
          (near_fair_vote && recovery_score >= 67) || healthy_catchup_score);
@@ -1190,6 +1266,21 @@ ReputationCandidate ComputeReputationCandidate(
         validator.current_weight - validator.decay_applied +
             validator.recovery_credit + validator.bonus_credit,
         config);
+    const bool peertrust_soft_floor_eligible =
+        config.peertrust_enabled &&
+        validator.vote_score >= kHealthyCatchUpScore &&
+        validator.sybil_graph_debt == 0;
+    if (peertrust_soft_floor_eligible && low_peertrust &&
+        validator.current_weight > peertrust_soft_floor &&
+        validator.next_weight > peertrust_soft_floor) {
+      validator.next_weight = peertrust_soft_floor;
+    }
+    if (peertrust_soft_floor_eligible &&
+        validator.current_weight + validator.decay_applied >=
+            peertrust_soft_floor &&
+        validator.next_weight < peertrust_soft_floor) {
+      validator.next_weight = peertrust_soft_floor;
+    }
   }
 
   if (config.strong_fault_enabled) {

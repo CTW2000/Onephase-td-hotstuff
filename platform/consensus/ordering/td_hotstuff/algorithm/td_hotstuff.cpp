@@ -261,6 +261,17 @@ void HotStuff::MaybeDelayVoteForExperiment() const {
   std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
 }
 
+bool HotStuff::ShouldUsePeerTrustCliqueForView(int view) const {
+  if (!EnvFlagEnabled("TD_HS_PEERTRUST_CLIQUE")) {
+    return false;
+  }
+  const int leader = leader_schedule_ != nullptr
+                         ? leader_schedule_->LeaderForView(view)
+                         : DefaultLeaderForView(view, total_num_);
+  return leader > 0 &&
+         EnvListContainsId("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", leader);
+}
+
 bool HotStuff::IsInvalidQcForExperiment() const {
   return EnvFlagEnabled("TD_HS_INVALID_QC");
 }
@@ -735,18 +746,20 @@ std::vector<int> HotStuff::CertificateSigners(
     return {};
   }
 
+  const int64_t quorum_weight =
+      weight_schedule_ != nullptr ? weight_schedule_->QuorumWeightForView(view)
+                                  : quorum_weight_;
+
   // std::map iteration always starts from the smallest validator id. Rotate the
   // timely signer set by view so all honest voters get comparable QC inclusion
   // opportunities without waiting for late votes.
+  const int view_index = std::max(view - 1, 0);
   const size_t start =
-      static_cast<size_t>(std::max(view - 1, 0)) % available_signers.size();
+      static_cast<size_t>(view_index) % available_signers.size();
 
   std::vector<int> signers;
   signers.reserve(available_signers.size());
   int64_t selected_weight = 0;
-  const int64_t quorum_weight =
-      weight_schedule_ != nullptr ? weight_schedule_->QuorumWeightForView(view)
-                                  : quorum_weight_;
   for (size_t offset = 0; offset < available_signers.size(); ++offset) {
     const int signer = available_signers[(start + offset) % available_signers.size()];
     const int64_t weight = WeightForSigner(signer, view);
@@ -936,6 +949,20 @@ bool HotStuff::MaybeFormQcLocked(
   if (available_signers.empty()) {
     available_signers = selected_signers;
   }
+  if (ShouldUsePeerTrustCliqueForView(view)) {
+    available_signers.clear();
+    for (int signer = 1; signer <= total_num_; ++signer) {
+      if (WeightForSigner(signer, view) > 0) {
+        available_signers.push_back(signer);
+      }
+    }
+    if (EnvFlagEnabled("TD_HS_PEERTRUST_QC_TRACE")) {
+      LOG(ERROR) << "[PeerTrustCliqueEvidence] view=" << view
+                 << " selected_count=" << selected_signers.size()
+                 << " available_count=" << available_signers.size()
+                 << " shared_qc_metadata=public_available_set";
+    }
+  }
 
   std::unique_ptr<QC> qc = std::make_unique<QC>();
   qc->set_hash(hash);
@@ -1009,8 +1036,8 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
         *cert, &signed_vote_snapshot);
     const int view = cert->view();
     const int local_current_view = proposal_manager_->CurrentView();
+    const std::string hash = cert->hash();
     if (view >= local_current_view) {
-      const std::string hash = cert->hash();
       auto& certs = receive_[view][hash];
       const int64_t previous_weight = CertificateWeight(certs, view);
       certs.insert(std::make_pair(cert->signer(), std::move(cert)));
@@ -1018,7 +1045,9 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
       const int64_t quorum_weight =
           weight_schedule_ != nullptr ? weight_schedule_->QuorumWeightForView(view)
                                       : quorum_weight_;
-      if (previous_weight < quorum_weight && current_weight >= quorum_weight) {
+      const bool crossed_quorum =
+          previous_weight < quorum_weight && current_weight >= quorum_weight;
+      if (view >= local_current_view && crossed_quorum) {
         MarkTimeoutProgressLocked();
         MaybeFormQcLocked(view, hash);
       }
