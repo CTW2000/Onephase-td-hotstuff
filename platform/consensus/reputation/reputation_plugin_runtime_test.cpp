@@ -268,7 +268,8 @@ TEST(ReputationPluginRuntimeTest, DedupesAndSortsEquivalentEvidence) {
 TEST(ReputationPluginRuntimeTest,
      PersistsVoteBetaCountersAcrossSameWeightSnapshot) {
   ReputationRuntimeOptions options = RuntimeOptions();
-  options.initial_weights = {100, 100, 100, 100};
+  options.total_replicas = 5;
+  options.initial_weights = {100, 100, 100, 100, 100};
   options.initial_weight_root = WeightRootHex(options.initial_weights);
   options.config.decay_per_epoch = 10;
   options.config.max_recovery_per_epoch = 10;
@@ -279,8 +280,8 @@ TEST(ReputationPluginRuntimeTest,
   for (int view = 0; view < 4; ++view) {
     CertifiedSignerEvidenceRecord evidence = Evidence(
         view, "bad-qc-" + std::to_string(view));
-    evidence.signer_bitmap = Bitmap({2, 3, 4}, 4);
-    evidence.available_signer_bitmap.clear();
+    evidence.signer_bitmap = Bitmap({2, 3, 4, 5}, 5);
+    evidence.available_signer_bitmap = Bitmap({2, 3, 4, 5}, 5);
     evidence.active_weights = options.initial_weights;
     evidence.weight_root_hex = options.initial_weight_root;
     EXPECT_TRUE(runtime.RecordEvidence(evidence));
@@ -293,8 +294,8 @@ TEST(ReputationPluginRuntimeTest,
   for (int view = 4; view < 8; ++view) {
     CertifiedSignerEvidenceRecord evidence = Evidence(
         view, "good-qc-" + std::to_string(view));
-    evidence.signer_bitmap = Bitmap({1, 2, 3, 4}, 4);
-    evidence.available_signer_bitmap.clear();
+    evidence.signer_bitmap = Bitmap({1, 2, 3, 4, 5}, 5);
+    evidence.available_signer_bitmap = Bitmap({1, 2, 3, 4, 5}, 5);
     evidence.active_weights = options.initial_weights;
     evidence.weight_root_hex = options.initial_weight_root;
     EXPECT_TRUE(runtime.RecordEvidence(evidence));
@@ -790,6 +791,63 @@ TEST(ReputationPluginRuntimeTest,
             first_candidates[0].candidate_digest_hex);
 }
 
+
+
+TEST(ReputationPluginRuntimeTest,
+     PersistsFormulaStakeAcrossCertifiedWeightActivation) {
+  ReputationRuntimeOptions options = RuntimeOptions();
+  options.window_size_views = 2;
+  options.total_replicas = 5;
+  options.initial_weights = {100, 100, 100, 100, 100};
+  options.initial_weight_root = WeightRootHex(options.initial_weights);
+  options.initial_weight_version = 0;
+  ReputationPluginRuntime runtime(options);
+  runtime.Start();
+
+  for (int view = 0; view < 2; ++view) {
+    CertifiedSignerEvidenceRecord record;
+    record.view_or_round = view;
+    record.slot_or_height = 0;
+    record.leader_id = (view % 5) + 1;
+    record.artifact_digest = "bad-window-" + std::to_string(view);
+    record.signer_bitmap = Bitmap({2, 3, 4, 5}, 5);
+    record.available_signer_bitmap = Bitmap({2, 3, 4, 5}, 5);
+    record.weight_root_hex = options.initial_weight_root;
+    record.weight_version = 0;
+    record.active_weights = options.initial_weights;
+    EXPECT_TRUE(runtime.RecordEvidence(record));
+  }
+  runtime.AdvanceWatermark(2);
+  auto first_candidates = WaitForCandidates(&runtime, 1);
+  ASSERT_EQ(first_candidates.size(), 1);
+  ASSERT_EQ(first_candidates[0].validators[0].stake_factor_per_mille, 1000);
+  ASSERT_LT(first_candidates[0].validators[0].next_weight, 100);
+
+  for (int view = 2; view < 4; ++view) {
+    CertifiedSignerEvidenceRecord record;
+    record.view_or_round = view;
+    record.slot_or_height = 0;
+    record.leader_id = (view % 5) + 1;
+    record.artifact_digest = "recovery-window-" + std::to_string(view);
+    record.signer_bitmap = Bitmap({1, 2, 3, 4, 5}, 5);
+    record.available_signer_bitmap = Bitmap({1, 2, 3, 4, 5}, 5);
+    record.weight_root_hex = first_candidates[0].next_weight_root_hex;
+    record.weight_version = first_candidates[0].old_weight_version + 1;
+    record.active_weights = first_candidates[0].next_weights;
+    EXPECT_TRUE(runtime.RecordEvidence(record));
+  }
+  runtime.AdvanceWatermark(4);
+  auto second_candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(second_candidates.size(), 1);
+  EXPECT_EQ(second_candidates[0].validators[0].stake_factor_per_mille, 1000);
+  EXPECT_NE(second_candidates[0].validators[0].stake_factor_per_mille,
+            static_cast<int>(second_candidates[0].validators[0].current_weight *
+                             10));
+  EXPECT_GE(second_candidates[0].validators[0].next_weight,
+            first_candidates[0].validators[0].next_weight);
+}
 
 TEST(ReputationPluginRuntimeTest, DrainsOnlyEarliestCandidatePerWeightVersion) {
   ReputationPluginRuntime runtime(RuntimeOptions());

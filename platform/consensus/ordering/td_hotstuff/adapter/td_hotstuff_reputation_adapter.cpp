@@ -16,15 +16,27 @@ namespace {
 constexpr size_t kDefaultWindowSize = 4096;
 constexpr size_t kDefaultQueueCapacity = 65536;
 
-bool EnvFlagEnabled(const char* name) {
+bool BoolFromEnv(const char* name, bool fallback) {
   const char* raw = std::getenv(name);
   if (raw == nullptr) {
-    return false;
+    return fallback;
   }
   const std::string value(raw);
-  return value == "1" || value == "true" || value == "TRUE" ||
-         value == "yes" || value == "YES" || value == "on" ||
-         value == "ON";
+  if (value == "1" || value == "true" || value == "TRUE" ||
+      value == "yes" || value == "YES" || value == "on" ||
+      value == "ON") {
+    return true;
+  }
+  if (value == "0" || value == "false" || value == "FALSE" ||
+      value == "no" || value == "NO" || value == "off" ||
+      value == "OFF") {
+    return false;
+  }
+  return fallback;
+}
+
+bool EnvFlagEnabled(const char* name) {
+  return BoolFromEnv(name, false);
 }
 
 size_t PositiveSizeFromEnv(const char* name, size_t fallback) {
@@ -180,6 +192,24 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.reputation_config.vote_beta_decay_per_mille = PositiveIntFromEnv(
       "TD_HS_REPUTATION_VOTE_BETA_DECAY_PER_MILLE",
       options.reputation_config.vote_beta_decay_per_mille);
+  options.reputation_config.multiplicative_weight_formula_enabled = BoolFromEnv(
+      "TD_HS_REPUTATION_MULTIPLICATIVE_WEIGHT_ENABLE",
+      options.reputation_config.multiplicative_weight_formula_enabled);
+  options.reputation_config.stake_exponent_tau_per_mille = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_STAKE_TAU_PER_MILLE",
+      options.reputation_config.stake_exponent_tau_per_mille);
+  options.reputation_config.stake_factor_min_per_mille = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_STAKE_MIN_PER_MILLE",
+      options.reputation_config.stake_factor_min_per_mille);
+  options.reputation_config.stake_factor_max_per_mille = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_STAKE_MAX_PER_MILLE",
+      options.reputation_config.stake_factor_max_per_mille);
+  options.reputation_config.identity_factor_min_per_mille = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE",
+      options.reputation_config.identity_factor_min_per_mille);
+  options.reputation_config.identity_factor_max_per_mille = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE",
+      options.reputation_config.identity_factor_max_per_mille);
   options.reputation_config.min_weight = PositiveIntFromEnv(
       "TD_HS_REPUTATION_MIN_WEIGHT",
       options.reputation_config.min_weight);

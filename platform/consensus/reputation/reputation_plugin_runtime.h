@@ -175,6 +175,10 @@ class ReputationPluginRuntime {
   std::map<std::pair<std::string, uint64_t>, std::vector<int64_t>> known_weights_;
   std::map<std::pair<std::string, uint64_t>, ReputationWeightSnapshot>
       known_snapshots_;
+  std::map<std::pair<std::string, uint64_t>, std::vector<int>>
+      prior_stake_factors_per_mille_;
+  std::map<std::pair<std::string, uint64_t>, std::vector<int>>
+      prior_identity_factors_per_mille_;
   std::map<std::pair<std::string, uint64_t>,
            std::vector<ParticipationBetaCounter>>
       prior_vote_beta_counters_;

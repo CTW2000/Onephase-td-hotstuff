@@ -148,6 +148,12 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   setenv("TD_HS_REPUTATION_MIN_CANDIDATE_QCS", "16", 1);
   setenv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT", "10", 1);
   setenv("TD_HS_REPUTATION_PEERTRUST_ENABLE", "1", 1);
+  setenv("TD_HS_REPUTATION_MULTIPLICATIVE_WEIGHT_ENABLE", "1", 1);
+  setenv("TD_HS_REPUTATION_STAKE_TAU_PER_MILLE", "750", 1);
+  setenv("TD_HS_REPUTATION_STAKE_MIN_PER_MILLE", "900", 1);
+  setenv("TD_HS_REPUTATION_STAKE_MAX_PER_MILLE", "1100", 1);
+  setenv("TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE", "950", 1);
+  setenv("TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE", "1050", 1);
 
   const TdHotstuffReputationAdapterOptions options =
       TdHotstuffReputationAdapter::OptionsFromEnv();
@@ -163,6 +169,12 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   EXPECT_EQ(options.min_candidate_events, 16);
   EXPECT_EQ(options.reputation_config.leader_eligible_min_weight, 10);
   EXPECT_TRUE(options.reputation_config.peertrust_enabled);
+  EXPECT_TRUE(options.reputation_config.multiplicative_weight_formula_enabled);
+  EXPECT_EQ(options.reputation_config.stake_exponent_tau_per_mille, 750);
+  EXPECT_EQ(options.reputation_config.stake_factor_min_per_mille, 900);
+  EXPECT_EQ(options.reputation_config.stake_factor_max_per_mille, 1100);
+  EXPECT_EQ(options.reputation_config.identity_factor_min_per_mille, 950);
+  EXPECT_EQ(options.reputation_config.identity_factor_max_per_mille, 1050);
 
   unsetenv("TD_HS_REPUTATION_ENABLE");
   unsetenv("TD_HS_REPUTATION_DECAY_PER_EPOCH");
@@ -175,6 +187,12 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   unsetenv("TD_HS_REPUTATION_MIN_CANDIDATE_QCS");
   unsetenv("TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT");
   unsetenv("TD_HS_REPUTATION_PEERTRUST_ENABLE");
+  unsetenv("TD_HS_REPUTATION_MULTIPLICATIVE_WEIGHT_ENABLE");
+  unsetenv("TD_HS_REPUTATION_STAKE_TAU_PER_MILLE");
+  unsetenv("TD_HS_REPUTATION_STAKE_MIN_PER_MILLE");
+  unsetenv("TD_HS_REPUTATION_STAKE_MAX_PER_MILLE");
+  unsetenv("TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE");
+  unsetenv("TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE");
 }
 
 

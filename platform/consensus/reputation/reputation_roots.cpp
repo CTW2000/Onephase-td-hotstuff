@@ -19,7 +19,12 @@ std::string MetricCanonical(const ReputationCandidate& candidate) {
     out << '|' << validator.validator_id << ':' << validator.opportunities << ':'
         << validator.inclusions << ':' << validator.vote_score << ':'
         << validator.vote_beta_success << ':' << validator.vote_beta_failure
-        << ':' << validator.leader_certified_count << ':'
+        << ':' << validator.stake_factor_per_mille << ':'
+        << validator.stake_power_factor_per_mille << ':'
+        << validator.identity_factor_per_mille << ':'
+        << validator.reputation_factor_per_mille << ':'
+        << validator.direct_penalty_factor_per_mille << ':'
+        << validator.leader_certified_count << ':'
         << validator.leader_opportunity_count << ':'
         << validator.leader_score << ':' << validator.leader_diversity_score
         << ':' << validator.peertrust_score << ':'
@@ -49,7 +54,13 @@ std::string ReputationCanonical(const ReputationCandidate& candidate) {
         << ':' << validator.decay_applied << ':' << validator.recovery_credit
         << ':' << validator.bonus_credit << ':' << validator.current_weight
         << ':' << validator.next_weight << ':' << validator.vote_beta_success
-        << ':' << validator.vote_beta_failure << ':' << validator.strong_fault_count
+        << ':' << validator.vote_beta_failure << ':'
+        << validator.stake_factor_per_mille << ':'
+        << validator.stake_power_factor_per_mille << ':'
+        << validator.identity_factor_per_mille << ':'
+        << validator.reputation_factor_per_mille << ':'
+        << validator.direct_penalty_factor_per_mille << ':'
+        << validator.strong_fault_count
         << ':' << validator.penalty_points << ':' << validator.peertrust_score
         << ':' << validator.reviewer_credibility_score << ':'
         << validator.transaction_context_score << ':'

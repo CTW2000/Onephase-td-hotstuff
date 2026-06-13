@@ -31,6 +31,14 @@ struct ReputationConfig {
   int64_t max_weight = 100;
   uint64_t min_decay_opportunities = 1;
   int vote_beta_decay_per_mille = 900;
+  bool multiplicative_weight_formula_enabled = true;
+  int stake_exponent_tau_per_mille = 1000;
+  int stake_factor_min_per_mille = 1000;
+  int stake_factor_max_per_mille = 1000;
+  uint64_t stake_factor_seed = 0x9e3779b97f4a7c15ULL;
+  int identity_factor_min_per_mille = 1000;
+  int identity_factor_max_per_mille = 1000;
+  uint64_t identity_factor_seed = 0xbf58476d1ce4e5b9ULL;
   uint64_t min_leader_opportunities = 8;
   int64_t leader_eligible_min_weight = 10;
   bool leader_recovery_enabled = false;
@@ -74,6 +82,11 @@ struct ValidatorReputation {
   int vote_score = 0;
   uint64_t vote_beta_success = 0;
   uint64_t vote_beta_failure = 0;
+  int stake_factor_per_mille = 1000;
+  int stake_power_factor_per_mille = 1000;
+  int identity_factor_per_mille = 1000;
+  int reputation_factor_per_mille = 1000;
+  int direct_penalty_factor_per_mille = 1000;
   uint64_t leader_certified_count = 0;
   uint64_t leader_opportunity_count = 0;
   int leader_score = 100;
@@ -213,6 +226,8 @@ struct ReputationWindowInput {
   std::vector<CertifiedSignerEvidence> certified_signer_evidence;
   std::vector<LeaderOutcomeEvidence> leader_outcome_evidence;
   std::vector<uint64_t> scheduled_leader_counts;
+  std::vector<int> stake_factors_per_mille;
+  std::vector<int> identity_factors_per_mille;
   std::vector<ParticipationBetaCounter> prior_vote_beta_counters;
   std::vector<SignedProposalEvidence> signed_proposal_evidence;
   std::vector<SignedVoteEvidence> signed_vote_evidence;

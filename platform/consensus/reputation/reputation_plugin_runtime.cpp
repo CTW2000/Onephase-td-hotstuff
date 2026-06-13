@@ -174,6 +174,15 @@ std::string AuditValidatorsJson(const std::vector<ValidatorReputation>& validato
         << ",\"vote_score\":" << validator.vote_score
         << ",\"vote_beta_success\":" << validator.vote_beta_success
         << ",\"vote_beta_failure\":" << validator.vote_beta_failure
+        << ",\"stake_factor_per_mille\":" << validator.stake_factor_per_mille
+        << ",\"stake_power_factor_per_mille\":"
+        << validator.stake_power_factor_per_mille
+        << ",\"identity_factor_per_mille\":"
+        << validator.identity_factor_per_mille
+        << ",\"reputation_factor_per_mille\":"
+        << validator.reputation_factor_per_mille
+        << ",\"direct_penalty_factor_per_mille\":"
+        << validator.direct_penalty_factor_per_mille
         << ",\"leader_certified_count\":" << validator.leader_certified_count
         << ",\"leader_opportunity_count\":" << validator.leader_opportunity_count
         << ",\"leader_score\":" << validator.leader_score
@@ -1040,14 +1049,23 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
       buffer->start_view, buffer->end_view, buffer->snapshot);
   {
     std::lock_guard<std::mutex> lk(mutex_);
-    auto prior_vote_it = prior_vote_beta_counters_.find(
-        {buffer->snapshot.weight_root_hex, buffer->snapshot.weight_version});
+    const auto snapshot_key = std::make_pair(
+        buffer->snapshot.weight_root_hex, buffer->snapshot.weight_version);
+    auto prior_stake_it = prior_stake_factors_per_mille_.find(snapshot_key);
+    if (prior_stake_it != prior_stake_factors_per_mille_.end()) {
+      input.stake_factors_per_mille = prior_stake_it->second;
+    }
+    auto prior_identity_it =
+        prior_identity_factors_per_mille_.find(snapshot_key);
+    if (prior_identity_it != prior_identity_factors_per_mille_.end()) {
+      input.identity_factors_per_mille = prior_identity_it->second;
+    }
+    auto prior_vote_it = prior_vote_beta_counters_.find(snapshot_key);
     if (prior_vote_it != prior_vote_beta_counters_.end()) {
       input.prior_vote_beta_counters = prior_vote_it->second;
     }
     if (options_.config.peertrust_enabled) {
-      auto prior_it = prior_peertrust_leader_debt_.find(
-          {buffer->snapshot.weight_root_hex, buffer->snapshot.weight_version});
+      auto prior_it = prior_peertrust_leader_debt_.find(snapshot_key);
       if (prior_it != prior_peertrust_leader_debt_.end()) {
         input.prior_peertrust_leader_debt = prior_it->second;
       }
@@ -1069,13 +1087,38 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
                           input.invalid_qc_proposal_evidence.size();
   ApplyPersistentStrongFaults(&candidate);
   RecomputeReputationCandidateRoots(&candidate);
+  std::vector<int> stake_factors;
+  std::vector<int> identity_factors;
+  stake_factors.reserve(candidate.validators.size());
+  identity_factors.reserve(candidate.validators.size());
   std::vector<ParticipationBetaCounter> vote_beta_counters;
   vote_beta_counters.reserve(candidate.validators.size());
   for (const ValidatorReputation& validator : candidate.validators) {
+    stake_factors.push_back(validator.stake_factor_per_mille);
+    identity_factors.push_back(validator.identity_factor_per_mille);
     ParticipationBetaCounter counter;
     counter.success = validator.vote_beta_success;
     counter.failure = validator.vote_beta_failure;
     vote_beta_counters.push_back(counter);
+  }
+  if (!stake_factors.empty() || !identity_factors.empty()) {
+    const auto current_snapshot_key =
+        std::make_pair(buffer->snapshot.weight_root_hex,
+                       buffer->snapshot.weight_version);
+    const auto next_snapshot_key =
+        std::make_pair(candidate.next_weight_root_hex,
+                       candidate.old_weight_version + 1);
+    std::lock_guard<std::mutex> lk(mutex_);
+    if (!stake_factors.empty()) {
+      prior_stake_factors_per_mille_[current_snapshot_key] = stake_factors;
+      prior_stake_factors_per_mille_[next_snapshot_key] = stake_factors;
+    }
+    if (!identity_factors.empty()) {
+      prior_identity_factors_per_mille_[current_snapshot_key] =
+          identity_factors;
+      prior_identity_factors_per_mille_[next_snapshot_key] =
+          identity_factors;
+    }
   }
   if (!vote_beta_counters.empty()) {
     const auto current_snapshot_key =

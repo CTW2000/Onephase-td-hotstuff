@@ -400,6 +400,123 @@ TEST(ReputationAlgorithmTest, PriorVoteBetaCountersInfluenceVoteScore) {
                       candidate.validators[1].opportunities));
 }
 
+
+
+TEST(ReputationAlgorithmTest,
+     MultiplicativeFormulaIsDefaultAndPreservesHealthyCurrentWeight) {
+  ReputationConfig config = TestConfig();
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {30, 50, 80, 100}, config, "old-root", 0, 64);
+
+  EXPECT_TRUE(config.multiplicative_weight_formula_enabled);
+  EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({30, 50, 80, 100}));
+  EXPECT_EQ(candidate.validators[0].stake_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[1].stake_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[2].stake_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[3].stake_factor_per_mille, 1000);
+  for (size_t i = 0; i < candidate.validators.size(); ++i) {
+    const ValidatorReputation& validator = candidate.validators[i];
+    EXPECT_EQ(validator.identity_factor_per_mille, 1000);
+    EXPECT_EQ(validator.reputation_factor_per_mille,
+              static_cast<int>(candidate.next_weights[i] * 10));
+    EXPECT_EQ(validator.direct_penalty_factor_per_mille, 1000);
+  }
+}
+
+TEST(ReputationAlgorithmTest,
+     MultiplicativeFormulaIsDefaultAndReducesBadReputation) {
+  ReputationConfig config = TestConfig();
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 5) + 1,
+                                   Bitmap({2, 3, 4, 5}, 5),
+                                   Bitmap({2, 3, 4, 5}, 5)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 5, 1, evidence, {100, 100, 100, 100, 100}, config, "old-root", 0, 64);
+
+  EXPECT_TRUE(config.multiplicative_weight_formula_enabled);
+  EXPECT_EQ(candidate.validators[0].vote_score, 20);
+  EXPECT_EQ(candidate.validators[0].reputation_factor_per_mille, 200);
+  EXPECT_EQ(candidate.validators[0].next_weight, 20);
+  EXPECT_EQ(candidate.validators[1].reputation_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[1].next_weight, 100);
+}
+
+TEST(ReputationAlgorithmTest,
+     MultiplicativeFormulaUsesStakeIdentityAndReputationFactors) {
+  ReputationConfig config = TestConfig();
+  config.multiplicative_weight_formula_enabled = true;
+  config.stake_exponent_tau_per_mille = 1000;
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  config.bonus_per_epoch = 0;
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 5) + 1,
+                                   Bitmap({2, 3, 4, 5}, 5),
+                                   Bitmap({2, 3, 4, 5}, 5)));
+  }
+  ReputationWindowInput input = BuildWindowInput(
+      1, 5, 1, evidence, {100, 100, 100, 100, 100}, "old-root", 0, 64);
+  input.stake_factors_per_mille = {1000, 800, 1000, 1000, 1000};
+  input.identity_factors_per_mille = {800, 1000, 1000, 1000, 1000};
+
+  const ReputationCandidate candidate =
+      ComputeReputationCandidate(input, config);
+
+  EXPECT_EQ(candidate.validators[0].stake_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[0].stake_power_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[0].identity_factor_per_mille, 800);
+  EXPECT_EQ(candidate.validators[0].reputation_factor_per_mille, 200);
+  EXPECT_EQ(candidate.validators[0].direct_penalty_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[0].next_weight, 16);
+  EXPECT_EQ(candidate.validators[1].stake_factor_per_mille, 800);
+  EXPECT_EQ(candidate.validators[1].identity_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[1].reputation_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[1].next_weight, 80);
+  EXPECT_EQ(candidate.validators[2].next_weight, 100);
+  EXPECT_EQ(candidate.validators[3].next_weight, 100);
+}
+
+TEST(ReputationAlgorithmTest,
+     MultiplicativeFormulaUsesDeterministicDefaultStakeAndIdentity) {
+  ReputationConfig config = TestConfig();
+  config.multiplicative_weight_formula_enabled = true;
+  config.stake_factor_min_per_mille = 900;
+  config.stake_factor_max_per_mille = 900;
+  config.identity_factor_min_per_mille = 950;
+  config.identity_factor_max_per_mille = 950;
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {100, 100, 100, 100}, config, "old-root", 0, 64);
+
+  for (const ValidatorReputation& validator : candidate.validators) {
+    EXPECT_EQ(validator.stake_factor_per_mille, 900);
+    EXPECT_EQ(validator.identity_factor_per_mille, 950);
+    EXPECT_EQ(validator.reputation_factor_per_mille, 1000);
+    EXPECT_EQ(validator.next_weight, 86);
+  }
+}
+
 TEST(ReputationAlgorithmTest, LeaderWeightsStayRoundRobinWhenEveryoneEligible) {
   ReputationConfig config = TestConfig();
   config.leader_eligible_min_weight = 10;
@@ -475,6 +592,7 @@ TEST(ReputationAlgorithmTest,
   std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 10; ++view) {
     evidence.push_back(CertifiedQc(view, ((view - 1) % 5) + 1,
+                                   Bitmap({1, 2, 3, 4}, 5),
                                    Bitmap({1, 2, 3, 4}, 5)));
   }
 

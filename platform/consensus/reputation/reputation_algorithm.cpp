@@ -1,6 +1,8 @@
 #include "platform/consensus/reputation/reputation_algorithm.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <set>
@@ -24,6 +26,9 @@ constexpr int kHealthyCatchUpScore = 40;
 constexpr int kDebtNoRecoveryBelow = 30;
 constexpr uint64_t kMinNoCertifiedLeaderOpportunities = 3;
 constexpr uint64_t kVoteBetaCounterScale = 1000;
+constexpr int kFactorScale = 1000;
+constexpr int kFormulaFullReputationScore = kHealthyCatchUpScore;
+constexpr uint64_t kFourFactorDenominator = 1000000000000ULL;
 
 struct CoreEvidenceEvent {
   int view_or_round = 0;
@@ -54,6 +59,192 @@ std::string StrongFaultTypeName(StrongFaultType type) {
       return "unknown";
   }
   return "unknown";
+}
+
+int ClampPermilleFactor(int value) {
+  return std::max(0, std::min(10000, value));
+}
+
+std::pair<int, int> NormalizedFactorRange(int min_per_mille,
+                                          int max_per_mille) {
+  int min_factor = ClampPermilleFactor(min_per_mille);
+  int max_factor = ClampPermilleFactor(max_per_mille);
+  if (min_factor <= 0) {
+    min_factor = kFactorScale;
+  }
+  if (max_factor <= 0) {
+    max_factor = kFactorScale;
+  }
+  if (min_factor > max_factor) {
+    std::swap(min_factor, max_factor);
+  }
+  return {min_factor, max_factor};
+}
+
+uint64_t Mix64(uint64_t value) {
+  value ^= value >> 30;
+  value *= 0xbf58476d1ce4e5b9ULL;
+  value ^= value >> 27;
+  value *= 0x94d049bb133111ebULL;
+  value ^= value >> 31;
+  return value;
+}
+
+int DeterministicPermilleFactor(int validator_id, uint64_t seed,
+                                int min_per_mille, int max_per_mille) {
+  const auto range = NormalizedFactorRange(min_per_mille, max_per_mille);
+  const int span = range.second - range.first + 1;
+  if (span <= 1) {
+    return range.first;
+  }
+  const uint64_t mixed = Mix64(seed ^ (static_cast<uint64_t>(validator_id) *
+                                      0x9e3779b97f4a7c15ULL));
+  return range.first + static_cast<int>(mixed % static_cast<uint64_t>(span));
+}
+
+bool HasConfiguredFactorRange(int min_per_mille, int max_per_mille) {
+  return min_per_mille > 0 || max_per_mille > 0;
+}
+
+int FactorFromInputOrDefault(const std::vector<int>& input_factors,
+                             int validator_index, uint64_t seed,
+                             int min_per_mille, int max_per_mille,
+                             int fallback_per_mille) {
+  if (validator_index >= 0 &&
+      validator_index < static_cast<int>(input_factors.size()) &&
+      input_factors[validator_index] > 0) {
+    return ClampPermilleFactor(input_factors[validator_index]);
+  }
+  if (!HasConfiguredFactorRange(min_per_mille, max_per_mille)) {
+    return ClampPermilleFactor(fallback_per_mille);
+  }
+  return DeterministicPermilleFactor(validator_index + 1, seed, min_per_mille,
+                                    max_per_mille);
+}
+
+
+int StakePowerFactorPerMille(int stake_factor_per_mille,
+                             int tau_per_mille) {
+  const int bounded_stake = ClampPermilleFactor(stake_factor_per_mille);
+  if (tau_per_mille <= 0) {
+    return kFactorScale;
+  }
+  if (tau_per_mille == kFactorScale) {
+    return bounded_stake;
+  }
+  const long double stake =
+      static_cast<long double>(bounded_stake) / kFactorScale;
+  const long double tau = static_cast<long double>(tau_per_mille) / kFactorScale;
+  const long double scaled = std::pow(stake, tau) * kFactorScale;
+  if (!(scaled >= 0.0L)) {
+    return 0;
+  }
+  if (scaled > 10000.0L) {
+    return 10000;
+  }
+  return static_cast<int>(scaled + 0.5L);
+}
+
+int WeightRatioFactorPerMille(int64_t numerator_weight,
+                                int64_t denominator_weight) {
+  if (denominator_weight <= 0) {
+    return kFactorScale;
+  }
+  return ClampPermilleFactor(static_cast<int>(RoundedDivide(
+      static_cast<uint64_t>(std::max<int64_t>(0, numerator_weight)) *
+          kFactorScale,
+      static_cast<uint64_t>(denominator_weight))));
+}
+
+int ScoreFactorPerMille(int recovery_score) {
+  const int bounded_score = std::max(0, std::min(100, recovery_score));
+  if (bounded_score >= kFormulaFullReputationScore) {
+    return kFactorScale;
+  }
+  return bounded_score * 10;
+}
+
+int FormulaReputationFactorPerMille(int recovery_score,
+                                    int64_t current_weight,
+                                    int64_t max_weight,
+                                    int64_t smoothed_next_weight,
+                                    bool force_score_factor) {
+  (void)current_weight;
+  const int score_factor = ScoreFactorPerMille(recovery_score);
+  const int smooth_factor = WeightRatioFactorPerMille(smoothed_next_weight,
+                                                      max_weight);
+  if (force_score_factor) {
+    return std::min(score_factor, smooth_factor);
+  }
+  return smooth_factor;
+}
+
+int64_t MultiplicativeWeightFromFactors(
+    const ValidatorReputation& validator, const ReputationConfig& config) {
+  unsigned __int128 numerator =
+      static_cast<unsigned __int128>(std::max<int64_t>(0, config.max_weight));
+  numerator *= static_cast<uint64_t>(ClampPermilleFactor(
+      validator.stake_power_factor_per_mille));
+  numerator *= static_cast<uint64_t>(ClampPermilleFactor(
+      validator.identity_factor_per_mille));
+  numerator *= static_cast<uint64_t>(ClampPermilleFactor(
+      validator.reputation_factor_per_mille));
+  numerator *= static_cast<uint64_t>(ClampPermilleFactor(
+      validator.direct_penalty_factor_per_mille));
+  numerator += kFourFactorDenominator / 2;
+  const unsigned __int128 raw = numerator / kFourFactorDenominator;
+  const int64_t bounded_raw =
+      raw > static_cast<unsigned __int128>(std::numeric_limits<int64_t>::max())
+          ? std::numeric_limits<int64_t>::max()
+          : static_cast<int64_t>(raw);
+  return ClampWeight(bounded_raw, config);
+}
+
+int DirectPenaltyFactorForWeight(int64_t pre_penalty_weight,
+                                 int64_t penalty_weight) {
+  if (pre_penalty_weight <= 0) {
+    return kFactorScale;
+  }
+  const int64_t bounded_penalty = std::max<int64_t>(0, penalty_weight);
+  return ClampPermilleFactor(static_cast<int>(RoundedDivide(
+      static_cast<uint64_t>(bounded_penalty) * kFactorScale,
+      static_cast<uint64_t>(pre_penalty_weight))));
+}
+
+void InitializeFormulaFactors(ValidatorReputation* validator, int index,
+                              const ReputationWindowInput& input,
+                              const ReputationConfig& config) {
+  if (validator == nullptr) {
+    return;
+  }
+  validator->stake_factor_per_mille = FactorFromInputOrDefault(
+      input.stake_factors_per_mille, index, config.stake_factor_seed,
+      config.stake_factor_min_per_mille, config.stake_factor_max_per_mille,
+      kFactorScale);
+  validator->stake_power_factor_per_mille = StakePowerFactorPerMille(
+      validator->stake_factor_per_mille, config.stake_exponent_tau_per_mille);
+  validator->identity_factor_per_mille = FactorFromInputOrDefault(
+      input.identity_factors_per_mille, index, config.identity_factor_seed,
+      config.identity_factor_min_per_mille,
+      config.identity_factor_max_per_mille, kFactorScale);
+  validator->reputation_factor_per_mille = kFactorScale;
+  validator->direct_penalty_factor_per_mille = kFactorScale;
+}
+
+void MaybeApplyMultiplicativeWeightFormula(
+    ValidatorReputation* validator, const ReputationConfig& config,
+    int recovery_score, int64_t smoothed_next_weight,
+    bool force_score_factor) {
+  if (validator == nullptr) {
+    return;
+  }
+  validator->reputation_factor_per_mille = FormulaReputationFactorPerMille(
+      recovery_score, validator->current_weight, config.max_weight,
+      smoothed_next_weight, force_score_factor);
+  validator->direct_penalty_factor_per_mille = kFactorScale;
+  if (config.multiplicative_weight_formula_enabled) {
+    validator->next_weight = MultiplicativeWeightFromFactors(*validator, config);
+  }
 }
 
 int VoteBetaDecayPerMille(const ReputationConfig& config) {
@@ -251,7 +442,8 @@ bool HasStrongFaultEvidence(const ReputationWindowInput& input) {
 
 bool UseCoreOnlyFastPath(const ReputationWindowInput& input,
                          const ReputationConfig& config) {
-  return !config.leader_recovery_enabled && !config.peertrust_enabled &&
+  return !config.multiplicative_weight_formula_enabled &&
+         !config.leader_recovery_enabled && !config.peertrust_enabled &&
          !config.sybil_graph_enabled && !config.strong_fault_enabled &&
          !HasStrongFaultEvidence(input);
 }
@@ -533,6 +725,7 @@ ReputationCandidate ComputeReputationCandidate(
     validator.validator_id = i + 1;
     validator.current_weight = weights[i];
     validator.next_weight = weights[i];
+    InitializeFormulaFactors(&validator, i, input, config);
     if (has_scheduled_leader_counts) {
       validator.leader_opportunity_count = input.scheduled_leader_counts[i];
     }
@@ -723,9 +916,12 @@ ReputationCandidate ComputeReputationCandidate(
     previous_signers_by_leader[diversity_idx] = signers;
   }
 
-  const uint64_t fair_opportunities = FairExpectedSignerOpportunities(
-      legacy_selected_signer_slots, total_replicas,
-      legacy_certificate_event_count);
+  const uint64_t fair_opportunities =
+      config.multiplicative_weight_formula_enabled
+          ? 0
+          : FairExpectedSignerOpportunities(legacy_selected_signer_slots,
+                                            total_replicas,
+                                            legacy_certificate_event_count);
   const uint64_t broad_available_fair_opportunities =
       HasWindowFairAvailableSignerCoverage(window_quorum_available_signers,
                                            total_replicas)
@@ -1310,10 +1506,26 @@ ReputationCandidate ComputeReputationCandidate(
                 validator.bonus_credit > 0
             ? 100
             : std::max(0, std::min(100, recovery_score));
-    validator.next_weight = ClampWeight(
+    const int64_t smoothed_next_weight = ClampWeight(
         validator.current_weight - validator.decay_applied +
             validator.recovery_credit + validator.bonus_credit,
         config);
+    validator.next_weight = smoothed_next_weight;
+    const bool low_vote_score =
+        validator.sybil_graph_debt == 0 &&
+        validator_has_enough_decay_evidence && config.decay_per_epoch > 0 &&
+        validator.inclusions == 0 &&
+        validator.vote_score < kFormulaFullReputationScore;
+    const bool low_leader_score =
+        validator.sybil_graph_debt == 0 &&
+        config.leader_recovery_enabled && HasLeaderRecoveryEvidence(validator, config) &&
+        validator.leader_score < kFormulaFullReputationScore;
+    const bool force_score_factor =
+        low_peertrust || validator.peertrust_leader_debt > 0 ||
+        low_vote_score || low_leader_score;
+    MaybeApplyMultiplicativeWeightFormula(
+        &validator, config, recovery_score, smoothed_next_weight,
+        force_score_factor);
     const bool peertrust_floor_applies =
         low_peertrust || validator.peertrust_leader_debt > 0 ||
         previous_peertrust_debt > 0;
@@ -1412,11 +1624,15 @@ ReputationCandidate ComputeReputationCandidate(
         ClampWeight(config.strong_fault_target_weight, config);
     for (int validator_id : faulted_validators) {
       ValidatorReputation& validator = candidate.validators[validator_id - 1];
+      const int64_t pre_penalty_weight = validator.next_weight;
       validator.recovery_credit = 0;
       validator.bonus_credit = 0;
       validator.reputation_score = 0;
+      validator.reputation_factor_per_mille = 0;
+      validator.direct_penalty_factor_per_mille = DirectPenaltyFactorForWeight(
+          pre_penalty_weight, penalty_weight);
       validator.penalty_points =
-          std::max<int64_t>(0, validator.next_weight - penalty_weight);
+          std::max<int64_t>(0, pre_penalty_weight - penalty_weight);
       validator.next_weight = penalty_weight;
     }
   }
