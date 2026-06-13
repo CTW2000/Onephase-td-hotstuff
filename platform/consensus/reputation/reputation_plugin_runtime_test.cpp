@@ -265,6 +265,50 @@ TEST(ReputationPluginRuntimeTest, DedupesAndSortsEquivalentEvidence) {
             second_candidates[0].candidate_digest_hex);
 }
 
+TEST(ReputationPluginRuntimeTest,
+     PersistsVoteBetaCountersAcrossSameWeightSnapshot) {
+  ReputationRuntimeOptions options = RuntimeOptions();
+  options.initial_weights = {100, 100, 100, 100};
+  options.initial_weight_root = WeightRootHex(options.initial_weights);
+  options.config.decay_per_epoch = 10;
+  options.config.max_recovery_per_epoch = 10;
+  options.config.vote_beta_decay_per_mille = 1000;
+  ReputationPluginRuntime runtime(options);
+  runtime.Start();
+
+  for (int view = 0; view < 4; ++view) {
+    CertifiedSignerEvidenceRecord evidence = Evidence(
+        view, "bad-qc-" + std::to_string(view));
+    evidence.signer_bitmap = Bitmap({2, 3, 4}, 4);
+    evidence.available_signer_bitmap.clear();
+    evidence.active_weights = options.initial_weights;
+    evidence.weight_root_hex = options.initial_weight_root;
+    EXPECT_TRUE(runtime.RecordEvidence(evidence));
+  }
+  runtime.AdvanceWatermark(4);
+  auto first_candidates = WaitForCandidates(&runtime, 1);
+  ASSERT_EQ(first_candidates.size(), 1);
+  ASSERT_GT(first_candidates[0].validators[0].vote_beta_failure, 0);
+
+  for (int view = 4; view < 8; ++view) {
+    CertifiedSignerEvidenceRecord evidence = Evidence(
+        view, "good-qc-" + std::to_string(view));
+    evidence.signer_bitmap = Bitmap({1, 2, 3, 4}, 4);
+    evidence.available_signer_bitmap.clear();
+    evidence.active_weights = options.initial_weights;
+    evidence.weight_root_hex = options.initial_weight_root;
+    EXPECT_TRUE(runtime.RecordEvidence(evidence));
+  }
+  runtime.AdvanceWatermark(8);
+  auto second_candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(second_candidates.size(), 1);
+  const ReputationCandidate& second = second_candidates[0];
+  EXPECT_GT(second.validators[0].vote_beta_failure, 0);
+  EXPECT_LT(second.validators[0].vote_score, second.validators[1].vote_score);
+}
+
 TEST(ReputationPluginRuntimeTest, FindLocalCandidateReturnsCompletedCandidate) {
   ReputationPluginRuntime runtime(RuntimeOptions());
   runtime.Start();

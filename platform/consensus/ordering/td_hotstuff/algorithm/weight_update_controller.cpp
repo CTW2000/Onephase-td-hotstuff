@@ -3,7 +3,9 @@
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <sstream>
+#include <string>
 #include <tuple>
 #include <utility>
 
@@ -17,6 +19,21 @@ namespace {
 constexpr const char* kQuorumRuleId = "old_weight_quorum_v1";
 constexpr int64_t kMinCandidateWeight = 1;
 constexpr int64_t kMaxCandidateWeight = 100;
+
+bool EnvFlagEnabled(const char* name) {
+  const char* raw = std::getenv(name);
+  if (raw == nullptr) {
+    return false;
+  }
+  const std::string value(raw);
+  return value == "1" || value == "true" || value == "TRUE" ||
+         value == "yes" || value == "YES" || value == "on" ||
+         value == "ON";
+}
+
+bool AllowNoOpCandidateForExperiment() {
+  return EnvFlagEnabled("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE");
+}
 
 std::string BuildBitmap(const std::vector<int>& signers, int total_replicas) {
   std::string bitmap((total_replicas + 7) / 8, '\0');
@@ -353,7 +370,8 @@ bool WeightUpdateController::ValidateCandidateStructure(
           candidate.leader_selection_version())) {
     return false;
   }
-  if (weights == weight_schedule_->ActiveWeights()) {
+  if (weights == weight_schedule_->ActiveWeights() &&
+      !AllowNoOpCandidateForExperiment()) {
     return false;
   }
   if (DigestForCandidateParts(candidate, weights, leader_weights) !=

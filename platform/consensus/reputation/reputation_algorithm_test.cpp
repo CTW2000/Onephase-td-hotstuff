@@ -1,4 +1,5 @@
 #include "platform/consensus/reputation/reputation_algorithm.h"
+#include "platform/consensus/reputation/soft_reputation.h"
 
 #include <initializer_list>
 #include <string>
@@ -365,6 +366,38 @@ TEST(ReputationAlgorithmTest, PartialHealthyBelowMeanValidatorCanCatchUp) {
             candidate.validators[0].decay_applied);
   EXPECT_EQ(candidate.validators[0].bonus_credit, 1);
   EXPECT_EQ(candidate.validators[0].next_weight, 21);
+}
+
+TEST(ReputationAlgorithmTest, PriorVoteBetaCountersInfluenceVoteScore) {
+  ReputationConfig config = TestConfig();
+  config.decay_per_epoch = 10;
+  config.max_recovery_per_epoch = 10;
+  config.vote_beta_decay_per_mille = 1000;
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  ReputationWindowInput input = BuildWindowInput(
+      1, 4, 1, evidence, {100, 100, 100, 100}, "old-root", 0, 64);
+  input.prior_vote_beta_counters.resize(4);
+  input.prior_vote_beta_counters[0].failure = 64 * 1000;
+
+  const ReputationCandidate candidate =
+      ComputeReputationCandidate(input, config);
+
+  EXPECT_EQ(candidate.validators[0].vote_beta_failure, 64 * 1000);
+  EXPECT_LT(candidate.validators[0].vote_score,
+            VoteScore(candidate.validators[0].inclusions,
+                      candidate.validators[0].opportunities));
+  EXPECT_LT(candidate.validators[0].recovery_credit,
+            candidate.validators[0].decay_applied);
+  EXPECT_EQ(candidate.validators[1].vote_score,
+            VoteScore(candidate.validators[1].inclusions,
+                      candidate.validators[1].opportunities));
 }
 
 TEST(ReputationAlgorithmTest, LeaderWeightsStayRoundRobinWhenEveryoneEligible) {

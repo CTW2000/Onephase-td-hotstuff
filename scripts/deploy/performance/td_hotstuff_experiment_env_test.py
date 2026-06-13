@@ -113,6 +113,9 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_SYBIL_GRAPH_ENABLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_SYBIL_GRAPH_DEBT_INCREMENT", shared_env_block)
+        self.assertIn("TD_HS_REPUTATION_MIN_CANDIDATE_QCS", shared_env_block)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE", shared_env_block)
+        self.assertIn("TD_HS_REPUTATION_VOTE_BETA_DECAY_PER_MILLE", shared_env_block)
         self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_SIGNERS", shared_env_block)
         self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_MIN_SIGNERS", shared_env_block)
         self.assertIn("is_silent_leader_node", body)
@@ -145,6 +148,18 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
                 self.assertIn("-u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", script_body)
                 self.assertIn("-u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", script_body)
                 self.assertIn("-u TD_HS_INVALID_TC_PROPOSAL_IDS", script_body)
+
+
+    def test_weight_update_equivocation_runner_creates_vote_artifacts(self):
+        runner = os.path.join(
+            REPO_ROOT,
+            "scripts",
+            "deploy",
+            "run_weight_update_vote_equivocation_n20.sh",
+        )
+        with open(runner) as fp:
+            body = fp.read()
+        self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE=1", body)
 
     def test_strong_fault_runners_can_enable_all_detectors(self):
         for script in [

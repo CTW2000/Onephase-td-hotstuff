@@ -141,6 +141,7 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   setenv("TD_HS_REPUTATION_DECAY_PER_EPOCH", "30", 1);
   setenv("TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH", "30", 1);
   setenv("TD_HS_REPUTATION_BONUS_PER_EPOCH", "2", 1);
+  setenv("TD_HS_REPUTATION_VOTE_BETA_DECAY_PER_MILLE", "875", 1);
   setenv("TD_HS_REPUTATION_MIN_WEIGHT", "7", 1);
   setenv("TD_HS_REPUTATION_MAX_WEIGHT", "80", 1);
   setenv("TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES", "9", 1);
@@ -155,6 +156,7 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   EXPECT_EQ(options.reputation_config.decay_per_epoch, 30);
   EXPECT_EQ(options.reputation_config.max_recovery_per_epoch, 30);
   EXPECT_EQ(options.reputation_config.bonus_per_epoch, 2);
+  EXPECT_EQ(options.reputation_config.vote_beta_decay_per_mille, 875);
   EXPECT_EQ(options.reputation_config.min_weight, 7);
   EXPECT_EQ(options.reputation_config.max_weight, 80);
   EXPECT_EQ(options.reputation_config.min_decay_opportunities, 9);
@@ -166,6 +168,7 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   unsetenv("TD_HS_REPUTATION_DECAY_PER_EPOCH");
   unsetenv("TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH");
   unsetenv("TD_HS_REPUTATION_BONUS_PER_EPOCH");
+  unsetenv("TD_HS_REPUTATION_VOTE_BETA_DECAY_PER_MILLE");
   unsetenv("TD_HS_REPUTATION_MIN_WEIGHT");
   unsetenv("TD_HS_REPUTATION_MAX_WEIGHT");
   unsetenv("TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES");

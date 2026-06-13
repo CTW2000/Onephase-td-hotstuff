@@ -30,6 +30,7 @@ struct ReputationConfig {
   int64_t min_weight = 1;
   int64_t max_weight = 100;
   uint64_t min_decay_opportunities = 1;
+  int vote_beta_decay_per_mille = 900;
   uint64_t min_leader_opportunities = 8;
   int64_t leader_eligible_min_weight = 10;
   bool leader_recovery_enabled = false;
@@ -61,11 +62,18 @@ struct ReputationConfig {
 
 
 
+struct ParticipationBetaCounter {
+  uint64_t success = 0;
+  uint64_t failure = 0;
+};
+
 struct ValidatorReputation {
   int validator_id = 0;
   uint64_t opportunities = 0;
   uint64_t inclusions = 0;
   int vote_score = 0;
+  uint64_t vote_beta_success = 0;
+  uint64_t vote_beta_failure = 0;
   uint64_t leader_certified_count = 0;
   uint64_t leader_opportunity_count = 0;
   int leader_score = 100;
@@ -205,6 +213,7 @@ struct ReputationWindowInput {
   std::vector<CertifiedSignerEvidence> certified_signer_evidence;
   std::vector<LeaderOutcomeEvidence> leader_outcome_evidence;
   std::vector<uint64_t> scheduled_leader_counts;
+  std::vector<ParticipationBetaCounter> prior_vote_beta_counters;
   std::vector<SignedProposalEvidence> signed_proposal_evidence;
   std::vector<SignedVoteEvidence> signed_vote_evidence;
   std::vector<InvalidQcProposalEvidence> invalid_qc_proposal_evidence;

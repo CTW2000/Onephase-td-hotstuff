@@ -177,6 +177,9 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.reputation_config.bonus_per_epoch = PositiveIntFromEnv(
       "TD_HS_REPUTATION_BONUS_PER_EPOCH",
       options.reputation_config.bonus_per_epoch);
+  options.reputation_config.vote_beta_decay_per_mille = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_VOTE_BETA_DECAY_PER_MILLE",
+      options.reputation_config.vote_beta_decay_per_mille);
   options.reputation_config.min_weight = PositiveIntFromEnv(
       "TD_HS_REPUTATION_MIN_WEIGHT",
       options.reputation_config.min_weight);

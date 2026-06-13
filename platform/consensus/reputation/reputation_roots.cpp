@@ -18,7 +18,8 @@ std::string MetricCanonical(const ReputationCandidate& candidate) {
   for (const auto& validator : candidate.validators) {
     out << '|' << validator.validator_id << ':' << validator.opportunities << ':'
         << validator.inclusions << ':' << validator.vote_score << ':'
-        << validator.leader_certified_count << ':'
+        << validator.vote_beta_success << ':' << validator.vote_beta_failure
+        << ':' << validator.leader_certified_count << ':'
         << validator.leader_opportunity_count << ':'
         << validator.leader_score << ':' << validator.leader_diversity_score
         << ':' << validator.peertrust_score << ':'
@@ -47,7 +48,8 @@ std::string ReputationCanonical(const ReputationCandidate& candidate) {
     out << '|' << validator.validator_id << ':' << validator.reputation_score
         << ':' << validator.decay_applied << ':' << validator.recovery_credit
         << ':' << validator.bonus_credit << ':' << validator.current_weight
-        << ':' << validator.next_weight << ':' << validator.strong_fault_count
+        << ':' << validator.next_weight << ':' << validator.vote_beta_success
+        << ':' << validator.vote_beta_failure << ':' << validator.strong_fault_count
         << ':' << validator.penalty_points << ':' << validator.peertrust_score
         << ':' << validator.reviewer_credibility_score << ':'
         << validator.transaction_context_score << ':'

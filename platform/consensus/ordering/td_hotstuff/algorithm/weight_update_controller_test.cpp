@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
+#include <cstdlib>
 #include <memory>
 #include <vector>
 
@@ -134,6 +135,26 @@ TEST(WeightUpdateControllerTest, IgnoresNoOpLocalCandidate) {
 
   EXPECT_FALSE(controller.AddLocalCandidate(candidate));
   EXPECT_EQ(controller.HandleCandidate(CandidateMessage(candidate)), nullptr);
+}
+
+TEST(WeightUpdateControllerTest, AllowsNoOpLocalCandidateForExperiment) {
+  setenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE", "1", /*overwrite=*/1);
+  auto schedule = std::make_shared<WeightSchedule>(
+      4, std::vector<int64_t>{1, 1, 1, 1});
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(_)).WillOnce(Return(SignatureFor(1)));
+  WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
+                                    schedule, &verifier);
+  auto candidate = NoOpCandidate();
+
+  EXPECT_TRUE(controller.AddLocalCandidate(candidate));
+  std::unique_ptr<WeightUpdateVote> vote =
+      controller.HandleCandidate(CandidateMessage(candidate));
+  unsetenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE");
+
+  ASSERT_NE(vote, nullptr);
+  EXPECT_EQ(vote->signer(), 1);
+  EXPECT_EQ(vote->candidate_digest(), candidate.candidate_digest_hex);
 }
 
 TEST(WeightUpdateControllerTest, IgnoresLeaderOnlyLocalCandidate) {

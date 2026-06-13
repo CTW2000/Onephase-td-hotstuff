@@ -172,6 +172,8 @@ std::string AuditValidatorsJson(const std::vector<ValidatorReputation>& validato
         << ",\"opportunities\":" << validator.opportunities
         << ",\"inclusions\":" << validator.inclusions
         << ",\"vote_score\":" << validator.vote_score
+        << ",\"vote_beta_success\":" << validator.vote_beta_success
+        << ",\"vote_beta_failure\":" << validator.vote_beta_failure
         << ",\"leader_certified_count\":" << validator.leader_certified_count
         << ",\"leader_opportunity_count\":" << validator.leader_opportunity_count
         << ",\"leader_score\":" << validator.leader_score
@@ -1036,12 +1038,19 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
   input.invalid_qc_proposal_evidence = buffer->invalid_qc_proposals;
   input.scheduled_leader_counts = ScheduledLeaderCountsForWindow(
       buffer->start_view, buffer->end_view, buffer->snapshot);
-  if (options_.config.peertrust_enabled) {
+  {
     std::lock_guard<std::mutex> lk(mutex_);
-    auto prior_it = prior_peertrust_leader_debt_.find(
+    auto prior_vote_it = prior_vote_beta_counters_.find(
         {buffer->snapshot.weight_root_hex, buffer->snapshot.weight_version});
-    if (prior_it != prior_peertrust_leader_debt_.end()) {
-      input.prior_peertrust_leader_debt = prior_it->second;
+    if (prior_vote_it != prior_vote_beta_counters_.end()) {
+      input.prior_vote_beta_counters = prior_vote_it->second;
+    }
+    if (options_.config.peertrust_enabled) {
+      auto prior_it = prior_peertrust_leader_debt_.find(
+          {buffer->snapshot.weight_root_hex, buffer->snapshot.weight_version});
+      if (prior_it != prior_peertrust_leader_debt_.end()) {
+        input.prior_peertrust_leader_debt = prior_it->second;
+      }
     }
   }
 
@@ -1060,6 +1069,25 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
                           input.invalid_qc_proposal_evidence.size();
   ApplyPersistentStrongFaults(&candidate);
   RecomputeReputationCandidateRoots(&candidate);
+  std::vector<ParticipationBetaCounter> vote_beta_counters;
+  vote_beta_counters.reserve(candidate.validators.size());
+  for (const ValidatorReputation& validator : candidate.validators) {
+    ParticipationBetaCounter counter;
+    counter.success = validator.vote_beta_success;
+    counter.failure = validator.vote_beta_failure;
+    vote_beta_counters.push_back(counter);
+  }
+  if (!vote_beta_counters.empty()) {
+    const auto current_snapshot_key =
+        std::make_pair(buffer->snapshot.weight_root_hex,
+                       buffer->snapshot.weight_version);
+    const auto next_snapshot_key =
+        std::make_pair(candidate.next_weight_root_hex,
+                       candidate.old_weight_version + 1);
+    std::lock_guard<std::mutex> lk(mutex_);
+    prior_vote_beta_counters_[current_snapshot_key] = vote_beta_counters;
+    prior_vote_beta_counters_[next_snapshot_key] = std::move(vote_beta_counters);
+  }
   if (options_.config.peertrust_enabled) {
     std::vector<int> peertrust_leader_debt;
     peertrust_leader_debt.reserve(candidate.validators.size());

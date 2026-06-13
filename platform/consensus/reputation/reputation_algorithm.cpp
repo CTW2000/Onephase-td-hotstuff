@@ -23,6 +23,8 @@ constexpr int64_t kCarryoverDecayWeightGap = 10;
 constexpr int kHealthyCatchUpScore = 40;
 constexpr int kDebtNoRecoveryBelow = 30;
 constexpr uint64_t kMinNoCertifiedLeaderOpportunities = 3;
+constexpr uint64_t kVoteBetaCounterScale = 1000;
+
 struct CoreEvidenceEvent {
   int view_or_round = 0;
   int leader_id = 0;
@@ -52,6 +54,50 @@ std::string StrongFaultTypeName(StrongFaultType type) {
       return "unknown";
   }
   return "unknown";
+}
+
+int VoteBetaDecayPerMille(const ReputationConfig& config) {
+  return std::max(0, std::min(1000, config.vote_beta_decay_per_mille));
+}
+
+uint64_t ScaledObservationCount(uint64_t count) {
+  return count * kVoteBetaCounterScale;
+}
+
+uint64_t DecayVoteBetaCounter(uint64_t counter, const ReputationConfig& config) {
+  const int decay_per_mille = VoteBetaDecayPerMille(config);
+  if (counter == 0 || decay_per_mille == 0) {
+    return 0;
+  }
+  return (counter * static_cast<uint64_t>(decay_per_mille) +
+          kVoteBetaCounterScale / 2) /
+         kVoteBetaCounterScale;
+}
+
+int VoteScoreFromBetaCounters(uint64_t success, uint64_t failure) {
+  const uint64_t numerator = 100 * (kVoteBetaCounterScale + success);
+  const uint64_t denominator =
+      2 * kVoteBetaCounterScale + success + failure;
+  return std::max(0, std::min(100, RoundedDivide(numerator, denominator)));
+}
+
+void UpdateVoteBetaCounters(ValidatorReputation* validator,
+                            const ReputationConfig& config) {
+  if (validator == nullptr) {
+    return;
+  }
+  const uint64_t misses =
+      validator->opportunities > validator->inclusions
+          ? validator->opportunities - validator->inclusions
+          : 0;
+  validator->vote_beta_success =
+      DecayVoteBetaCounter(validator->vote_beta_success, config) +
+      ScaledObservationCount(validator->inclusions);
+  validator->vote_beta_failure =
+      DecayVoteBetaCounter(validator->vote_beta_failure, config) +
+      ScaledObservationCount(misses);
+  validator->vote_score = VoteScoreFromBetaCounters(
+      validator->vote_beta_success, validator->vote_beta_failure);
 }
 
 int CoreRecoveryCreditForScore(int score, int max_recovery_per_epoch) {
@@ -372,8 +418,7 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
                           candidate->validators.size());
 
   for (ValidatorReputation& validator : candidate->validators) {
-    validator.vote_score = VoteScore(validator.inclusions,
-                                     validator.opportunities);
+    UpdateVoteBetaCounters(&validator, config);
     validator.leader_score = LeaderCertifiedScore(
         validator.leader_certified_count, validator.leader_opportunity_count);
     int recovery_score = validator.vote_score;
@@ -490,6 +535,10 @@ ReputationCandidate ComputeReputationCandidate(
     validator.next_weight = weights[i];
     if (has_scheduled_leader_counts) {
       validator.leader_opportunity_count = input.scheduled_leader_counts[i];
+    }
+    if (i < static_cast<int>(input.prior_vote_beta_counters.size())) {
+      validator.vote_beta_success = input.prior_vote_beta_counters[i].success;
+      validator.vote_beta_failure = input.prior_vote_beta_counters[i].failure;
     }
     if (config.peertrust_enabled &&
         i < static_cast<int>(input.prior_peertrust_leader_debt.size())) {
@@ -975,8 +1024,7 @@ ReputationCandidate ComputeReputationCandidate(
   constexpr int kLeaderDiversityOutlierDeadband = 10;
 
   for (ValidatorReputation& validator : candidate.validators) {
-    validator.vote_score = VoteScore(validator.inclusions,
-                                     validator.opportunities);
+    UpdateVoteBetaCounters(&validator, config);
     const int idx = validator.validator_id - 1;
     const int raw_leader_diversity_score =
         idx >= 0 && idx < static_cast<int>(raw_leader_diversity_scores.size())
