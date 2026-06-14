@@ -11,11 +11,28 @@
 namespace resdb {
 namespace td_hotstuff {
 namespace {
+namespace reputation = resdb::consensus::reputation;
 
 std::string LeaderRoot(const std::vector<int64_t>& weights,
                        int64_t eligible_min_weight) {
-  return resdb::consensus::reputation::LeaderWeightRootHex(
-      weights, eligible_min_weight, /*leader_selection_version=*/1);
+  return reputation::LeaderWeightRootHex(weights, eligible_min_weight,
+                                         /*leader_selection_version=*/1);
+}
+
+int MaxConsecutiveRun(const std::vector<int>& leaders) {
+  int best = 0;
+  int current = 0;
+  int previous = 0;
+  for (int leader : leaders) {
+    if (leader == previous) {
+      ++current;
+    } else {
+      previous = leader;
+      current = 1;
+    }
+    best = std::max(best, current);
+  }
+  return best;
 }
 
 TEST(LeaderSelectionScheduleTest, DisabledMatchesRoundRobinAndEmptyContext) {
@@ -50,14 +67,56 @@ TEST(LeaderSelectionScheduleTest, WeightedSelectionIsDeterministicAndEligible) {
                                    /*enabled=*/true,
                                    /*eligible_min_weight=*/10);
   std::map<int, int> counts;
+  std::vector<int> leaders;
+  leaders.reserve(150);
   for (int view = 0; view < 150; ++view) {
-    counts[schedule.LeaderForView(view)]++;
+    const int leader = schedule.LeaderForView(view);
+    leaders.push_back(leader);
+    counts[leader]++;
   }
-  EXPECT_EQ(100, counts[1]);
-  EXPECT_EQ(50, counts[2]);
   EXPECT_EQ(0, counts[3]);
   EXPECT_EQ(0, counts[4]);
+  EXPECT_GT(counts[1], counts[2]);
+  EXPECT_GT(counts[2], 0);
+  EXPECT_LE(MaxConsecutiveRun(leaders), 2);
   EXPECT_TRUE(schedule.ContextHashForView(1).empty());
+}
+
+TEST(LeaderSelectionScheduleTest, WeightedSelectionAppliesCooldownAndFairnessDebt) {
+  LeaderSelectionSchedule schedule(/*total_replicas=*/4,
+                                   std::vector<int64_t>{100, 20, 20, 20},
+                                   /*enabled=*/true,
+                                   /*eligible_min_weight=*/10);
+  std::map<int, int> counts;
+  std::vector<int> leaders;
+  leaders.reserve(80);
+  for (int view = 0; view < 80; ++view) {
+    const int leader = schedule.LeaderForView(view);
+    leaders.push_back(leader);
+    counts[leader]++;
+  }
+  EXPECT_GT(counts[1], counts[2]);
+  EXPECT_GT(counts[2], 0);
+  EXPECT_GT(counts[3], 0);
+  EXPECT_GT(counts[4], 0);
+  EXPECT_LE(MaxConsecutiveRun(leaders), 2);
+}
+
+TEST(LeaderSelectionScheduleTest, CertifiedEpochScheduleUsesCooldownAndFairnessDebt) {
+  const std::vector<int64_t> weights{100, 20, 20, 20};
+  const std::vector<int> leaders = reputation::BuildLeaderEpochSchedule(
+      /*total_replicas=*/4, weights, /*eligible_min_weight=*/10,
+      /*epoch_start_view=*/64, /*epoch_views=*/80);
+  ASSERT_EQ(80, static_cast<int>(leaders.size()));
+  std::map<int, int> counts;
+  for (int leader : leaders) {
+    counts[leader]++;
+  }
+  EXPECT_GT(counts[1], counts[2]);
+  EXPECT_GT(counts[2], 0);
+  EXPECT_GT(counts[3], 0);
+  EXPECT_GT(counts[4], 0);
+  EXPECT_LE(MaxConsecutiveRun(leaders), 2);
 }
 
 TEST(LeaderSelectionScheduleTest, AllBelowThresholdFallsBackToPositiveWeights) {

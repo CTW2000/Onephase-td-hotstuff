@@ -393,6 +393,36 @@ int LeaderSelectionScore(const ValidatorReputation& validator,
   return std::max(0, std::min(100, score));
 }
 
+bool HasBroadLeaderRecoveryEvidence(const ValidatorReputation& validator,
+                                    const ReputationConfig& config) {
+  if (!config.leader_recovery_enabled) {
+    return true;
+  }
+  return validator.leader_certified_count >= config.min_leader_opportunities &&
+         validator.leader_diversity_score >= 95 && validator.leader_score >= 95;
+}
+
+bool ShouldPreserveSoftLeaderCap(const ValidatorReputation& validator,
+                                 const ReputationConfig& config,
+                                 int64_t current_leader_weight) {
+  if (!config.leader_recovery_enabled || validator.strong_fault_count > 0) {
+    return false;
+  }
+  const int64_t max_leader_weight = ClampWeight(config.max_weight, config);
+  const int64_t min_leader_weight = ClampWeight(config.min_weight, config);
+  if (current_leader_weight >= max_leader_weight ||
+      current_leader_weight <= config.leader_eligible_min_weight) {
+    return false;
+  }
+  if (LeaderSelectionScore(validator, config) < 100) {
+    return false;
+  }
+  if (HasBroadLeaderRecoveryEvidence(validator, config)) {
+    return false;
+  }
+  return current_leader_weight >= min_leader_weight;
+}
+
 std::vector<int64_t> LeaderWeightsForCandidate(
     const std::vector<ValidatorReputation>& validators,
     const ReputationConfig& config,
@@ -413,6 +443,10 @@ std::vector<int64_t> LeaderWeightsForCandidate(
       all_validators_eligible = false;
       break;
     }
+    if (ShouldPreserveSoftLeaderCap(validator, config, current_leader_weight)) {
+      all_validators_eligible = false;
+      break;
+    }
   }
   const int64_t equal_leader_weight = ClampWeight(config.max_weight, config);
   const int64_t ineligible_leader_weight = ClampWeight(config.min_weight, config);
@@ -429,6 +463,9 @@ std::vector<int64_t> LeaderWeightsForCandidate(
     } else if (LeaderSelectionScore(validator, config) < 100) {
       leader_weights.push_back(ClampWeight(LeaderSelectionScore(validator, config),
                                            config));
+    } else if (ShouldPreserveSoftLeaderCap(validator, config,
+                                           current_leader_weight)) {
+      leader_weights.push_back(ClampWeight(current_leader_weight, config));
     } else if (config.leader_recovery_enabled) {
       leader_weights.push_back(equal_leader_weight);
     } else {
@@ -1439,9 +1476,6 @@ ReputationCandidate ComputeReputationCandidate(
     }
 
     int recovery_score = validator.vote_score;
-    if (has_leader_recovery_evidence) {
-      recovery_score = std::min(recovery_score, certified_leader_score);
-    }
     if (config.peertrust_enabled &&
         (validator.feedback_count > 0 ||
          validator.peertrust_leader_debt > 0)) {
@@ -1546,12 +1580,9 @@ ReputationCandidate ComputeReputationCandidate(
         validator_has_enough_decay_evidence && config.decay_per_epoch > 0 &&
         validator.inclusions == 0 &&
         validator.vote_score < kFormulaFullReputationScore;
-    const bool low_leader_score =
-        validator.sybil_graph_debt == 0 && has_leader_recovery_evidence &&
-        certified_leader_score < kFormulaFullReputationScore;
     const bool force_score_factor =
         low_peertrust || validator.peertrust_leader_debt > 0 ||
-        low_vote_score || low_leader_score;
+        low_vote_score;
     MaybeApplyMultiplicativeWeightFormula(
         &validator, config, recovery_score, smoothed_next_weight,
         force_score_factor);

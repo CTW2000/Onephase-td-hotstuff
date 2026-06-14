@@ -668,7 +668,32 @@ TEST(ReputationAlgorithmTest, SilentLeaderLosesLeaderRecovery) {
   EXPECT_EQ(candidate.validators[0].leader_opportunity_count, 4);
   EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
   EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 4);
-  EXPECT_LT(candidate.validators[1].next_weight, candidate.validators[0].next_weight);
+  EXPECT_EQ(candidate.validators[1].next_weight,
+            candidate.validators[0].next_weight);
+  EXPECT_LT(candidate.leader_weights[1], candidate.leader_weights[0]);
+}
+
+TEST(ReputationAlgorithmTest,
+     ScheduledLeaderMissWithHealthyVotesOnlyReducesLeaderWeight) {
+  ReputationConfig config = TestConfig();
+  config.decay_per_epoch = 99;
+  config.max_recovery_per_epoch = 99;
+  config.min_leader_opportunities = 3;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {100, 100, 100, 100}, config, "old-root", 0, 64,
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
+
+  EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
+  EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 4);
+  EXPECT_GE(candidate.validators[1].vote_score, 40);
+  EXPECT_EQ(candidate.validators[1].next_weight, 100);
+  EXPECT_EQ(candidate.leader_weights[1], 1);
 }
 
 TEST(ReputationAlgorithmTest,
@@ -689,8 +714,9 @@ TEST(ReputationAlgorithmTest,
   EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 4);
   EXPECT_EQ(candidate.validators[1].peertrust_score, 100);
   EXPECT_EQ(candidate.validators[1].peertrust_leader_debt, 0);
-  EXPECT_LT(candidate.validators[1].next_weight,
+  EXPECT_EQ(candidate.validators[1].next_weight,
             config.peertrust_soft_min_weight);
+  EXPECT_EQ(candidate.leader_weights[1], config.min_weight);
 }
 
 TEST(ReputationAlgorithmTest, OneScheduledLeaderMissDoesNotReduceRecovery) {
@@ -747,7 +773,8 @@ TEST(ReputationAlgorithmTest,
 
   EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
   EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 3);
-  EXPECT_LT(candidate.validators[1].next_weight, 30);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+  EXPECT_LT(candidate.leader_weights[1], candidate.leader_weights[0]);
 }
 
 TEST(ReputationAlgorithmTest,
@@ -929,6 +956,39 @@ TEST(ReputationAlgorithmTest,
             config.leader_diversity_soft_min_weight);
   EXPECT_EQ(candidate.validators[0].next_weight, 100);
   EXPECT_EQ(candidate.leader_weights[0], 80);
+}
+
+TEST(ReputationAlgorithmTest,
+     SignerDiversitySoftCapPersistsWithoutBroadRecoveryEvidence) {
+  ReputationConfig config = TestConfig();
+  config.leader_diversity_soft_min_weight = 80;
+  std::vector<TestEvidence> evidence;
+  const std::string clique_quorum = BitmapFromVector(
+      ConsecutiveModuloSigners(1, 14, 20), 20);
+  const std::string all_available = BitmapFromVector(
+      ConsecutiveModuloSigners(1, 20, 20), 20);
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, clique_quorum, all_available));
+    evidence.push_back(CertifiedQc(view + 10, 2, clique_quorum, all_available));
+    evidence.push_back(CertifiedQc(view + 30, 4, clique_quorum, all_available));
+    evidence.push_back(CertifiedQc(view + 40, 5, clique_quorum, all_available));
+  }
+
+  std::vector<int64_t> current_leader_weights(20, 100);
+  for (int id : {1, 2, 3, 4, 5}) {
+    current_leader_weights[id - 1] = config.leader_diversity_soft_min_weight;
+  }
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 100), config,
+      "old-root", 0, 64, {}, {}, {}, {}, {}, {}, {}, {}, {},
+      /*scheduled_leader_counts=*/{}, current_leader_weights);
+
+  EXPECT_EQ(candidate.leader_weights[2], 80);
+  EXPECT_EQ(candidate.validators[2].leader_score, 100);
+  EXPECT_EQ(candidate.validators[2].leader_diversity_score, 100);
+  EXPECT_EQ(candidate.validators[2].next_weight, 100);
+  EXPECT_EQ(candidate.validators[2].strong_fault_count, 0);
+  EXPECT_EQ(candidate.validators[2].penalty_points, 0);
 }
 
 TEST(ReputationAlgorithmTest,
