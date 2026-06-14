@@ -65,7 +65,8 @@ std::vector<int> BitmapSigners(const std::string& bitmap, int total_replicas) {
 std::string DigestForCandidateParts(
     const CandidateWeightUpdate& candidate,
     const std::vector<int64_t>& weights,
-    const std::vector<int64_t>& leader_weights) {
+    const std::vector<int64_t>& leader_weights,
+    const std::vector<int>& leader_epoch_leaders) {
   return resdb::consensus::reputation::ReputationCandidateDigest(
       candidate.next_weights_size(), candidate.window_index(),
       candidate.window_start(), candidate.window_end(),
@@ -75,10 +76,15 @@ std::string DigestForCandidateParts(
       candidate.next_weight_root(), weights, candidate.strong_fault_root(),
       candidate.penalty_root(), leader_weights, candidate.leader_weight_root(),
       candidate.leader_eligible_min_weight(),
-      candidate.leader_selection_version());
+      candidate.leader_selection_version(), candidate.leader_epoch_start_view(),
+      candidate.leader_epoch_views(), leader_epoch_leaders,
+      candidate.leader_schedule_root());
 }
 
 }  // namespace
+
+std::vector<int> CandidateLeaderEpochLeaders(
+    const CandidateWeightUpdate& candidate);
 
 CandidateWeightUpdate ToCandidateWeightUpdate(
     const resdb::consensus::reputation::ReputationCandidate& candidate) {
@@ -99,6 +105,9 @@ CandidateWeightUpdate ToCandidateWeightUpdate(
   message.set_leader_weight_root(candidate.leader_weight_root_hex);
   message.set_leader_selection_version(candidate.leader_selection_version);
   message.set_leader_eligible_min_weight(candidate.leader_eligible_min_weight);
+  message.set_leader_epoch_start_view(candidate.leader_epoch_start_view);
+  message.set_leader_epoch_views(candidate.leader_epoch_views);
+  message.set_leader_schedule_root(candidate.leader_schedule_root_hex);
   for (size_t i = 0; i < candidate.next_weights.size(); ++i) {
     CandidateWeight* weight = message.add_next_weights();
     weight->set_validator_id(static_cast<int>(i) + 1);
@@ -108,6 +117,9 @@ CandidateWeightUpdate ToCandidateWeightUpdate(
     CandidateWeight* weight = message.add_leader_weights();
     weight->set_validator_id(static_cast<int>(i) + 1);
     weight->set_weight(candidate.leader_weights[i]);
+  }
+  for (int leader : candidate.leader_epoch_leaders) {
+    message.add_leader_epoch_leaders(leader);
   }
   return message;
 }
@@ -158,17 +170,64 @@ WeightUpdateController::WeightUpdateController(
 
 bool WeightUpdateController::AddLocalCandidate(
     const resdb::consensus::reputation::ReputationCandidate& candidate) {
+  return AddLocalCandidateAndMaybeCert(candidate, nullptr);
+}
+
+std::unique_ptr<WeightUpdateCert>
+WeightUpdateController::AddLocalCandidateAndMaybeCert(
+    const resdb::consensus::reputation::ReputationCandidate& candidate) {
+  std::unique_ptr<WeightUpdateCert> cert;
+  if (!AddLocalCandidateAndMaybeCert(candidate, &cert)) {
+    return nullptr;
+  }
+  return cert;
+}
+
+bool WeightUpdateController::AddLocalCandidateAndMaybeCert(
+    const resdb::consensus::reputation::ReputationCandidate& candidate,
+    std::unique_ptr<WeightUpdateCert>* cert) {
   std::lock_guard<std::mutex> lk(mutex_);
   CandidateWeightUpdate message = ToCandidateWeightUpdate(candidate);
   if (!ValidateCandidateStructure(message)) {
     LOG(WARNING) << "local reputation candidate failed structure guard";
     return false;
   }
+  if (cert != nullptr) {
+    cert->reset();
+  }
   const CandidateKey key = KeyForCandidate(message);
   const std::string digest = message.candidate_digest();
   local_candidates_[key] = message;
   candidates_by_digest_[digest] = message;
   AbsorbPendingVotesLocked(digest, candidates_by_digest_[digest]);
+  if (cert != nullptr) {
+    auto bucket_it = vote_buckets_.find(digest);
+    if (bucket_it != vote_buckets_.end()) {
+      *cert = MaybeFormCert(&bucket_it->second);
+    }
+  }
+  return true;
+}
+
+bool WeightUpdateController::ObserveCandidate(
+    const CandidateWeightUpdate& candidate,
+    std::unique_ptr<WeightUpdateCert>* cert) {
+  std::lock_guard<std::mutex> lk(mutex_);
+  if (!ValidateCandidateStructure(candidate)) {
+    return false;
+  }
+  if (cert != nullptr) {
+    cert->reset();
+  }
+  const std::string digest = candidate.candidate_digest();
+  candidates_by_digest_[digest] = candidate;
+  AbsorbPendingVotesLocked(digest, candidates_by_digest_[digest]);
+  if (cert != nullptr) {
+    auto bucket_it = vote_buckets_.find(digest);
+    if (bucket_it != vote_buckets_.end()) {
+      *cert = MaybeFormCert(&bucket_it->second);
+    }
+  }
   return true;
 }
 
@@ -254,10 +313,41 @@ bool WeightUpdateController::HandleCert(const WeightUpdateCert& cert) {
   if (cert.signer_bitmap() != BuildBitmap(signers, total_replicas_)) {
     return false;
   }
+  if (!StageCandidateSchedule(cert.candidate())) {
+    return false;
+  }
   accepted_cert_digests_.insert(digest);
   pending_certs_[digest] = cert;
+  recent_certs_[digest] = cert;
   candidates_by_digest_[digest] = cert.candidate();
   return true;
+}
+
+std::unique_ptr<WeightUpdateCert> WeightUpdateController::LatestCertForProposal(
+    int view) const {
+  std::lock_guard<std::mutex> lk(mutex_);
+  const WeightUpdateCert* best = nullptr;
+  auto consider = [&](const WeightUpdateCert& cert) {
+    const CandidateWeightUpdate& candidate = cert.candidate();
+    const int activation_view = candidate.activation_view();
+    const int epoch_views = std::max(candidate.leader_epoch_views(), 1);
+    if (view > activation_view + epoch_views) {
+      return;
+    }
+    if (best == nullptr || activation_view > best->candidate().activation_view()) {
+      best = &cert;
+    }
+  };
+  for (const auto& entry : pending_certs_) {
+    consider(entry.second);
+  }
+  for (const auto& entry : recent_certs_) {
+    consider(entry.second);
+  }
+  if (best == nullptr) {
+    return nullptr;
+  }
+  return std::make_unique<WeightUpdateCert>(*best);
 }
 
 bool WeightUpdateController::ActivateReady(int current_view) {
@@ -266,21 +356,12 @@ bool WeightUpdateController::ActivateReady(int current_view) {
   for (auto it = pending_certs_.begin(); it != pending_certs_.end();) {
     const CandidateWeightUpdate& candidate = it->second.candidate();
     const int effective_activation_view = candidate.activation_view();
-    if (effective_activation_view >= current_view) {
+    if (effective_activation_view > current_view) {
       ++it;
       continue;
     }
     const uint64_t before_version = weight_schedule_->ActiveWeightVersion();
-    const std::vector<int64_t> weights = CandidateWeights(candidate);
-    const std::vector<int64_t> leader_weights = CandidateLeaderWeights(candidate);
-    if (weight_schedule_->ScheduleUpdate(
-            effective_activation_view, weights, candidate.old_weight_root(),
-            candidate.old_weight_version()) &&
-        (leader_schedule_ == nullptr ||
-         leader_schedule_->ScheduleUpdate(
-             effective_activation_view, before_version + 1,
-             candidate.leader_weight_root(), leader_weights,
-             candidate.leader_eligible_min_weight())) &&
+    if (StageCandidateSchedule(candidate) &&
         weight_schedule_->ActivateUpTo(current_view) &&
         (leader_schedule_ == nullptr || leader_schedule_->ActivateUpTo(current_view) ||
          !leader_schedule_->enabled()) &&
@@ -370,11 +451,54 @@ bool WeightUpdateController::ValidateCandidateStructure(
           candidate.leader_selection_version())) {
     return false;
   }
-  if (weights == weight_schedule_->ActiveWeights() &&
-      !AllowNoOpCandidateForExperiment()) {
+  const std::vector<int> leader_epoch_leaders =
+      CandidateLeaderEpochLeaders(candidate);
+  if (candidate.leader_epoch_start_view() != candidate.activation_view() ||
+      candidate.leader_epoch_views() <= 0 ||
+      leader_epoch_leaders.size() !=
+          static_cast<size_t>(candidate.leader_epoch_views())) {
     return false;
   }
-  if (DigestForCandidateParts(candidate, weights, leader_weights) !=
+  for (int leader : leader_epoch_leaders) {
+    if (leader < 1 || leader > total_replicas_) {
+      return false;
+    }
+  }
+  const std::vector<int> expected_epoch_leaders =
+      resdb::consensus::reputation::BuildLeaderEpochSchedule(
+          total_replicas_, leader_weights,
+          candidate.leader_eligible_min_weight(),
+          candidate.leader_epoch_start_view(), candidate.leader_epoch_views());
+  if (leader_epoch_leaders != expected_epoch_leaders) {
+    return false;
+  }
+  if (candidate.leader_schedule_root() !=
+      resdb::consensus::reputation::LeaderScheduleRootHex(
+          candidate.leader_selection_version(),
+          candidate.leader_eligible_min_weight(),
+          candidate.leader_weight_root(), candidate.leader_epoch_start_view(),
+          candidate.leader_epoch_views(), leader_epoch_leaders)) {
+    return false;
+  }
+  if (weights == weight_schedule_->ActiveWeights() &&
+      !AllowNoOpCandidateForExperiment()) {
+    bool leader_profile_changed = false;
+    if (leader_schedule_ != nullptr && leader_schedule_->enabled()) {
+      const std::vector<int64_t> active_leader_weights =
+          leader_schedule_->ActiveLeaderWeights();
+      leader_profile_changed =
+          leader_weights != active_leader_weights ||
+          candidate.leader_eligible_min_weight() !=
+              leader_schedule_->ActiveEligibleMinWeight() ||
+          candidate.leader_weight_root() !=
+              leader_schedule_->ActiveLeaderWeightRoot();
+    }
+    if (!leader_profile_changed) {
+      return false;
+    }
+  }
+  if (DigestForCandidateParts(candidate, weights, leader_weights,
+                              leader_epoch_leaders) !=
       candidate.candidate_digest()) {
     return false;
   }
@@ -413,6 +537,16 @@ std::vector<int64_t> WeightUpdateController::CandidateLeaderWeights(
     weights.push_back(weight.weight());
   }
   return weights;
+}
+
+std::vector<int> CandidateLeaderEpochLeaders(
+    const CandidateWeightUpdate& candidate) {
+  std::vector<int> leaders;
+  leaders.reserve(candidate.leader_epoch_leaders_size());
+  for (int leader : candidate.leader_epoch_leaders()) {
+    leaders.push_back(leader);
+  }
+  return leaders;
 }
 
 int64_t WeightUpdateController::VoteWeight(
@@ -468,6 +602,24 @@ std::unique_ptr<WeightUpdateCert> WeightUpdateController::MaybeFormCert(
   }
   cert->set_signer_bitmap(BuildBitmap(signers, total_replicas_));
   return cert;
+}
+
+bool WeightUpdateController::StageCandidateSchedule(
+    const CandidateWeightUpdate& candidate) const {
+  const std::vector<int64_t> weights = CandidateWeights(candidate);
+  const std::vector<int64_t> leader_weights = CandidateLeaderWeights(candidate);
+  const std::vector<int> leader_epoch_leaders =
+      CandidateLeaderEpochLeaders(candidate);
+  return weight_schedule_->ScheduleUpdate(
+             candidate.activation_view(), weights, candidate.old_weight_root(),
+             candidate.old_weight_version()) &&
+         (leader_schedule_ == nullptr ||
+          leader_schedule_->ScheduleEpochUpdate(
+              candidate.activation_view(), candidate.old_weight_version() + 1,
+              candidate.leader_weight_root(), leader_weights,
+              candidate.leader_eligible_min_weight(),
+              candidate.leader_epoch_start_view(), candidate.leader_epoch_views(),
+              leader_epoch_leaders, candidate.leader_schedule_root()));
 }
 
 }  // namespace td_hotstuff

@@ -279,7 +279,8 @@ bool ProposalManager::VerifyEnvelopeForEvidence(const Proposal& proposal) {
 }
 
 std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
-    const std::vector<std::unique_ptr<Transaction>>& txns) {
+    const std::vector<std::unique_ptr<Transaction>>& txns,
+    const WeightUpdateCert* weight_update_cert) {
   std::unique_ptr<Proposal> proposal = std::make_unique<Proposal>();
   int proposal_view = 0;
   {
@@ -301,6 +302,9 @@ std::unique_ptr<Proposal> ProposalManager::GenerateProposal(
         highest_timeout_cert_.view() + 1 == round_) {
       *proposal->mutable_header()->mutable_timeout_cert() =
           highest_timeout_cert_;
+    }
+    if (weight_update_cert != nullptr) {
+      *proposal->mutable_header()->mutable_weight_update_cert() = *weight_update_cert;
     }
 
     proposal->mutable_header()->set_view(round_);

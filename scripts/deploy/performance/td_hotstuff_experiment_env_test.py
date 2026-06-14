@@ -91,6 +91,10 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertNotIn("TD_HS_SYBIL_GRAPH_REVIEWER_IDS", shared_env_block)
         self.assertNotIn("TD_HS_DOUBLE_PROPOSAL_IDS", shared_env_block)
         self.assertNotIn("TD_HS_DOUBLE_VOTE_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_LOW_DIVERSITY_QC_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_LOW_DIVERSITY_TARGET_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_LOW_DIVERSITY_REVIEWER_IDS", shared_env_block)
+        self.assertNotIn("TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS", shared_env_block)
         self.assertNotIn("TD_HS_INVALID_QC_IDS", shared_env_block)
         self.assertNotIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", shared_env_block)
         self.assertNotIn("TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", shared_env_block)
@@ -103,6 +107,10 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("-u TD_HS_SYBIL_GRAPH_REVIEWER_IDS", body)
         self.assertIn("-u TD_HS_DOUBLE_PROPOSAL_IDS", body)
         self.assertIn("-u TD_HS_DOUBLE_VOTE_IDS", body)
+        self.assertIn("-u TD_HS_LOW_DIVERSITY_QC_IDS", body)
+        self.assertIn("-u TD_HS_LOW_DIVERSITY_TARGET_IDS", body)
+        self.assertIn("-u TD_HS_LOW_DIVERSITY_REVIEWER_IDS", body)
+        self.assertIn("-u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS", body)
         self.assertIn("-u TD_HS_INVALID_QC_IDS", body)
         self.assertIn("-u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", body)
         self.assertIn("-u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", body)
@@ -117,6 +125,10 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("TD_HS_SYBIL_GRAPH_REVIEWER_IDS=", body)
         self.assertIn("TD_HS_DOUBLE_PROPOSAL=1", body)
         self.assertIn("TD_HS_DOUBLE_VOTE=1", body)
+        self.assertIn("TD_HS_LOW_DIVERSITY_QC=1", body)
+        self.assertIn("TD_HS_LOW_DIVERSITY_TARGET_IDS=", body)
+        self.assertIn("TD_HS_LOW_DIVERSITY_REVIEWER_IDS=", body)
+        self.assertIn("TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS=", body)
         self.assertIn("TD_HS_INVALID_QC=1", body)
         self.assertIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION=1", body)
         self.assertIn("TD_HS_TIMEOUT_VOTE_EQUIVOCATION=1", body)
@@ -141,6 +153,7 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("is_sybil_graph_attack_node", body)
         self.assertIn("is_double_proposal_node", body)
         self.assertIn("is_double_vote_node", body)
+        self.assertIn("is_low_diversity_qc_node", body)
         self.assertIn("is_invalid_qc_node", body)
         self.assertIn("is_weight_update_vote_equivocation_node", body)
         self.assertIn("is_timeout_vote_equivocation_node", body)
@@ -152,6 +165,7 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
             "run_double_proposal_n20.sh",
             "run_double_vote_n20.sh",
             "run_invalid_qc_n20.sh",
+            "run_low_diversity_n20.sh",
             "run_weight_update_vote_equivocation_n20.sh",
             "run_timeout_vote_equivocation_n20.sh",
             "run_invalid_tc_n20.sh",
@@ -163,6 +177,10 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
                 self.assertIn("-u TD_HS_DOUBLE_PROPOSAL_IDS", script_body)
                 self.assertIn("-u TD_HS_DOUBLE_VOTE_IDS", script_body)
                 self.assertIn("-u TD_HS_INVALID_QC_IDS", script_body)
+                self.assertIn("-u TD_HS_LOW_DIVERSITY_QC_IDS", script_body)
+                self.assertIn("-u TD_HS_LOW_DIVERSITY_TARGET_IDS", script_body)
+                self.assertIn("-u TD_HS_LOW_DIVERSITY_REVIEWER_IDS", script_body)
+                self.assertIn("-u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS", script_body)
                 self.assertIn("-u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", script_body)
                 self.assertIn("-u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", script_body)
                 self.assertIn("-u TD_HS_INVALID_TC_PROPOSAL_IDS", script_body)
@@ -241,6 +259,55 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertNotIn('PositiveIntFromEnv("TD_HS_PEERTRUST_BROAD_QC_MIN_SIGNERS"', body)
         self.assertNotIn("available_signers.size() < static_cast<size_t>(min_signers)", body)
         self.assertNotIn("retry_peertrust_broad_qc", body)
+
+    def test_low_diversity_runner_isolates_attack_ids(self):
+        runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_low_diversity_n20.sh")
+        with open(runner) as fp:
+            body = fp.read()
+        self.assertIn("TD_HS_REPUTATION_ENABLE=1", body)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_ENABLE=1", body)
+        self.assertIn("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=1", body)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE=0", body)
+        self.assertIn("TD_HS_REPUTATION_SYBIL_GRAPH_ENABLE=0", body)
+        self.assertIn("TD_HS_STRONG_FAULT_ENABLE=0", body)
+        self.assertIn('TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE="${TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE:-1}"', body)
+        self.assertIn('TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES="${TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES:-256}"', body)
+        self.assertIn('TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES="${TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES:-8}"', body)
+        self.assertIn("LOW_DIVERSITY_COUNTS=(0 1 3 5)", body)
+        self.assertIn("TD_HS_LOW_DIVERSITY_QC_IDS", body)
+        self.assertIn("TD_HS_LOW_DIVERSITY_TARGET_IDS", body)
+        self.assertIn("TD_HS_LOW_DIVERSITY_REVIEWER_IDS", body)
+        self.assertIn("TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS", body)
+        self.assertIn('SLEEP_TIME="${SLEEP_TIME:-120}"', body)
+        self.assertIn('TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY="${TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY:-4}"', body)
+        self.assertIn('TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS="${TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS:-128}"', body)
+        self.assertIn('export TD_HS_LOW_DIVERSITY_TARGET_IDS="$bad_node_ids"', body)
+        self.assertIn('export TD_HS_LOW_DIVERSITY_QC_IDS="$collector_ids"', body)
+        self.assertIn('export TD_HS_LOW_DIVERSITY_REVIEWER_IDS="$reviewer_ids"', body)
+        self.assertIn("-u TD_HS_LOW_DIVERSITY_QC_IDS", body)
+        self.assertIn("-u TD_HS_LOW_DIVERSITY_TARGET_IDS", body)
+        self.assertIn("-u TD_HS_LOW_DIVERSITY_REVIEWER_IDS", body)
+        self.assertIn("-u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS", body)
+        self.assertIn("unset TD_HS_LOW_DIVERSITY_QC_IDS", body)
+        self.assertIn("unset TD_HS_LOW_DIVERSITY_TARGET_IDS", body)
+        self.assertIn("unset TD_HS_LOW_DIVERSITY_REVIEWER_IDS", body)
+        self.assertIn("unset TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS", body)
+        self.assertIn("td_hotstuff_qc_evidence_node_", body)
+
+    def test_low_diversity_hook_is_consumed_by_td_hotstuff(self):
+        td_hotstuff = os.path.join(
+            REPO_ROOT,
+            "platform", "consensus", "ordering", "td_hotstuff", "algorithm",
+            "td_hotstuff.cpp",
+        )
+        with open(td_hotstuff) as fp:
+            body = fp.read()
+        self.assertIn('EnvFlagEnabled("TD_HS_LOW_DIVERSITY_QC")', body)
+        self.assertIn('EnvListContainsId("TD_HS_LOW_DIVERSITY_TARGET_IDS"', body)
+        self.assertIn('IntListFromEnv("TD_HS_LOW_DIVERSITY_REVIEWER_IDS")', body)
+        self.assertIn("SelectLowDiversityQcSigners", body)
+        self.assertIn("selected_signers = low_diversity_signers", body)
+        self.assertIn("low_diversity_qc_metadata=public_available_set", body)
 
     def test_sybil_graph_runner_isolates_attack_ids(self):
         runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_sybil_graph_n20.sh")

@@ -33,10 +33,18 @@ class WeightUpdateController {
 
   bool AddLocalCandidate(
       const resdb::consensus::reputation::ReputationCandidate& candidate);
+  bool AddLocalCandidateAndMaybeCert(
+      const resdb::consensus::reputation::ReputationCandidate& candidate,
+      std::unique_ptr<WeightUpdateCert>* cert);
+  std::unique_ptr<WeightUpdateCert> AddLocalCandidateAndMaybeCert(
+      const resdb::consensus::reputation::ReputationCandidate& candidate);
+  bool ObserveCandidate(const CandidateWeightUpdate& candidate,
+                        std::unique_ptr<WeightUpdateCert>* cert = nullptr);
   std::unique_ptr<WeightUpdateVote> HandleCandidate(
       const CandidateWeightUpdate& candidate);
   std::unique_ptr<WeightUpdateCert> HandleVote(const WeightUpdateVote& vote);
   bool HandleCert(const WeightUpdateCert& cert);
+  std::unique_ptr<WeightUpdateCert> LatestCertForProposal(int view) const;
   bool ActivateReady(int current_view);
   int EarliestPendingActivationView() const;
 
@@ -76,6 +84,7 @@ class WeightUpdateController {
   void AbsorbPendingVotesLocked(const std::string& digest,
                                 const CandidateWeightUpdate& candidate);
   std::unique_ptr<WeightUpdateCert> MaybeFormCert(VoteBucket* bucket) const;
+  bool StageCandidateSchedule(const CandidateWeightUpdate& candidate) const;
 
   const int node_id_;
   const int total_replicas_;
@@ -89,6 +98,7 @@ class WeightUpdateController {
   std::map<std::string, VoteBucket> vote_buckets_;
   std::map<std::string, std::map<int, WeightUpdateVote>> pending_votes_by_digest_;
   std::map<std::string, WeightUpdateCert> pending_certs_;
+  std::map<std::string, WeightUpdateCert> recent_certs_;
   std::set<std::string> accepted_cert_digests_;
   std::set<std::string> voted_digests_;
 };

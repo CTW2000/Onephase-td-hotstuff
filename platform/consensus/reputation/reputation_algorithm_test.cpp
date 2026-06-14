@@ -1,6 +1,7 @@
 #include "platform/consensus/reputation/reputation_algorithm.h"
 #include "platform/consensus/reputation/soft_reputation.h"
 
+#include <algorithm>
 #include <initializer_list>
 #include <string>
 #include <vector>
@@ -35,6 +36,16 @@ std::string BitmapFromVector(const std::vector<int>& signers,
     bitmap[bit / 8] = static_cast<char>(bitmap[bit / 8] | (1 << (bit % 8)));
   }
   return bitmap;
+}
+
+std::vector<int> ConsecutiveModuloSigners(int start, int count,
+                                          int total_replicas) {
+  std::vector<int> signers;
+  signers.reserve(std::max(count, 0));
+  for (int offset = 0; offset < count; ++offset) {
+    signers.push_back(((start - 1 + offset) % total_replicas) + 1);
+  }
+  return signers;
 }
 
 ReputationConfig TestConfig() {
@@ -699,6 +710,26 @@ TEST(ReputationAlgorithmTest, OneScheduledLeaderMissDoesNotReduceRecovery) {
   EXPECT_EQ(candidate.validators[1].next_weight, 30);
 }
 
+TEST(ReputationAlgorithmTest, FewMostlySuccessfulLeaderOpportunitiesStayNeutral) {
+  ReputationConfig config = TestConfig();
+  config.min_leader_opportunities = 8;
+  config.leader_recovery_enabled = true;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 3; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {100, 100, 100, 100}, config, "old-root", 0, 64,
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 0, 0, 0});
+
+  EXPECT_EQ(candidate.validators[0].leader_certified_count, 3);
+  EXPECT_EQ(candidate.validators[0].leader_opportunity_count, 4);
+  EXPECT_EQ(candidate.validators[0].leader_score, 100);
+  EXPECT_EQ(candidate.leader_weights[0], 100);
+}
+
 TEST(ReputationAlgorithmTest,
      RepeatedScheduledLeaderMissesReduceRecoveryBeforeFullThreshold) {
   ReputationConfig config = TestConfig();
@@ -767,7 +798,7 @@ TEST(ReputationAlgorithmTest, NarrowSignerTargetOnlyReducesLeaderRecovery) {
               11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
              20);
   for (int view = 1; view <= 8; ++view) {
-    evidence.push_back(CertifiedQc(view, 1, narrow_quorum, narrow_quorum));
+    evidence.push_back(CertifiedQc(view, 1, narrow_quorum, all_available));
   }
   for (int view = 9; view <= 16; ++view) {
     evidence.push_back(CertifiedQc(view, 2, all_available, all_available));
@@ -779,8 +810,164 @@ TEST(ReputationAlgorithmTest, NarrowSignerTargetOnlyReducesLeaderRecovery) {
 
   EXPECT_LT(candidate.validators[0].leader_diversity_score,
             candidate.validators[1].leader_diversity_score);
-  EXPECT_LT(candidate.validators[0].next_weight,
+  EXPECT_LT(candidate.validators[0].leader_score,
+            candidate.validators[1].leader_score);
+  EXPECT_EQ(candidate.validators[0].next_weight,
             candidate.validators[1].next_weight);
+  EXPECT_LT(candidate.leader_weights[0], candidate.leader_weights[1]);
+}
+
+TEST(ReputationAlgorithmTest,
+     DeterministicQuorumSelectionDoesNotReduceLeaderRecovery) {
+  ReputationConfig config = TestConfig();
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 40; ++view) {
+    const int leader = ((view - 1) % 20) + 1;
+    const std::string deterministic_quorum =
+        BitmapFromVector(ConsecutiveModuloSigners(leader, 14, 20), 20);
+    const std::string broad_available =
+        BitmapFromVector(ConsecutiveModuloSigners(leader, 17, 20), 20);
+    evidence.push_back(
+        CertifiedQc(view, leader, deterministic_quorum, broad_available));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 100), config,
+      "old-root", 0, 64);
+
+  for (const ValidatorReputation& validator : candidate.validators) {
+    EXPECT_EQ(validator.leader_diversity_score, 100)
+        << "validator " << validator.validator_id;
+    EXPECT_EQ(validator.next_weight, 100)
+        << "validator " << validator.validator_id;
+    EXPECT_EQ(validator.strong_fault_count, 0);
+    EXPECT_EQ(validator.penalty_points, 0);
+  }
+}
+
+TEST(ReputationAlgorithmTest,
+     SignerDiversityGateAffectsLeaderScoreNotVotingWeight) {
+  ReputationConfig config = TestConfig();
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  std::vector<TestEvidence> evidence;
+  const std::string clique_quorum = BitmapFromVector(
+      ConsecutiveModuloSigners(1, 14, 20), 20);
+  const std::string all_available = BitmapFromVector(
+      ConsecutiveModuloSigners(1, 20, 20), 20);
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, clique_quorum, all_available));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 100), config,
+      "old-root", 0, 64);
+
+  EXPECT_LT(candidate.validators[0].leader_diversity_score, 30);
+  EXPECT_EQ(candidate.validators[0].leader_score,
+            config.leader_diversity_soft_min_weight);
+  EXPECT_GE(candidate.validators[0].vote_score, 90);
+  EXPECT_EQ(candidate.validators[0].next_weight, 100);
+  EXPECT_LT(candidate.leader_weights[0], 100);
+  EXPECT_GE(candidate.leader_weights[0],
+            config.leader_diversity_soft_min_weight);
+  EXPECT_EQ(candidate.validators[0].strong_fault_count, 0);
+  EXPECT_EQ(candidate.validators[0].penalty_points, 0);
+}
+
+TEST(ReputationAlgorithmTest,
+     SignerDiversityGateDoesNotDropLeaderWeightBelowSoftFloor) {
+  ReputationConfig config = TestConfig();
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  config.leader_diversity_soft_min_weight = 80;
+  std::vector<TestEvidence> evidence;
+  const std::string clique_quorum = BitmapFromVector(
+      ConsecutiveModuloSigners(1, 14, 20), 20);
+  const std::string all_available = BitmapFromVector(
+      ConsecutiveModuloSigners(1, 20, 20), 20);
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, clique_quorum, all_available));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 81), config,
+      "old-root", 0, 64);
+
+  EXPECT_LT(candidate.validators[0].leader_diversity_score, 30);
+  EXPECT_EQ(candidate.validators[0].leader_score,
+            config.leader_diversity_soft_min_weight);
+  EXPECT_EQ(candidate.validators[0].next_weight, 81);
+  EXPECT_EQ(candidate.leader_weights[0], 80);
+  EXPECT_EQ(candidate.validators[0].strong_fault_count, 0);
+  EXPECT_EQ(candidate.validators[0].penalty_points, 0);
+}
+
+TEST(ReputationAlgorithmTest,
+     SignerDiversityGateCanCapLeaderScoreBeforeSampleThreshold) {
+  ReputationConfig config = TestConfig();
+  config.min_leader_opportunities = 8;
+  config.leader_diversity_soft_min_weight = 80;
+  std::vector<TestEvidence> evidence;
+  const std::string clique_quorum = BitmapFromVector(
+      ConsecutiveModuloSigners(1, 14, 20), 20);
+  const std::string all_available = BitmapFromVector(
+      ConsecutiveModuloSigners(1, 20, 20), 20);
+  for (int view = 1; view <= 3; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, clique_quorum, all_available));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 100), config,
+      "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[0].leader_opportunity_count, 3);
+  EXPECT_LT(candidate.validators[0].leader_diversity_score, 30);
+  EXPECT_EQ(candidate.validators[0].leader_score,
+            config.leader_diversity_soft_min_weight);
+  EXPECT_EQ(candidate.validators[0].next_weight, 100);
+  EXPECT_EQ(candidate.leader_weights[0], 80);
+}
+
+TEST(ReputationAlgorithmTest,
+     SignerDiversityGateUsesWeightedJaccardForHighOverlapRotation) {
+  ReputationConfig config = TestConfig();
+  config.decay_per_epoch = 5;
+  config.max_recovery_per_epoch = 5;
+  std::vector<TestEvidence> evidence;
+  const std::string all_available = BitmapFromVector(
+      ConsecutiveModuloSigners(1, 20, 20), 20);
+  for (int view = 1; view <= 20; ++view) {
+    evidence.push_back(CertifiedQc(
+        view, 1,
+        BitmapFromVector(ConsecutiveModuloSigners(view, 14, 20), 20),
+        all_available));
+  }
+  for (int view = 21; view <= 40; ++view) {
+    const int start = 1 + ((view - 21) * 7) % 20;
+    evidence.push_back(CertifiedQc(
+        view, 2,
+        BitmapFromVector(ConsecutiveModuloSigners(start, 14, 20), 20),
+        all_available));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 30), config,
+      "old-root", 0, 64);
+
+  EXPECT_LT(candidate.validators[0].leader_diversity_score,
+            candidate.validators[1].leader_diversity_score);
+  EXPECT_LT(candidate.validators[0].leader_diversity_score, 30);
+  EXPECT_GE(candidate.validators[1].leader_diversity_score, 60);
+  EXPECT_LT(candidate.validators[0].leader_score,
+            candidate.validators[1].leader_score);
+  EXPECT_EQ(candidate.validators[0].next_weight, 30);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+  EXPECT_LT(candidate.leader_weights[0], candidate.leader_weights[1]);
+  EXPECT_EQ(candidate.validators[0].strong_fault_count, 0);
+  EXPECT_EQ(candidate.validators[0].penalty_points, 0);
 }
 
 TEST(ReputationAlgorithmTest, PeerTrustDisabledKeepsAuditNeutral) {
@@ -876,7 +1063,9 @@ TEST(ReputationAlgorithmTest, PeerTrustCliqueFeedbackLowersOnlyLeaderRecovery) {
             candidate.validators[1].next_weight);
   EXPECT_EQ(candidate.validators[0].peertrust_leader_debt, 20);
   EXPECT_EQ(candidate.validators[1].peertrust_leader_debt, 0);
-  EXPECT_EQ(candidate.leader_weights[0], candidate.leader_weights[1]);
+  EXPECT_LT(candidate.leader_weights[0], candidate.leader_weights[1]);
+  EXPECT_GE(candidate.leader_weights[0],
+            config.leader_diversity_soft_min_weight);
   EXPECT_EQ(candidate.validators[3].strong_fault_count, 0);
   EXPECT_EQ(candidate.validators[3].penalty_points, 0);
   EXPECT_EQ(candidate.validators[3].next_weight, 30);
@@ -884,9 +1073,9 @@ TEST(ReputationAlgorithmTest, PeerTrustCliqueFeedbackLowersOnlyLeaderRecovery) {
 
 
 TEST(ReputationAlgorithmTest,
-     PeerTrustSharedReviewerCliqueDropsBelowLegacyDiversityGate) {
-  ReputationConfig legacy_config = TestConfig();
-  legacy_config.peertrust_enabled = false;
+     PeerTrustSharedReviewerCliqueDropsBelowSignerDiversityGate) {
+  ReputationConfig signer_diversity_config = TestConfig();
+  signer_diversity_config.peertrust_enabled = false;
   ReputationConfig peertrust_config = TestConfig();
   peertrust_config.peertrust_enabled = true;
   const std::string all_available =
@@ -902,29 +1091,29 @@ TEST(ReputationAlgorithmTest,
       CertifiedQc(4, 16, all_available, all_available),
   };
 
-  const ReputationCandidate legacy_candidate = ComputeCandidate(
-      1, 20, 1, evidence, std::vector<int64_t>(20, 30), legacy_config,
+  const ReputationCandidate signer_diversity_candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 30), signer_diversity_config,
       "old-root", 0, 64);
   const ReputationCandidate peertrust_candidate = ComputeCandidate(
       1, 20, 1, evidence, std::vector<int64_t>(20, 30), peertrust_config,
       "old-root", 0, 64);
 
-  EXPECT_EQ(legacy_candidate.validators[0].next_weight, 30);
-  EXPECT_EQ(legacy_candidate.validators[1].next_weight, 30);
+  EXPECT_EQ(signer_diversity_candidate.validators[0].next_weight, 30);
+  EXPECT_EQ(signer_diversity_candidate.validators[1].next_weight, 30);
   EXPECT_LT(peertrust_candidate.validators[0].community_context_score,
             peertrust_candidate.validators[14].community_context_score);
   EXPECT_LT(peertrust_candidate.validators[1].community_context_score,
             peertrust_candidate.validators[15].community_context_score);
   EXPECT_LT(peertrust_candidate.validators[0].next_weight,
-            legacy_candidate.validators[0].next_weight);
+            signer_diversity_candidate.validators[0].next_weight);
   EXPECT_LT(peertrust_candidate.validators[1].next_weight,
-            legacy_candidate.validators[1].next_weight);
+            signer_diversity_candidate.validators[1].next_weight);
   EXPECT_EQ(peertrust_candidate.validators[0].peertrust_leader_debt, 20);
   EXPECT_EQ(peertrust_candidate.validators[1].peertrust_leader_debt, 20);
   EXPECT_EQ(peertrust_candidate.leader_weights[0],
-            legacy_candidate.leader_weights[0]);
+            signer_diversity_candidate.leader_weights[0]);
   EXPECT_EQ(peertrust_candidate.leader_weights[1],
-            legacy_candidate.leader_weights[1]);
+            signer_diversity_candidate.leader_weights[1]);
   EXPECT_EQ(peertrust_candidate.validators[0].strong_fault_count, 0);
   EXPECT_EQ(peertrust_candidate.validators[0].penalty_points, 0);
   EXPECT_EQ(peertrust_candidate.validators[14].next_weight, 30);
@@ -1411,6 +1600,11 @@ TEST(ReputationAlgorithmTest,
       sybil_score_sum += validator.sybil_graph_score;
       sybil_weight_sum += validator.next_weight;
       EXPECT_GT(validator.sybil_graph_debt, 0);
+      EXPECT_LT(validator.next_weight, validator.current_weight)
+          << "id=" << id << " debt=" << validator.sybil_graph_debt
+          << " score=" << validator.sybil_graph_score
+          << " current=" << validator.current_weight
+          << " next=" << validator.next_weight;
     } else if (id >= 15) {
       honest_score_sum += validator.sybil_graph_score;
       honest_weight_sum += validator.next_weight;

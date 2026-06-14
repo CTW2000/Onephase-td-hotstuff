@@ -42,6 +42,23 @@ std::string BuildLeaderWeightRoot(const std::vector<int64_t>& weights,
   return HashHexForTesting(out.str());
 }
 
+std::string BuildLeaderScheduleRoot(int leader_selection_version,
+                                    int64_t eligible_min_weight,
+                                    const std::string& leader_weight_root,
+                                    int epoch_start_view, int epoch_views,
+                                    const std::vector<int>& epoch_leaders) {
+  std::ostringstream out;
+  out << "protocol_neutral_leader_schedule_root_v1|"
+      << leader_selection_version << '|' << eligible_min_weight << '|'
+      << leader_weight_root << '|' << epoch_start_view << '|' << epoch_views;
+  for (size_t i = 0; i < epoch_leaders.size(); ++i) {
+    out << '|' << (epoch_start_view + static_cast<int>(i)) << ':'
+        << epoch_leaders[i];
+  }
+  return HashHexForTesting(out.str());
+}
+
+
 }  // namespace
 
 int RoundRobinLeaderForView(int view, int total_replicas) {
@@ -70,7 +87,18 @@ int LeaderSelectionSchedule::LeaderForView(int view) const {
   }
   std::lock_guard<std::mutex> lk(mutex_);
   const Record& record = RecordForViewLocked(view);
-  if (!record.context_required || record.sequence.empty()) {
+  if (record.sequence.empty()) {
+    return RoundRobinLeaderForView(view, total_replicas_);
+  }
+  if (record.has_explicit_epoch) {
+    const int size = static_cast<int>(record.sequence.size());
+    int idx = (view - record.epoch_start_view) % size;
+    if (idx < 0) {
+      idx += size;
+    }
+    return record.sequence[static_cast<size_t>(idx)];
+  }
+  if (!record.context_required) {
     return RoundRobinLeaderForView(view, total_replicas_);
   }
   const int idx = ((view % static_cast<int>(record.sequence.size())) +
@@ -128,6 +156,72 @@ bool LeaderSelectionSchedule::ScheduleUpdate(
   return true;
 }
 
+bool LeaderSelectionSchedule::ScheduleEpochUpdate(
+    int activation_view, uint64_t leader_version,
+    const std::string& leader_weight_root,
+    const std::vector<int64_t>& leader_weights, int64_t eligible_min_weight,
+    int epoch_start_view, int epoch_views,
+    const std::vector<int>& epoch_leaders,
+    const std::string& leader_schedule_root) {
+  if (!enabled_) {
+    return true;
+  }
+  if (activation_view <= 0 || epoch_start_view != activation_view ||
+      epoch_views <= 0 ||
+      epoch_leaders.size() != static_cast<size_t>(epoch_views) ||
+      leader_weights.size() != static_cast<size_t>(total_replicas_) ||
+      leader_version <= ActiveLeaderVersion()) {
+    return false;
+  }
+  const std::vector<int64_t> normalized =
+      NormalizeLeaderProfile(leader_weights, total_replicas_);
+  if (normalized != leader_weights) {
+    return false;
+  }
+  for (int leader : epoch_leaders) {
+    if (leader < 1 || leader > total_replicas_) {
+      return false;
+    }
+  }
+  const int64_t normalized_threshold =
+      std::max<int64_t>(kMinLeaderWeight, eligible_min_weight);
+  if (leader_weight_root !=
+      BuildLeaderWeightRoot(normalized, normalized_threshold, kLeaderParamsVersion)) {
+    return false;
+  }
+  if (leader_schedule_root !=
+      BuildLeaderScheduleRoot(kLeaderParamsVersion, normalized_threshold,
+                              leader_weight_root, epoch_start_view,
+                              epoch_views, epoch_leaders)) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lk(mutex_);
+  for (size_t i = active_index_ + 1; i < records_.size(); ++i) {
+    const Record& pending = records_[i];
+    if (pending.activation_view == activation_view &&
+        pending.version == leader_version && pending.root == leader_weight_root &&
+        pending.weights == normalized &&
+        pending.eligible_min_weight == normalized_threshold &&
+        pending.schedule_root == leader_schedule_root &&
+        pending.sequence == epoch_leaders) {
+      return true;
+    }
+    if (pending.activation_view == activation_view) {
+      return false;
+    }
+  }
+  records_.push_back(BuildEpochRecord(activation_view, leader_version,
+                                      leader_weight_root, normalized,
+                                      normalized_threshold, epoch_start_view,
+                                      epoch_views, epoch_leaders,
+                                      leader_schedule_root));
+  std::sort(records_.begin() + 1, records_.end(),
+            [](const Record& a, const Record& b) {
+              return a.activation_view < b.activation_view;
+            });
+  return true;
+}
+
 bool LeaderSelectionSchedule::ActivateUpTo(int current_view) {
   if (!enabled_) {
     return false;
@@ -135,7 +229,7 @@ bool LeaderSelectionSchedule::ActivateUpTo(int current_view) {
   std::lock_guard<std::mutex> lk(mutex_);
   size_t selected = active_index_;
   for (size_t i = active_index_; i < records_.size(); ++i) {
-    if (records_[i].activation_view < current_view) {
+    if (records_[i].activation_view <= current_view) {
       selected = i;
     }
   }
@@ -169,11 +263,8 @@ int64_t LeaderSelectionSchedule::ActiveEligibleMinWeight() const {
 const LeaderSelectionSchedule::Record& LeaderSelectionSchedule::RecordForViewLocked(
     int view) const {
   const Record* selected = &records_.front();
-  const size_t last_active =
-      std::min(active_index_, records_.empty() ? size_t{0} : records_.size() - 1);
-  for (size_t i = 0; i <= last_active; ++i) {
-    const Record& record = records_[i];
-    if (record.activation_view < view) {
+  for (const Record& record : records_) {
+    if (record.activation_view <= view) {
       selected = &record;
     } else {
       break;
@@ -199,6 +290,23 @@ LeaderSelectionSchedule::Record LeaderSelectionSchedule::BuildRecord(
                                                   record.eligible_min_weight);
   record.context_required = !IsExactRoundRobinProfile(record.weights,
                                                       record.eligible_min_weight);
+  return record;
+}
+
+LeaderSelectionSchedule::Record LeaderSelectionSchedule::BuildEpochRecord(
+    int activation_view, uint64_t version, const std::string& leader_weight_root,
+    const std::vector<int64_t>& leader_weights, int64_t eligible_min_weight,
+    int epoch_start_view, int epoch_views,
+    const std::vector<int>& epoch_leaders,
+    const std::string& leader_schedule_root) const {
+  Record record = BuildRecord(activation_view, version, leader_weight_root,
+                              leader_weights, eligible_min_weight);
+  record.sequence = epoch_leaders;
+  record.schedule_root = leader_schedule_root;
+  record.epoch_start_view = epoch_start_view;
+  record.epoch_views = epoch_views;
+  record.has_explicit_epoch = true;
+  record.context_required = true;
   return record;
 }
 

@@ -72,6 +72,9 @@ class HotStuff : public common::ProtocolBase {
   std::vector<int> CertificateSigners(
       const std::map<int, std::unique_ptr<Certificate>>& certs,
       int view) const;
+  std::vector<int> SelectLowDiversityQcSigners(
+      const std::map<int, std::unique_ptr<Certificate>>& certs, int view,
+      int64_t quorum_weight) const;
   bool MaybeMakeSignedProposalEvidenceSnapshotLocked(
       const Proposal& proposal,
       TdHotstuffSignedProposalEvidenceSnapshot* snapshot);
@@ -98,6 +101,7 @@ class HotStuff : public common::ProtocolBase {
   void BroadcastWeightUpdateCert(const WeightUpdateCert& cert);
   void DrainCompletedWeightCandidates();
   void ActivateReadyWeightUpdates();
+  void ProcessWeightUpdateCertFromProposal(const WeightUpdateCert& cert, int view);
   void ActivateReadyWeightUpdates(int view);
   void RefreshPendingWeightActivationView();
   void MaybeActivateReadyWeightUpdatesAfterViewAdvance();
@@ -108,6 +112,7 @@ class HotStuff : public common::ProtocolBase {
   bool IsSlowVoteForExperiment() const;
   void MaybeDelayVoteForExperiment() const;
   bool ShouldUsePeerTrustCliqueForView(int view) const;
+  bool ShouldUseLowDiversityQcForView(int view) const;
   bool IsInvalidQcForExperiment() const;
   bool IsWeightUpdateVoteEquivocationForExperiment() const;
   std::unique_ptr<Proposal> MakeConflictingProposalForExperiment(

@@ -1,8 +1,10 @@
 #!/bin/bash
-# TD-Hotstuff double-vote strong-fault experiment for n=20.
-# TD_HS_DOUBLE_VOTE_IDS is used only by deploy_multi.sh to inject the
-# replica-local TD_HS_DOUBLE_VOTE=1 flag into selected faulty processes.
-# Clients and ordinary replicas receive neither the ID list nor the local flag.
+# TD-Hotstuff low-diversity QC signer-clique experiment for n=20.
+# TD_HS_LOW_DIVERSITY_QC_IDS is used only by deploy_multi.sh to inject the
+# replica-local TD_HS_LOW_DIVERSITY_QC=1 flag into selected QC collectors.
+# TD_HS_LOW_DIVERSITY_TARGET_IDS and TD_HS_LOW_DIVERSITY_REVIEWER_IDS are
+# passed only to those injected collectors. Clients, ordinary replicas, the
+# adapter, and the plugin never receive the target or reviewer lists.
 
 set -o pipefail
 DEPLOY_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -11,19 +13,19 @@ cd "$DEPLOY_DIR"
 . ./script/env.sh
 . ./td_hotstuff_stable_env.sh
 
-RESULT_DIR="$DEPLOY_DIR/experiment_results/double_vote_n20"
+RESULT_DIR="${LOW_DIVERSITY_RESULT_DIR:-$DEPLOY_DIR/experiment_results/low_diversity_n20}"
 mkdir -p "$RESULT_DIR"
 
 LOCAL_IP="10.10.131.205"
 SERVERS="10.10.131.224 10.10.131.247 10.10.131.86 10.10.131.125 10.10.131.83"
-SLEEP_TIME="${SLEEP_TIME:-90}"
+SLEEP_TIME="${SLEEP_TIME:-120}"
 N=20
 MEAN_DELAY_MS=0
 
-if [ -n "${DOUBLE_VOTE_COUNTS_OVERRIDE:-}" ]; then
-  read -r -a DOUBLE_VOTE_COUNTS <<< "${DOUBLE_VOTE_COUNTS_OVERRIDE}"
+if [ -n "${LOW_DIVERSITY_COUNTS_OVERRIDE:-}" ]; then
+  read -r -a LOW_DIVERSITY_COUNTS <<< "${LOW_DIVERSITY_COUNTS_OVERRIDE}"
 else
-  DOUBLE_VOTE_COUNTS=(0 1 3)
+  LOW_DIVERSITY_COUNTS=(0 1 3 5)
 fi
 
 CONFIG_FILES_TO_RESTORE=(
@@ -79,24 +81,67 @@ derive_bad_node_ids() {
   local count="$1"
   local ids=""
   for ((i=1; i<=count; i++)); do
-    if [ -n "$ids" ]; then
-      ids="${ids},${i}"
-    else
-      ids="${i}"
-    fi
+    if [ -n "$ids" ]; then ids="${ids},${i}"; else ids="${i}"; fi
   done
   printf '%s' "$ids"
+}
+
+derive_reviewer_ids() {
+  local bad_count="$1"
+  local group_size="${TD_HS_LOW_DIVERSITY_REVIEWER_GROUP_SIZE:-14}"
+  local start="${TD_HS_LOW_DIVERSITY_REVIEWER_START:-1}"
+  local ids=""
+  local chosen=0
+  for ((offset=0; chosen<group_size && offset<N; offset++)); do
+    local i=$(( ((start - 1 + offset) % N) + 1 ))
+    if [ -n "$ids" ]; then ids="${ids},${i}"; else ids="${i}"; fi
+    chosen=$((chosen + 1))
+  done
+  printf '%s' "$ids"
+}
+
+derive_collector_ids() {
+  local target_ids="$1"
+  if [ -n "${TD_HS_LOW_DIVERSITY_COLLECTOR_IDS_OVERRIDE:-}" ]; then
+    printf "%s" "$TD_HS_LOW_DIVERSITY_COLLECTOR_IDS_OVERRIDE"
+    return
+  fi
+  if [ -z "$target_ids" ]; then
+    printf ""
+    return
+  fi
+
+  local group_size="${TD_HS_LOW_DIVERSITY_COLLECTOR_GROUP_SIZE:-5}"
+  local ids=""
+  IFS="," read -r -a targets <<< "$target_ids"
+  for target in "${targets[@]}"; do
+    [[ "$target" =~ ^[0-9]+$ ]] || continue
+    for ((offset=1; offset<=group_size; offset++)); do
+      local collector=$(( ((target - 1 + offset) % N) + 1 ))
+      case ",${ids}," in
+        *,${collector},*) ;;
+        *)
+          if [ -n "$ids" ]; then ids="${ids},${collector}"; else ids="${collector}"; fi
+          ;;
+      esac
+    done
+  done
+  printf "%s" "$ids"
 }
 
 run_single_experiment() {
   local num_bad="$1"
   local bad_node_ids
   bad_node_ids=$(derive_bad_node_ids "$num_bad")
-  local result_file="$RESULT_DIR/TD-Hotstuff_doublevote${num_bad}.txt"
+  local reviewer_ids
+  reviewer_ids=$(derive_reviewer_ids "$num_bad")
+  local collector_ids
+  collector_ids=$(derive_collector_ids "$bad_node_ids")
+  local result_file="$RESULT_DIR/TD-Hotstuff_low_diversity_${num_bad}.txt"
 
   echo ""
   echo "======================================================================"
-  echo "  EXPERIMENT: DoubleVote bad=$num_bad ids=${bad_node_ids:-none} n=$N"
+  echo "  EXPERIMENT: LowDiversityQC bad=$num_bad targets=${bad_node_ids:-none} collectors=${collector_ids:-none} reviewers=${reviewer_ids:-none} n=$N"
   echo "======================================================================"
 
   cleanup_all
@@ -114,44 +159,34 @@ generate_performance_server_conf($N)
   export server=//benchmark/protocols/td_hotstuff:kv_server_performance
   export TD_HS_REPUTATION_ENABLE=1
   export TD_HS_WEIGHT_UPDATE_ENABLE=1
-  export TD_HS_STRONG_FAULT_ENABLE=1
-  export TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE=0
-  export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=0
-  export TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE=0
-  export TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE=0
-  export TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE=0
-  export TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE=0
-  export TD_HS_CONFLICTING_QC_DETECT_ENABLE=0
-  if [ "${TD_HS_ALL_DETECTORS_ENABLE:-0}" = "1" ]; then
-    td_hs_enable_all_detectors
-  else
-    export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=1
-  fi
-  export TD_HS_STRONG_FAULT_TARGET_WEIGHT=1
-  # Strong-fault experiments should punish only authenticated equivocation
-  # evidence. Keep soft decay inactive to avoid unrelated honest-node drift.
-  export TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES=1000000
+  export TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=1
+  export TD_HS_REPUTATION_PEERTRUST_ENABLE=0
+  export TD_HS_REPUTATION_SYBIL_GRAPH_ENABLE=0
+  export TD_HS_STRONG_FAULT_ENABLE=0
   export TD_HS_REPUTATION_WINDOW_SIZE=64
   export TD_HS_REPUTATION_MIN_CANDIDATE_QCS=16
+  export TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES="${TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES:-256}"
+  export TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES="${TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES:-8}"
+  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1
   export TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS=64
-  export TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY=1
-  export TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS=32
+  export TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY="${TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY:-4}"
+  export TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS="${TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS:-128}"
   export TD_HS_LEADER_SELECTION_ENABLE=1
   export TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT=10
-  export TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE=1
-  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1
+  export TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE="${TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE:-1}"
   export TD_HS_EVIDENCE_ENABLE=0
-  # Double vote creates signed conflicting votes for the same view. Keep the
-  # experiment pacemaker on so equivocated views can still advance if needed.
-  export TD_HS_TIMEOUT_ENABLE=1
-  export TD_HS_TIMEOUT_MS=200
-  export TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS=20
+  export TD_HS_TIMEOUT_ENABLE=0
   export TD_HS_BAD_NODE_COUNT="$num_bad"
   export TD_HS_BAD_NODE_IDS="$bad_node_ids"
+  export TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS="${TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS:-17}"
   if [ "$num_bad" -gt 0 ]; then
-    export TD_HS_DOUBLE_VOTE_IDS="$bad_node_ids"
+    export TD_HS_LOW_DIVERSITY_QC_IDS="$collector_ids"
+    export TD_HS_LOW_DIVERSITY_TARGET_IDS="$bad_node_ids"
+    export TD_HS_LOW_DIVERSITY_REVIEWER_IDS="$reviewer_ids"
   else
-    unset TD_HS_DOUBLE_VOTE_IDS
+    unset TD_HS_LOW_DIVERSITY_QC_IDS
+    unset TD_HS_LOW_DIVERSITY_TARGET_IDS
+    unset TD_HS_LOW_DIVERSITY_REVIEWER_IDS
   fi
 
   bash ./script/deploy_multi.sh "./config/performance.conf" 2>&1 | grep -E "(=== |Phase|deployed|started|ready|running)"
@@ -161,12 +196,19 @@ generate_performance_server_conf($N)
     cf=$PWD/config_out/client${i}.config
     if [ ! -f "$cf" ]; then break; fi
     env -u TD_HS_SILENT_LEADER_IDS \
+        -u TD_HS_LOW_DIVERSITY_QC_IDS \
+        -u TD_HS_LOW_DIVERSITY_TARGET_IDS \
+        -u TD_HS_LOW_DIVERSITY_REVIEWER_IDS \
+        -u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS \
+        -u TD_HS_PEERTRUST_CLIQUE_IDS \
+        -u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS \
+        -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS \
         -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS \
-        -u TD_HS_INVALID_QC_IDS -u TD_HS_LOW_DIVERSITY_QC_IDS -u TD_HS_LOW_DIVERSITY_TARGET_IDS -u TD_HS_LOW_DIVERSITY_REVIEWER_IDS -u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS \
+        -u TD_HS_INVALID_QC_IDS \
         -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
         -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS \
-        -u TD_HS_INVALID_TC_PROPOSAL_IDS -u TD_HS_BAD_NODE_IDS \
-        -u TD_HS_BAD_NODE_COUNT \
+        -u TD_HS_INVALID_TC_PROPOSAL_IDS \
+        -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT \
         ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
   done
 
@@ -186,7 +228,7 @@ generate_performance_server_conf($N)
     tps=$(grep "^[0-9]" "$result_file" | head -1)
     lat=$(grep "^[0-9]" "$result_file" | tail -1)
     echo "  >> Throughput: $tps txn/s | Latency: $lat s"
-    local keep_dir="$RESULT_DIR/logs_TD-Hotstuff_doublevote${num_bad}"
+    local keep_dir="$RESULT_DIR/logs_TD-Hotstuff_low_diversity_${num_bad}"
     rm -rf "$keep_dir"
     mkdir -p "$keep_dir"
     cp result_*_log "$keep_dir"/ 2>/dev/null || true
@@ -200,21 +242,26 @@ generate_performance_server_conf($N)
     echo "0" >> "$result_file"
   fi
 
-  unset TD_HS_DOUBLE_VOTE_IDS
+  unset TD_HS_LOW_DIVERSITY_QC_IDS
+  unset TD_HS_LOW_DIVERSITY_TARGET_IDS
+  unset TD_HS_LOW_DIVERSITY_REVIEWER_IDS
+  unset TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS
+  unset TD_HS_LOW_DIVERSITY_QC_TRACE
+  unset TD_HS_REPUTATION_AUDIT_JSONL_ENABLE
 }
 
 echo "=== Building TD-Hotstuff benchmark binaries ==="
 bazel build //benchmark/protocols/td_hotstuff:kv_server_performance \
             //benchmark/protocols/pbft:kv_service_tools 2>&1 | tail -5
 
-for num_bad in "${DOUBLE_VOTE_COUNTS[@]}"; do
+for num_bad in "${LOW_DIVERSITY_COUNTS[@]}"; do
   run_single_experiment "$num_bad"
 done
 
 cleanup_all
 echo ""
 echo "======================================================================"
-echo "  DOUBLE-VOTE EXPERIMENTS COMPLETE (n=$N)"
+echo "  LOW-DIVERSITY QC EXPERIMENTS COMPLETE (n=$N)"
 echo "  Results in: $RESULT_DIR/"
 echo "======================================================================"
 ls -la "$RESULT_DIR/"

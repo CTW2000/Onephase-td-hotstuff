@@ -27,6 +27,13 @@ class LeaderSelectionSchedule {
                       const std::string& leader_weight_root,
                       const std::vector<int64_t>& leader_weights,
                       int64_t eligible_min_weight);
+  bool ScheduleEpochUpdate(int activation_view, uint64_t leader_version,
+                           const std::string& leader_weight_root,
+                           const std::vector<int64_t>& leader_weights,
+                           int64_t eligible_min_weight,
+                           int epoch_start_view, int epoch_views,
+                           const std::vector<int>& epoch_leaders,
+                           const std::string& leader_schedule_root);
   bool ActivateUpTo(int current_view);
 
   uint64_t ActiveLeaderVersion() const;
@@ -42,6 +49,10 @@ class LeaderSelectionSchedule {
     std::vector<int64_t> weights;
     int64_t eligible_min_weight = 10;
     std::vector<int> sequence;
+    std::string schedule_root;
+    int epoch_start_view = 0;
+    int epoch_views = 0;
+    bool has_explicit_epoch = false;
     bool context_required = false;
   };
 
@@ -50,6 +61,13 @@ class LeaderSelectionSchedule {
                      const std::string& leader_weight_root,
                      const std::vector<int64_t>& leader_weights,
                      int64_t eligible_min_weight) const;
+  Record BuildEpochRecord(int activation_view, uint64_t version,
+                          const std::string& leader_weight_root,
+                          const std::vector<int64_t>& leader_weights,
+                          int64_t eligible_min_weight,
+                          int epoch_start_view, int epoch_views,
+                          const std::vector<int>& epoch_leaders,
+                          const std::string& leader_schedule_root) const;
   std::vector<int> BuildSmoothWeightedRoundRobin(
       const std::vector<int64_t>& weights, int64_t eligible_min_weight) const;
   bool IsExactRoundRobinProfile(const std::vector<int64_t>& weights,

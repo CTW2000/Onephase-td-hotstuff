@@ -59,7 +59,8 @@ class ProposalManager {
                   std::shared_ptr<LeaderSelectionSchedule> leader_schedule = nullptr);
 
   std::unique_ptr<Proposal> GenerateProposal(
-      const std::vector<std::unique_ptr<Transaction>>& txns);
+      const std::vector<std::unique_ptr<Transaction>>& txns,
+      const WeightUpdateCert* weight_update_cert = nullptr);
   ProposalValidationResult ValidateProposal(const Proposal& proposal);
   bool Verify(const Proposal& proposal);
   bool VerifyEnvelopeForEvidence(const Proposal& proposal);

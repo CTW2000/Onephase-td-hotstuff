@@ -23,6 +23,7 @@ namespace {
 constexpr const char* kAlgorithmBayesV4 = "bayes_v4";
 constexpr int64_t kCarryoverDecayWeightGap = 10;
 constexpr int kHealthyCatchUpScore = 40;
+constexpr int kLeaderDiversityGateThreshold = 50;
 constexpr int kDebtNoRecoveryBelow = 30;
 constexpr uint64_t kMinNoCertifiedLeaderOpportunities = 3;
 constexpr uint64_t kVoteBetaCounterScale = 1000;
@@ -38,6 +39,19 @@ struct CoreEvidenceEvent {
   std::string available_signer_bitmap;
   OutcomeClass outcome_class = OutcomeClass::kNone;
 };
+
+int LeaderSignerDiversityGateScore(int weighted_effective_signer_score,
+                                   int repeated_signer_concentration_score,
+                                   int weighted_jaccard_variation_score) {
+  // F_div is a soft recovery gate built from the paper's signer-diversity
+  // terms. Low scores reduce recovery credit gradually; they do not classify a
+  // Byzantine fault or directly rewrite leader weights.
+  return std::max(
+      0, std::min(100,
+                  std::min(weighted_effective_signer_score,
+                           std::min(repeated_signer_concentration_score,
+                                    weighted_jaccard_variation_score))));
+}
 
 std::string StrongFaultTypeName(StrongFaultType type) {
   switch (type) {
@@ -338,19 +352,44 @@ bool IsLeaderWeightIneligible(const ValidatorReputation& validator,
       !has_good_leader_reentry_evidence) {
     return true;
   }
-  return HasLeaderRecoveryEvidence(validator, config) &&
+  const bool only_low_diversity_gate =
+      validator.leader_certified_count > 0 &&
+      validator.leader_diversity_score < kLeaderDiversityGateThreshold;
+  return !only_low_diversity_gate &&
+         HasLeaderRecoveryEvidence(validator, config) &&
          validator.next_weight <= config.leader_eligible_min_weight;
 }
 
 int LeaderSelectionScore(const ValidatorReputation& validator,
                          const ReputationConfig& config) {
-  static_cast<void>(validator);
-  static_cast<void>(config);
-  int score = 100;
-  // PeerTrust debt is intentionally audit/plugin-side state for now. Applying
-  // it directly to the active consensus leader schedule requires a synchronized
-  // activation protocol, otherwise validators can switch expected leaders at
-  // different local views.
+  if (!config.leader_recovery_enabled) {
+    return 100;
+  }
+  const bool has_repeated_uncertified_leader_opportunities =
+      validator.leader_opportunity_count >= kMinNoCertifiedLeaderOpportunities &&
+      validator.leader_certified_count == 0 && validator.leader_score < 50;
+  const bool has_low_diversity_leader_evidence =
+      validator.leader_certified_count > 0 &&
+      validator.leader_diversity_score < kLeaderDiversityGateThreshold;
+  const bool has_leader_score_evidence =
+      validator.leader_opportunity_count >= config.min_leader_opportunities ||
+      has_repeated_uncertified_leader_opportunities ||
+      has_low_diversity_leader_evidence;
+  if (!has_leader_score_evidence) {
+    return 100;
+  }
+
+  int score = validator.leader_score;
+  const bool only_low_diversity_gate =
+      validator.leader_certified_count > 0 &&
+      validator.leader_diversity_score < kLeaderDiversityGateThreshold;
+  if (only_low_diversity_gate) {
+    score = std::max<int>(score, static_cast<int>(std::max<int64_t>(
+                                     config.min_weight,
+                                     std::min<int64_t>(
+                                         config.leader_diversity_soft_min_weight,
+                                         config.max_weight))));
+  }
   return std::max(0, std::min(100, score));
 }
 
@@ -716,6 +755,8 @@ ReputationCandidate ComputeReputationCandidate(
       input.old_weight_root_hex.empty() ? WeightRootHex(weights) : input.old_weight_root_hex;
   candidate.old_weight_version = input.old_weight_version;
   candidate.activation_view = input.activation_view;
+  candidate.leader_epoch_start_view = input.activation_view;
+  candidate.leader_epoch_views = input.leader_epoch_views;
   candidate.validators.resize(std::max(total_replicas, 0));
   const bool has_scheduled_leader_counts =
       input.scheduled_leader_counts.size() >=
@@ -963,6 +1004,8 @@ ReputationCandidate ComputeReputationCandidate(
 
   std::vector<int> raw_leader_diversity_scores(candidate.validators.size(), 100);
   std::vector<int> public_target_coverage_scores(candidate.validators.size(), 100);
+  std::vector<bool> credible_available_signer_evidence(
+      candidate.validators.size(), false);
   std::vector<int> diversity_baseline_samples;
   diversity_baseline_samples.reserve(candidate.validators.size());
   for (const ValidatorReputation& validator : candidate.validators) {
@@ -1020,21 +1063,15 @@ ReputationCandidate ComputeReputationCandidate(
                   signer_frequency_by_leader[idx],
                   unique_available_signers_by_leader[idx])
             : 100;
-    int raw_diversity_score = diversity_score;
-    const bool repeated_narrow_choice =
-        has_repeated_leader_signer_group && variation_score < 50 &&
-        average_signer_set_coverage_score < 95 &&
-        (!has_public_available_signer_evidence || signer_coverage_score < 95);
     const int target_coverage_score =
         has_public_available_signer_evidence
             ? std::min(available_signer_coverage_score,
                        average_available_signer_set_coverage_score)
             : 100;
+    const bool has_credible_available_signer_evidence =
+        has_public_available_signer_evidence && target_coverage_score >= 85;
     const bool narrow_public_target =
-        has_public_available_signer_evidence && target_coverage_score < 95;
-    const bool unbalanced_public_frequency =
-        has_public_available_signer_evidence && had_broader_public_choice &&
-        frequency_balance_score < 67;
+        has_credible_available_signer_evidence && target_coverage_score < 95;
     const int target_coverage_recovery_score =
         has_public_available_signer_evidence
             ? (target_coverage_score >= 95
@@ -1047,39 +1084,22 @@ ReputationCandidate ComputeReputationCandidate(
                                              100,
                                          28))))
             : 100;
-    if (has_public_available_signer_evidence && !had_broader_public_choice &&
-        !narrow_public_target) {
-      raw_diversity_score = 100;
+    int raw_diversity_score = diversity_score;
+    if (has_credible_available_signer_evidence && had_broader_public_choice) {
+      const int weighted_jaccard_variation_score =
+          has_repeated_leader_signer_group ? variation_score : 100;
+      raw_diversity_score = LeaderSignerDiversityGateScore(
+          diversity_score, frequency_balance_score,
+          weighted_jaccard_variation_score);
     } else if (narrow_public_target) {
       raw_diversity_score = target_coverage_recovery_score;
-    } else if (repeated_narrow_choice || unbalanced_public_frequency) {
-      const int public_choice_gap =
-          has_public_available_signer_evidence
-              ? std::max(0,
-                         std::max(available_signer_coverage_score -
-                                      signer_coverage_score,
-                                  average_available_signer_set_coverage_score -
-                                      average_signer_set_coverage_score))
-              : 0;
-      const int public_choice_score =
-          has_public_available_signer_evidence
-              ? std::max(0, 100 - public_choice_gap * 2)
-              : 100;
-      const int concentration_score = std::min(
-          std::min(diversity_score, public_choice_score),
-          std::min(std::min(signer_coverage_score,
-                            average_signer_set_coverage_score),
-                   frequency_balance_score));
-      const int movement_score =
-          repeated_narrow_choice
-              ? std::min(variation_score, frequency_balance_score)
-              : frequency_balance_score;
-      raw_diversity_score = std::max(
-          0, std::min(100,
-                      RoundedDivide(concentration_score + movement_score, 2)));
+    } else if (has_public_available_signer_evidence) {
+      raw_diversity_score = 100;
     }
     raw_leader_diversity_scores[idx] = raw_diversity_score;
     public_target_coverage_scores[idx] = target_coverage_score;
+    credible_available_signer_evidence[idx] =
+        has_credible_available_signer_evidence;
     if (validator.leader_opportunity_count >= config.min_leader_opportunities &&
         diversity_count[idx] > 0) {
       diversity_baseline_samples.push_back(raw_diversity_score);
@@ -1229,17 +1249,12 @@ ReputationCandidate ComputeReputationCandidate(
     const bool low_diversity_outlier =
         raw_leader_diversity_score + kLeaderDiversityOutlierDeadband <
         leader_diversity_baseline_score;
-    const bool has_public_available_signer_evidence =
+    const bool has_credible_available_signer_evidence =
         idx >= 0 &&
-        idx < static_cast<int>(available_signer_evidence_count.size()) &&
-        available_signer_evidence_count[idx] > 0;
-    const bool has_narrow_public_target =
-        idx >= 0 && idx < static_cast<int>(public_target_coverage_scores.size()) &&
-        public_target_coverage_scores[idx] < 95;
-    if (has_public_available_signer_evidence && has_narrow_public_target) {
-      validator.leader_diversity_score = raw_leader_diversity_score;
-    } else if (has_public_available_signer_evidence &&
-               diversity_baseline_samples.size() > 1) {
+        idx < static_cast<int>(credible_available_signer_evidence.size()) &&
+        credible_available_signer_evidence[idx];
+    if (has_credible_available_signer_evidence &&
+        diversity_baseline_samples.size() > 1) {
       validator.leader_diversity_score =
           low_diversity_outlier && leader_diversity_baseline_score > 0
               ? std::max(0, std::min(100,
@@ -1252,8 +1267,32 @@ ReputationCandidate ComputeReputationCandidate(
     }
 
     const uint64_t leader_opportunities = validator.leader_opportunity_count;
-    validator.leader_score = LeaderCertifiedScore(
+    const int certified_leader_score = LeaderCertifiedScore(
         validator.leader_certified_count, leader_opportunities);
+    const bool has_enough_leader_opportunities =
+        leader_opportunities >= config.min_leader_opportunities;
+    const bool has_repeated_uncertified_leader_opportunities =
+        leader_opportunities >= kMinNoCertifiedLeaderOpportunities &&
+        validator.leader_certified_count == 0 && certified_leader_score < 50;
+    const bool has_leader_recovery_evidence =
+        config.leader_recovery_enabled &&
+        (has_enough_leader_opportunities ||
+         has_repeated_uncertified_leader_opportunities);
+    validator.leader_score =
+        has_leader_recovery_evidence ? certified_leader_score : 100;
+    const bool low_leader_diversity_gate =
+        config.leader_recovery_enabled && has_credible_available_signer_evidence &&
+        validator.leader_certified_count > 0 &&
+        validator.leader_diversity_score < kLeaderDiversityGateThreshold;
+    if (low_leader_diversity_gate) {
+      const int leader_diversity_soft_cap = static_cast<int>(
+          std::max<int64_t>(config.min_weight,
+                            std::min<int64_t>(
+                                config.leader_diversity_soft_min_weight,
+                                config.max_weight)));
+      validator.leader_score =
+          std::min(validator.leader_score, leader_diversity_soft_cap);
+    }
     const bool has_credible_peertrust_evidence =
         idx >= 0 &&
         idx < static_cast<int>(peertrust_has_credible_public_choice.size()) &&
@@ -1301,7 +1340,7 @@ ReputationCandidate ComputeReputationCandidate(
                                          peertrust_community_baseline_score)))
               : 100;
       const int relative_leader_diversity_score =
-          has_public_available_signer_evidence &&
+          has_credible_available_signer_evidence &&
                   diversity_baseline_samples.size() > 1
               ? (low_diversity_outlier && leader_diversity_baseline_score > 0
                      ? std::max(0, std::min(100,
@@ -1400,17 +1439,8 @@ ReputationCandidate ComputeReputationCandidate(
     }
 
     int recovery_score = validator.vote_score;
-    const bool has_repeated_uncertified_leader_opportunities =
-        leader_opportunities >= kMinNoCertifiedLeaderOpportunities &&
-        validator.leader_certified_count == 0 && validator.leader_score < 50;
-    if (config.leader_recovery_enabled &&
-        (leader_opportunities >= config.min_leader_opportunities ||
-         has_repeated_uncertified_leader_opportunities)) {
-      recovery_score = std::min(recovery_score, validator.leader_score);
-      if (has_narrow_public_target) {
-        recovery_score =
-            std::min(recovery_score, validator.leader_diversity_score);
-      }
+    if (has_leader_recovery_evidence) {
+      recovery_score = std::min(recovery_score, certified_leader_score);
     }
     if (config.peertrust_enabled &&
         (validator.feedback_count > 0 ||
@@ -1481,7 +1511,7 @@ ReputationCandidate ComputeReputationCandidate(
         validator.current_weight <= config.leader_eligible_min_weight;
     const bool has_good_leader_reentry_evidence =
         leader_opportunities >= config.min_leader_opportunities &&
-        validator.leader_score >= 95;
+        certified_leader_score >= 95;
     const bool leader_reentry_bonus_allowed =
         !at_leader_reentry_boundary || has_good_leader_reentry_evidence;
     const int64_t peertrust_soft_floor = std::max<int64_t>(
@@ -1517,15 +1547,20 @@ ReputationCandidate ComputeReputationCandidate(
         validator.inclusions == 0 &&
         validator.vote_score < kFormulaFullReputationScore;
     const bool low_leader_score =
-        validator.sybil_graph_debt == 0 &&
-        config.leader_recovery_enabled && HasLeaderRecoveryEvidence(validator, config) &&
-        validator.leader_score < kFormulaFullReputationScore;
+        validator.sybil_graph_debt == 0 && has_leader_recovery_evidence &&
+        certified_leader_score < kFormulaFullReputationScore;
     const bool force_score_factor =
         low_peertrust || validator.peertrust_leader_debt > 0 ||
         low_vote_score || low_leader_score;
     MaybeApplyMultiplicativeWeightFormula(
         &validator, config, recovery_score, smoothed_next_weight,
         force_score_factor);
+    if (config.sybil_graph_enabled && validator.sybil_graph_debt > 0 &&
+        validator.graph_degree > 0 &&
+        validator.current_weight > config.min_weight) {
+      validator.next_weight = std::min<int64_t>(
+          validator.next_weight, validator.current_weight - 1);
+    }
     const bool peertrust_floor_applies =
         low_peertrust || validator.peertrust_leader_debt > 0 ||
         previous_peertrust_debt > 0;

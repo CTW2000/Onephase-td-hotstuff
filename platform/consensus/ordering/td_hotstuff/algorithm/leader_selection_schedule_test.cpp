@@ -74,7 +74,7 @@ TEST(LeaderSelectionScheduleTest, AllBelowThresholdFallsBackToPositiveWeights) {
   EXPECT_EQ(3, counts[3]);
 }
 
-TEST(LeaderSelectionScheduleTest, ActivationBoundaryPreservesOldViews) {
+TEST(LeaderSelectionScheduleTest, CertifiedPendingScheduleAffectsLookupAtBoundary) {
   LeaderSelectionSchedule schedule(/*total_replicas=*/3,
                                    std::vector<int64_t>{10, 10, 10},
                                    /*enabled=*/true,
@@ -84,12 +84,12 @@ TEST(LeaderSelectionScheduleTest, ActivationBoundaryPreservesOldViews) {
                                       /*leader_version=*/1,
                                       LeaderRoot(next, 10), next,
                                       /*eligible_min_weight=*/10));
-  EXPECT_EQ(DefaultLeaderForView(5, 3), schedule.LeaderForView(5));
-  EXPECT_EQ(DefaultLeaderForView(6, 3), schedule.LeaderForView(6));
-  EXPECT_TRUE(schedule.ContextHashForView(6).empty());
-  ASSERT_TRUE(schedule.ActivateUpTo(/*current_view=*/6));
-  EXPECT_EQ(1, schedule.LeaderForView(6));
-  EXPECT_TRUE(schedule.ContextHashForView(6).empty());
+  EXPECT_EQ(DefaultLeaderForView(4, 3), schedule.LeaderForView(4));
+  EXPECT_EQ(1, schedule.LeaderForView(5));
+  EXPECT_TRUE(schedule.ContextHashForView(5).empty());
+  ASSERT_TRUE(schedule.ActivateUpTo(/*current_view=*/5));
+  EXPECT_EQ(1, schedule.LeaderForView(5));
+  EXPECT_TRUE(schedule.ContextHashForView(5).empty());
 }
 
 }  // namespace

@@ -41,6 +41,7 @@ struct ReputationConfig {
   uint64_t identity_factor_seed = 0xbf58476d1ce4e5b9ULL;
   uint64_t min_leader_opportunities = 8;
   int64_t leader_eligible_min_weight = 10;
+  int64_t leader_diversity_soft_min_weight = 80;
   bool leader_recovery_enabled = false;
   bool strong_fault_enabled = false;
   bool double_proposal_detection_enabled = false;
@@ -223,6 +224,7 @@ struct ReputationWindowInput {
   std::string old_weight_root_hex;
   uint64_t old_weight_version = 0;
   int activation_view = 0;
+  int leader_epoch_views = 0;
   std::vector<CertifiedSignerEvidence> certified_signer_evidence;
   std::vector<LeaderOutcomeEvidence> leader_outcome_evidence;
   std::vector<uint64_t> scheduled_leader_counts;
@@ -278,6 +280,10 @@ struct ReputationCandidate {
   std::string leader_weight_root_hex;
   int leader_selection_version = 1;
   int64_t leader_eligible_min_weight = 10;
+  int leader_epoch_start_view = 0;
+  int leader_epoch_views = 0;
+  std::vector<int> leader_epoch_leaders;
+  std::string leader_schedule_root_hex;
   std::string metric_root_hex;
   std::string reputation_root_hex;
   std::string strong_fault_root_hex;

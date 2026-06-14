@@ -1021,6 +1021,7 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
   input.activation_view = buffer->end_view +
                           options_.activation_delay_windows *
                               static_cast<int>(options_.window_size_views);
+  input.leader_epoch_views = static_cast<int>(options_.window_size_views);
   input.certified_signer_evidence.reserve(buffer->evidence.size());
   for (const CertifiedSignerEvidenceRecord& record : buffer->evidence) {
     CertifiedSignerEvidence evidence;

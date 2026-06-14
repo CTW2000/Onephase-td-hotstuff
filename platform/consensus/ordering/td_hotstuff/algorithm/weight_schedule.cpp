@@ -35,11 +35,8 @@ const std::vector<int64_t>& WeightSchedule::ActiveWeights() const {
 
 const WeightSchedule::Record& WeightSchedule::RecordForView(int view) const {
   const Record* selected = &records_.front();
-  const size_t last_active =
-      std::min(active_index_, records_.empty() ? size_t{0} : records_.size() - 1);
-  for (size_t i = 0; i <= last_active; ++i) {
-    const Record& record = records_[i];
-    if (record.activation_view < view) {
+  for (const Record& record : records_) {
+    if (record.activation_view <= view) {
       selected = &record;
     } else {
       break;
@@ -141,7 +138,7 @@ bool WeightSchedule::ScheduleUpdate(int activation_view,
 bool WeightSchedule::ActivateUpTo(int current_view) {
   size_t selected = active_index_;
   for (size_t i = active_index_; i < records_.size(); ++i) {
-    if (records_[i].activation_view < current_view) {
+    if (records_[i].activation_view <= current_view) {
       selected = i;
     }
   }

@@ -222,6 +222,9 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.reputation_config.leader_eligible_min_weight = PositiveIntFromEnv(
       "TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT",
       options.reputation_config.leader_eligible_min_weight);
+  options.reputation_config.leader_diversity_soft_min_weight = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_LEADER_DIVERSITY_SOFT_MIN_WEIGHT",
+      options.reputation_config.leader_diversity_soft_min_weight);
   options.reputation_config.min_leader_opportunities = PositiveIntFromEnv(
       "TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES",
       options.reputation_config.min_leader_opportunities);

@@ -80,6 +80,13 @@ Proposal ProposalWithQc(const QC& qc, TestProposalManager* manager) {
   return proposal;
 }
 
+WeightUpdateCert WeightUpdateCertForDigest(const std::string& digest) {
+  WeightUpdateCert cert;
+  cert.mutable_candidate()->set_candidate_digest(digest);
+  cert.mutable_candidate()->set_activation_view(8);
+  return cert;
+}
+
 TEST(CertificateVerifierTest, VotePayloadBindsSignerViewSlotAndHash) {
   const Certificate base = VoteFor(/*view=*/7, /*signer=*/2, "hash-a", 0);
   Certificate changed_signer = base;
@@ -116,6 +123,27 @@ TEST(CertificateVerifierTest, ProposalSignaturePayloadBindsSenderAndHash) {
             ProposalSignaturePayload(changed_hash));
   EXPECT_EQ(ProposalSignaturePayload(proposal),
             ProposalSignaturePayload(changed_signature));
+}
+
+TEST(CertificateVerifierTest,
+     GenerateProposalAttachesWeightUpdateCertBeforeHashAndSignature) {
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(_)).WillOnce(Return(SignatureFrom(1)));
+  TestProposalManager manager(/*id=*/1, &verifier);
+  const WeightUpdateCert cert = WeightUpdateCertForDigest("candidate-digest-a");
+
+  std::vector<std::unique_ptr<Transaction>> txns;
+  std::unique_ptr<Proposal> proposal = manager.GenerateProposal(txns, &cert);
+
+  ASSERT_NE(proposal, nullptr);
+  ASSERT_TRUE(proposal->header().has_weight_update_cert());
+  EXPECT_EQ(proposal->header().weight_update_cert().candidate().candidate_digest(),
+            "candidate-digest-a");
+  EXPECT_EQ(proposal->hash(), manager.HashForTesting(*proposal));
+
+  Proposal without_cert = *proposal;
+  without_cert.mutable_header()->clear_weight_update_cert();
+  EXPECT_NE(proposal->hash(), manager.HashForTesting(without_cert));
 }
 
 TEST(CertificateVerifierTest, VerifiesQcWithCanonicalVotePayload) {

@@ -79,6 +79,10 @@ message CandidateWeightUpdate {
   string leader_weight_root = 16;
   int32 leader_selection_version = 17;
   int64 leader_eligible_min_weight = 18;
+  int32 leader_epoch_start_view = 19;
+  int32 leader_epoch_views = 20;
+  repeated int32 leader_epoch_leaders = 21;
+  string leader_schedule_root = 22;
 }
 
 message WeightUpdateVote {
@@ -106,6 +110,7 @@ message Header {
   int32 slot = 6;
   bytes leader_context_hash = 7;
   TimeoutCert timeout_cert = 8;
+  WeightUpdateCert weight_update_cert = 9;
 }
 
 message Proposal {
