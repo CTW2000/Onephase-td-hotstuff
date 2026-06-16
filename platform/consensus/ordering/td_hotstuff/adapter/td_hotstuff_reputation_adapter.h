@@ -95,7 +95,7 @@ struct TdHotstuffReputationAdapterOptions {
   size_t window_size = 4096;
   size_t queue_capacity = 65536;
   size_t min_candidate_events = 1;
-  int activation_delay_windows = 1;
+  int activation_delay_windows = 4;
   bool audit_jsonl_enabled = false;
   std::string audit_jsonl_path;
   std::vector<int64_t> initial_weights;
@@ -183,6 +183,7 @@ class TdHotstuffReputationAdapter {
   bool WantsSignedVoteEvidence() const;
   bool WantsSignedWeightUpdateVoteEvidence() const;
   bool WantsInvalidQcProposalEvidence() const;
+  bool IsPersistentStrongFaultValidator(int validator_id) const;
   uint64_t queued_count() const;
   uint64_t dropped_count() const;
   uint64_t computed_window_count() const;

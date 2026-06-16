@@ -179,7 +179,7 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.min_candidate_events = PositiveSizeFromEnv(
       "TD_HS_REPUTATION_MIN_CANDIDATE_QCS", options.min_candidate_events);
   options.activation_delay_windows = PositiveIntFromEnv(
-      "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY", 1);
+      "TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY", 4);
   options.reputation_config.decay_per_epoch = PositiveIntFromEnv(
       "TD_HS_REPUTATION_DECAY_PER_EPOCH",
       options.reputation_config.decay_per_epoch);
@@ -406,7 +406,8 @@ bool TdHotstuffReputationAdapter::TryRecordSignedVote(
 
 bool TdHotstuffReputationAdapter::TryRecordSignedWeightUpdateVote(
     TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot snapshot) {
-  if (!WantsSignedWeightUpdateVoteEvidence() || runtime_ == nullptr) {
+  if (!WantsSignedWeightUpdateVoteEvidence() || runtime_ == nullptr ||
+      IsPersistentStrongFaultValidator(snapshot.validator_id)) {
     return false;
   }
   if (snapshot.total_replicas <= 0) {
@@ -481,6 +482,12 @@ bool TdHotstuffReputationAdapter::WantsSignedWeightUpdateVoteEvidence() const {
 
 bool TdHotstuffReputationAdapter::WantsInvalidQcProposalEvidence() const {
   return enabled_ && invalid_qc_proposal_evidence_enabled_;
+}
+
+bool TdHotstuffReputationAdapter::IsPersistentStrongFaultValidator(
+    int validator_id) const {
+  return runtime_ != nullptr &&
+         runtime_->IsPersistentStrongFaultValidator(validator_id);
 }
 
 uint64_t TdHotstuffReputationAdapter::queued_count() const {

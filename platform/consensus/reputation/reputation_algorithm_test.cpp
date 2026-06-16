@@ -465,6 +465,43 @@ TEST(ReputationAlgorithmTest,
 }
 
 TEST(ReputationAlgorithmTest,
+     FirstWindowPartialVoteSampleDoesNotDecayMaxWeightValidator) {
+  ReputationConfig config = TestConfig();
+  config.decay_per_epoch = 99;
+  config.max_recovery_per_epoch = 99;
+  config.bonus_per_epoch = 0;
+  config.multiplicative_weight_formula_enabled = false;
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 64; ++view) {
+    std::vector<int> signers;
+    if (view <= 10) {
+      for (int signer = 3; signer <= 15; ++signer) {
+        signers.push_back(signer);
+      }
+      signers.push_back(20);
+    } else {
+      for (int signer = 3; signer <= 16; ++signer) {
+        signers.push_back(signer);
+      }
+    }
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 20) + 1,
+                                   BitmapFromVector(signers, 20)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 100), config,
+      "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[0].inclusions, 0);
+  EXPECT_EQ(candidate.validators[0].next_weight, 1);
+  EXPECT_EQ(candidate.validators[19].inclusions, 10);
+  EXPECT_LT(candidate.validators[19].vote_score, 30);
+  EXPECT_EQ(candidate.validators[19].decay_applied, 0);
+  EXPECT_EQ(candidate.validators[19].next_weight, 100);
+}
+
+TEST(ReputationAlgorithmTest,
      MultiplicativeFormulaUsesStakeIdentityAndReputationFactors) {
   ReputationConfig config = TestConfig();
   config.multiplicative_weight_formula_enabled = true;

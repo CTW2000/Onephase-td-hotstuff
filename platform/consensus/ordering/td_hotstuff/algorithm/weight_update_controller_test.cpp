@@ -158,6 +158,31 @@ TEST(WeightUpdateControllerTest, AllowsNoOpLocalCandidateForExperiment) {
 }
 
 TEST(WeightUpdateControllerTest,
+     AllowsNoOpLocalCandidateOnlyForInitialVersionWhenConfigured) {
+  setenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE", "1", /*overwrite=*/1);
+  setenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY", "1",
+         /*overwrite=*/1);
+  auto schedule = std::make_shared<WeightSchedule>(
+      4, std::vector<int64_t>{1, 1, 1, 1});
+  ASSERT_TRUE(schedule->ScheduleUpdate(
+      /*activation_view=*/8, std::vector<int64_t>{1, 1, 1, 1},
+      schedule->ActiveWeightRoot(), schedule->ActiveWeightVersion()));
+  ASSERT_TRUE(schedule->ActivateUpTo(8));
+  MockSignatureVerifier verifier;
+  WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
+                                    schedule, &verifier);
+  auto candidate = CandidateWithWeights(
+      /*current_weights=*/{1, 1, 1, 1}, /*next_weights=*/{1, 1, 1, 1},
+      /*old_weight_version=*/1, schedule->ActiveWeightRoot(),
+      /*activation_view=*/12);
+
+  EXPECT_FALSE(controller.AddLocalCandidate(candidate));
+  EXPECT_EQ(controller.HandleCandidate(CandidateMessage(candidate)), nullptr);
+  unsetenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE");
+  unsetenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY");
+}
+
+TEST(WeightUpdateControllerTest,
      CertifiesLeaderOnlyLocalCandidateWhenLeaderSelectionChanges) {
   auto schedule = std::make_shared<WeightSchedule>(
       4, std::vector<int64_t>{1, 1, 1, 1});

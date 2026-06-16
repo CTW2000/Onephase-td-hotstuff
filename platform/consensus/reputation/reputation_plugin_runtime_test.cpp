@@ -547,6 +547,42 @@ TEST(ReputationPluginRuntimeTest,
 }
 
 TEST(ReputationPluginRuntimeTest,
+     PersistentWeightUpdateVoteEquivocationSuppressesRepeatEvidenceOnlyCandidates) {
+  ReputationPluginRuntime runtime(WeightUpdateVoteRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/1, /*validator=*/2,
+                               "candidate-a")));
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/1, /*validator=*/2,
+                               "candidate-b")));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+
+  ASSERT_EQ(candidates.size(), 1);
+  ASSERT_EQ(candidates[0].strong_faults.size(), 1);
+  EXPECT_EQ(candidates[0].strong_faults[0].type,
+            StrongFaultType::kWeightUpdateVoteEquivocation);
+  EXPECT_EQ(candidates[0].strong_faults[0].validator_id, 2);
+  EXPECT_EQ(candidates[0].next_weights,
+            (std::vector<int64_t>{100, 1, 100, 100}));
+
+  EXPECT_FALSE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/5, /*validator=*/2,
+                               "candidate-c")));
+  EXPECT_FALSE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/5, /*validator=*/2,
+                               "candidate-d")));
+  runtime.AdvanceWatermark(8);
+  std::this_thread::sleep_for(std::chrono::milliseconds(25));
+  candidates = runtime.TakeCompletedCandidates();
+  runtime.Stop();
+
+  EXPECT_TRUE(candidates.empty());
+}
+
+TEST(ReputationPluginRuntimeTest,
      WeightUpdateVoteEvidenceRejectsUnverifiedArtifacts) {
   ReputationPluginRuntime runtime(WeightUpdateVoteRuntimeOptions());
   runtime.Start();

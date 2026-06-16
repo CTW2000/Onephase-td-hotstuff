@@ -907,6 +907,7 @@ bool HotStuff::MaybeMakeSignedWeightUpdateVoteEvidenceSnapshot(
       verifier_ == nullptr || vote.signer() <= 0 ||
       vote.old_weight_root().empty() || vote.activation_view() <= 0 ||
       vote.candidate_digest().empty() ||
+      reputation_adapter_->IsPersistentStrongFaultValidator(vote.signer()) ||
       !verifier_->VerifyMessage(WeightUpdateVotePayload(vote),
                                 vote.signature())) {
     return false;

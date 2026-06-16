@@ -37,6 +37,79 @@ std::string AuditWeightsJson(const std::vector<int64_t>& values) {
   return out.str();
 }
 
+std::string AuditJsonString(const std::string& value) {
+  std::ostringstream out;
+  out << '"';
+  for (char c : value) {
+    switch (c) {
+      case '"':
+        out << "\\\"";
+        break;
+      case '\\':
+        out << "\\\\";
+        break;
+      case '\n':
+        out << "\\n";
+        break;
+      case '\r':
+        out << "\\r";
+        break;
+      case '\t':
+        out << "\\t";
+        break;
+      default:
+        out << c;
+        break;
+    }
+  }
+  out << '"';
+  return out.str();
+}
+
+std::string AuditStrongFaultType(StrongFaultType type) {
+  switch (type) {
+    case StrongFaultType::kDoubleProposal:
+      return "double_proposal";
+    case StrongFaultType::kDoubleVote:
+      return "double_vote";
+    case StrongFaultType::kInvalidQcProposal:
+      return "invalid_qc_proposal";
+    case StrongFaultType::kWeightUpdateVoteEquivocation:
+      return "weight_update_vote_equivocation";
+    case StrongFaultType::kTimeoutVoteEquivocation:
+      return "timeout_vote_equivocation";
+    case StrongFaultType::kInvalidTcProposal:
+      return "invalid_tc_proposal";
+    case StrongFaultType::kConflictingQc:
+      return "conflicting_qc";
+    case StrongFaultType::kUnknown:
+    default:
+      return "unknown";
+  }
+}
+
+std::string AuditStrongFaultsJson(
+    const std::vector<StrongFaultRecord>& faults) {
+  std::ostringstream out;
+  out << '[';
+  for (size_t i = 0; i < faults.size(); ++i) {
+    const StrongFaultRecord& fault = faults[i];
+    if (i > 0) {
+      out << ',';
+    }
+    out << "{\"type\":" << AuditJsonString(AuditStrongFaultType(fault.type))
+        << ",\"validator_id\":" << fault.validator_id
+        << ",\"view_or_round\":" << fault.view_or_round
+        << ",\"slot_or_height\":" << fault.slot_or_height
+        << ",\"first_artifact_digest\":"
+        << AuditJsonString(fault.first_artifact_digest)
+        << ",\"second_artifact_digest\":"
+        << AuditJsonString(fault.second_artifact_digest) << '}';
+  }
+  out << ']';
+  return out.str();
+}
+
 constexpr int64_t kMinLeaderWeight = 1;
 constexpr int64_t kMaxLeaderWeight = 100;
 constexpr int kLeaderSelectionVersion = 1;
@@ -408,6 +481,9 @@ bool ReputationPluginRuntime::RecordSignedVoteEvidence(
 
 bool ReputationPluginRuntime::RecordSignedWeightUpdateVoteEvidence(
     SignedWeightUpdateVoteEvidence evidence) {
+  if (IsPersistentStrongFaultValidator(evidence.validator_id)) {
+    return false;
+  }
   RuntimeEvent event;
   event.type = RuntimeEvent::Type::kSignedWeightUpdateVoteEvidence;
   event.signed_weight_update_vote = std::move(evidence);
@@ -487,6 +563,16 @@ std::optional<ReputationCandidate> ReputationPluginRuntime::FindLocalCandidate(
     return std::nullopt;
   }
   return it->second;
+}
+
+bool ReputationPluginRuntime::IsPersistentStrongFaultValidator(
+    int validator_id) const {
+  if (validator_id <= 0) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lk(mutex_);
+  return persistent_strong_fault_validators_.find(validator_id) !=
+         persistent_strong_fault_validators_.end();
 }
 
 void ReputationPluginRuntime::WorkerLoop() {
@@ -836,6 +922,10 @@ void ReputationPluginRuntime::ProcessSignedWeightUpdateVoteEvidence(
   key.weight_version = snapshot.weight_version;
 
   std::lock_guard<std::mutex> lk(mutex_);
+  if (persistent_strong_fault_validators_.find(evidence.validator_id) !=
+      persistent_strong_fault_validators_.end()) {
+    return;
+  }
   WindowBuffer& buffer = windows_[key];
   if (buffer.evidence.empty() && buffer.leader_outcomes.empty() &&
       buffer.signed_proposals.empty() && buffer.signed_votes.empty() &&
@@ -944,6 +1034,27 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
        buffer->signed_proposals.empty() && buffer->signed_votes.empty() &&
        buffer->signed_weight_update_votes.empty() &&
        buffer->invalid_qc_proposals.empty())) {
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lk(mutex_);
+    if (!persistent_strong_fault_validators_.empty() &&
+        !buffer->signed_weight_update_votes.empty()) {
+      buffer->signed_weight_update_votes.erase(
+          std::remove_if(buffer->signed_weight_update_votes.begin(),
+                         buffer->signed_weight_update_votes.end(),
+                         [this](const SignedWeightUpdateVoteEvidence& vote) {
+                           return persistent_strong_fault_validators_.find(
+                                      vote.validator_id) !=
+                                  persistent_strong_fault_validators_.end();
+                         }),
+          buffer->signed_weight_update_votes.end());
+    }
+  }
+  if (buffer->evidence.empty() && buffer->leader_outcomes.empty() &&
+      buffer->signed_proposals.empty() && buffer->signed_votes.empty() &&
+      buffer->signed_weight_update_votes.empty() &&
+      buffer->invalid_qc_proposals.empty()) {
     return;
   }
   const size_t soft_event_count =
@@ -1220,6 +1331,8 @@ void ReputationPluginRuntime::WriteAudit(const ReputationCandidate& candidate) {
   audit_file_ << "\"activation_view\":" << candidate.activation_view << ',';
   audit_file_ << "\"candidate_digest\":\"" << candidate.candidate_digest_hex << "\",";
   audit_file_ << "\"next_weights\":" << AuditWeightsJson(candidate.next_weights) << ',';
+  audit_file_ << "\"strong_faults\":"
+              << AuditStrongFaultsJson(candidate.strong_faults) << ',';
   audit_file_ << "\"validators\":" << AuditValidatorsJson(candidate.validators);
   audit_file_ << "}\n";
   audit_file_.flush();

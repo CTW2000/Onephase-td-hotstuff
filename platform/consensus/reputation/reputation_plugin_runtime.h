@@ -62,7 +62,7 @@ struct ReputationRuntimeOptions {
   size_t window_size_views = 4096;
   size_t queue_capacity = 65536;
   size_t min_candidate_events = 1;
-  int activation_delay_windows = 1;
+  int activation_delay_windows = 4;
   std::vector<int64_t> initial_weights;
   std::string initial_weight_root;
   uint64_t initial_weight_version = 0;
@@ -118,6 +118,7 @@ class ReputationPluginRuntime {
   std::vector<ReputationCandidate> TakeCompletedCandidates();
   std::optional<ReputationCandidate> FindLocalCandidate(
       const ReputationCandidateKey& key) const;
+  bool IsPersistentStrongFaultValidator(int validator_id) const;
 
   bool enabled() const { return options_.enabled; }
   uint64_t queued_count() const { return queued_count_.load(); }

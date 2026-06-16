@@ -139,6 +139,7 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("TD_HS_REPUTATION_SYBIL_GRAPH_DEBT_INCREMENT", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_MIN_CANDIDATE_QCS", shared_env_block)
         self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE", shared_env_block)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_VOTE_BETA_DECAY_PER_MILLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_MULTIPLICATIVE_WEIGHT_ENABLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_STAKE_TAU_PER_MILLE", shared_env_block)
@@ -195,7 +196,11 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         )
         with open(runner) as fp:
             body = fp.read()
-        self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE=1", body)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE_ON_ATTACK=1", body)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY=1", body)
+        self.assertIn('TD_HS_REPUTATION_WINDOW_SIZE="${TD_HS_REPUTATION_WINDOW_SIZE:-256}"', body)
+        self.assertIn('TD_HS_REPUTATION_MIN_CANDIDATE_QCS="${TD_HS_REPUTATION_MIN_CANDIDATE_QCS:-64}"', body)
+        self.assertIn('TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS="${TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS:-256}"', body)
 
     def test_strong_fault_runners_can_enable_all_detectors(self):
         for script in [

@@ -35,6 +35,11 @@ bool AllowNoOpCandidateForExperiment() {
   return EnvFlagEnabled("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE");
 }
 
+bool AllowNoOpCandidateInitialVersionOnlyForExperiment() {
+  return EnvFlagEnabled(
+      "TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY");
+}
+
 std::string BuildBitmap(const std::vector<int>& signers, int total_replicas) {
   std::string bitmap((total_replicas + 7) / 8, '\0');
   for (int signer : signers) {
@@ -480,8 +485,7 @@ bool WeightUpdateController::ValidateCandidateStructure(
           candidate.leader_epoch_views(), leader_epoch_leaders)) {
     return false;
   }
-  if (weights == weight_schedule_->ActiveWeights() &&
-      !AllowNoOpCandidateForExperiment()) {
+  if (weights == weight_schedule_->ActiveWeights()) {
     bool leader_profile_changed = false;
     if (leader_schedule_ != nullptr && leader_schedule_->enabled()) {
       const std::vector<int64_t> active_leader_weights =
@@ -494,7 +498,13 @@ bool WeightUpdateController::ValidateCandidateStructure(
               leader_schedule_->ActiveLeaderWeightRoot();
     }
     if (!leader_profile_changed) {
-      return false;
+      if (!AllowNoOpCandidateForExperiment()) {
+        return false;
+      }
+      if (AllowNoOpCandidateInitialVersionOnlyForExperiment() &&
+          candidate.old_weight_version() != 0) {
+        return false;
+      }
     }
   }
   if (DigestForCandidateParts(candidate, weights, leader_weights,

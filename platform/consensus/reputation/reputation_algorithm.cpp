@@ -686,6 +686,8 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
                           candidate->validators.size());
 
   for (ValidatorReputation& validator : candidate->validators) {
+    const bool had_vote_history =
+        validator.vote_beta_success > 0 || validator.vote_beta_failure > 0;
     UpdateVoteBetaCounters(&validator, config);
     validator.leader_score = LeaderCertifiedScore(
         validator.leader_certified_count, validator.leader_opportunity_count);
@@ -694,11 +696,16 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
         validator.opportunities == 0 &&
         validator.current_weight + kCarryoverDecayWeightGap <
             mean_current_weight;
-    const bool validator_has_enough_decay_evidence =
-        validator.opportunities >= config.min_decay_opportunities ||
-        carryover_decay;
     const bool near_fair_vote =
         HasNearFairInclusion(validator.inclusions, validator.opportunities);
+    const bool first_window_partial_vote_sample =
+        !had_vote_history && validator.current_weight >= config.max_weight &&
+        validator.opportunities >= config.min_decay_opportunities &&
+        validator.inclusions > 0 && !near_fair_vote;
+    const bool validator_has_enough_decay_evidence =
+        (validator.opportunities >= config.min_decay_opportunities ||
+         carryover_decay) &&
+        !first_window_partial_vote_sample;
     const int64_t available_decay =
         std::max<int64_t>(0, validator.current_weight - config.min_weight);
     validator.decay_applied =
@@ -1277,6 +1284,8 @@ ReputationCandidate ComputeReputationCandidate(
   constexpr int kLeaderDiversityOutlierDeadband = 10;
 
   for (ValidatorReputation& validator : candidate.validators) {
+    const bool had_vote_history =
+        validator.vote_beta_success > 0 || validator.vote_beta_failure > 0;
     UpdateVoteBetaCounters(&validator, config);
     const int idx = validator.validator_id - 1;
     const int raw_leader_diversity_score =
@@ -1511,11 +1520,16 @@ ReputationCandidate ComputeReputationCandidate(
         validator.opportunities == 0 &&
         validator.current_weight + kCarryoverDecayWeightGap <
             mean_current_weight;
-    const bool validator_has_enough_decay_evidence =
-        validator.opportunities >= config.min_decay_opportunities ||
-        carryover_decay;
     const bool near_fair_vote =
         HasNearFairInclusion(validator.inclusions, validator.opportunities);
+    const bool first_window_partial_vote_sample =
+        !had_vote_history && validator.current_weight >= config.max_weight &&
+        validator.opportunities >= config.min_decay_opportunities &&
+        validator.inclusions > 0 && !near_fair_vote;
+    const bool validator_has_enough_decay_evidence =
+        (validator.opportunities >= config.min_decay_opportunities ||
+         carryover_decay) &&
+        !first_window_partial_vote_sample;
     const int64_t available_decay =
         std::max<int64_t>(0, validator.current_weight - config.min_weight);
     validator.decay_applied =
