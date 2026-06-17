@@ -113,6 +113,18 @@ std::string AuditStrongFaultsJson(
 constexpr int64_t kMinLeaderWeight = 1;
 constexpr int64_t kMaxLeaderWeight = 100;
 constexpr int kLeaderSelectionVersion = 1;
+constexpr size_t kMaxRetainedCompletedCandidates = 128;
+constexpr size_t kMaxRetainedSnapshotState = 128;
+
+template <typename Map>
+void TrimMapToSize(Map* values, size_t limit) {
+  if (values == nullptr) {
+    return;
+  }
+  while (values->size() > limit) {
+    values->erase(values->begin());
+  }
+}
 
 int RoundRobinLeaderForView(int view, int total_replicas) {
   if (view <= 0 || total_replicas <= 0) {
@@ -538,6 +550,7 @@ void ReputationPluginRuntime::UpdateActiveWeights(
                   active_snapshot_.weight_version}] = active_snapshot_.weights;
   known_snapshots_[{active_snapshot_.weight_root_hex,
                     active_snapshot_.weight_version}] = active_snapshot_;
+  PruneRetainedStateLocked();
 }
 
 std::vector<ReputationCandidate>
@@ -1315,6 +1328,18 @@ void ReputationPluginRuntime::PushCompleted(ReputationCandidate candidate) {
       CandidateComesBefore(candidate, it->second)) {
     completed_by_version_[candidate.old_weight_version] = std::move(candidate);
   }
+  PruneRetainedStateLocked();
+}
+
+void ReputationPluginRuntime::PruneRetainedStateLocked() {
+  TrimMapToSize(&known_weights_, kMaxRetainedSnapshotState);
+  TrimMapToSize(&known_snapshots_, kMaxRetainedSnapshotState);
+  TrimMapToSize(&prior_stake_factors_per_mille_, kMaxRetainedSnapshotState);
+  TrimMapToSize(&prior_identity_factors_per_mille_, kMaxRetainedSnapshotState);
+  TrimMapToSize(&prior_vote_beta_counters_, kMaxRetainedSnapshotState);
+  TrimMapToSize(&prior_peertrust_leader_debt_, kMaxRetainedSnapshotState);
+  TrimMapToSize(&completed_by_version_, kMaxRetainedCompletedCandidates);
+  TrimMapToSize(&completed_index_, kMaxRetainedCompletedCandidates);
 }
 
 void ReputationPluginRuntime::WriteAudit(const ReputationCandidate& candidate) {

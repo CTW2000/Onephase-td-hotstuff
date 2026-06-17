@@ -12,3 +12,4 @@ venv
 sdk_validator/venv
 __pycache__
 scripts/deploy/result_*_log
+node_modules

@@ -20,8 +20,6 @@ namespace td_hotstuff {
 CandidateWeightUpdate ToCandidateWeightUpdate(
     const resdb::consensus::reputation::ReputationCandidate& candidate);
 std::string WeightUpdateVotePayload(const WeightUpdateVote& vote);
-std::unique_ptr<WeightUpdateVote> MakeConflictingWeightUpdateVoteForExperiment(
-    const WeightUpdateVote& vote, int node_id, SignatureVerifier* verifier);
 
 class WeightUpdateController {
  public:
@@ -85,6 +83,7 @@ class WeightUpdateController {
                                 const CandidateWeightUpdate& candidate);
   std::unique_ptr<WeightUpdateCert> MaybeFormCert(VoteBucket* bucket) const;
   bool StageCandidateSchedule(const CandidateWeightUpdate& candidate) const;
+  void PruneStaleStateLocked();
 
   const int node_id_;
   const int total_replicas_;
@@ -99,8 +98,8 @@ class WeightUpdateController {
   std::map<std::string, std::map<int, WeightUpdateVote>> pending_votes_by_digest_;
   std::map<std::string, WeightUpdateCert> pending_certs_;
   std::map<std::string, WeightUpdateCert> recent_certs_;
-  std::set<std::string> accepted_cert_digests_;
-  std::set<std::string> voted_digests_;
+  std::map<std::string, uint64_t> accepted_cert_versions_;
+  std::map<std::string, uint64_t> voted_digests_;
 };
 
 }  // namespace td_hotstuff

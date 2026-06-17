@@ -99,6 +99,18 @@ cc_library(
 )
 
 cc_library(
+    name = "weight_update_experiment",
+    srcs = ["weight_update_experiment.cpp"],
+    hdrs = ["weight_update_experiment.h"],
+    deps = [
+        ":weight_update_controller",
+        "//common/crypto:signature_verifier",
+        "//platform/consensus/ordering/td_hotstuff/proto:proposal_cc_proto",
+        "//platform/consensus/reputation:reputation_algorithm",
+    ],
+)
+
+cc_library(
     name = "td_hotstuff",
     srcs = ["td_hotstuff.cpp"],
     hdrs = ["td_hotstuff.h"],
@@ -109,6 +121,7 @@ cc_library(
         ":timeout_manager",
         ":weight_schedule",
         ":weight_update_controller",
+        ":weight_update_experiment",
         "//common:comm",
         "//platform/consensus/ordering/td_hotstuff/adapter:td_hotstuff_reputation_adapter",
         "//platform/common/queue:lock_free_queue",
@@ -189,6 +202,7 @@ cc_test(
         ":leader_selection_schedule",
         ":weight_schedule",
         ":weight_update_controller",
+        ":weight_update_experiment",
         "//common/crypto:mock_signature_verifier",
         "//common/test:test_main",
         "//platform/consensus/reputation:reputation_algorithm",

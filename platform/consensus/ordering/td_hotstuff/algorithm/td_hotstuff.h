@@ -88,6 +88,8 @@ class HotStuff : public common::ProtocolBase {
       TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot* snapshot) const;
   void MaybeBroadcastConflictingWeightUpdateVoteForExperiment(
       const WeightUpdateVote& vote);
+  void MaybeBroadcastRemoteCandidateWeightUpdateVoteEquivocationForExperiment(
+      const CandidateWeightUpdate& candidate);
   bool MaybeMakeQcEvidenceSnapshotLocked(const QC& qc,
                                           TdHotstuffQcEvidenceSnapshot* snapshot);
   bool MaybeFormQcLocked(int view, const std::string& hash);
@@ -167,6 +169,8 @@ class HotStuff : public common::ProtocolBase {
   std::unique_ptr<WeightUpdateController> weight_update_controller_;
   bool weight_candidate_inflight_ = false;
   uint64_t weight_candidate_inflight_version_ = 0;
+  std::mutex experiment_weight_update_vote_mutex_;
+  std::set<std::string> experiment_weight_update_vote_digests_;
   std::atomic<int> next_pending_weight_activation_view_{0};
   std::unique_ptr<TimeoutManager> timeout_manager_;
   std::set<int> timeout_echoed_views_;

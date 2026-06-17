@@ -10,6 +10,8 @@
 #include "common/crypto/mock_signature_verifier.h"
 #include "platform/consensus/reputation/reputation_roots.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_digest.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_experiment.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/td_hotstuff_digest.h"
 
 namespace resdb {
 namespace td_hotstuff {

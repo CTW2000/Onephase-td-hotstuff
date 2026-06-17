@@ -162,6 +162,7 @@ class ReputationPluginRuntime {
   std::vector<uint64_t> ScheduledLeaderCountsForWindow(
       int start_view, int end_view,
       const ReputationWeightSnapshot& snapshot) const;
+  void PruneRetainedStateLocked();
 
   ReputationRuntimeOptions options_;
 

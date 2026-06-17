@@ -14,6 +14,7 @@
 
 #include "common/utils/utils.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/certificate_verifier.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_experiment.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -939,6 +940,41 @@ void HotStuff::MaybeBroadcastConflictingWeightUpdateVoteForExperiment(
   BroadcastWeightUpdateVote(*conflicting);
 }
 
+void HotStuff::MaybeBroadcastRemoteCandidateWeightUpdateVoteEquivocationForExperiment(
+    const CandidateWeightUpdate& candidate) {
+  if (!IsWeightUpdateVoteEquivocationForExperiment() || verifier_ == nullptr ||
+      candidate.candidate_digest().empty()) {
+    return;
+  }
+  const std::string key =
+      candidate.old_weight_root() + "|" +
+      std::to_string(candidate.old_weight_version()) + "|" +
+      std::to_string(candidate.activation_view()) + "|" +
+      candidate.candidate_digest();
+  {
+    std::lock_guard<std::mutex> lk(
+        experiment_weight_update_vote_mutex_);
+    if (!experiment_weight_update_vote_digests_.insert(key).second) {
+      return;
+    }
+  }
+  std::unique_ptr<WeightUpdateVote> vote =
+      MakeWeightUpdateVoteForCandidateDigestForExperiment(
+          candidate, candidate.candidate_digest(), id_, verifier_);
+  if (vote == nullptr) {
+    LOG(ERROR) << "failed to build TD-Hotstuff remote-candidate "
+                  "weight update vote for WUE";
+    return;
+  }
+  if (WeightUpdateTraceEnabled()) {
+    LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
+               << " remote_candidate_experiment_vote digest="
+               << vote->candidate_digest();
+  }
+  BroadcastWeightUpdateVote(*vote);
+  MaybeBroadcastConflictingWeightUpdateVoteForExperiment(*vote);
+}
+
 bool HotStuff::MaybeMakeInvalidQcProposalEvidenceSnapshotLocked(
     const Proposal& proposal, const ProposalValidationResult& validation,
     TdHotstuffInvalidQcProposalEvidenceSnapshot* snapshot) {
@@ -1475,6 +1511,8 @@ bool HotStuff::ReceiveCandidateWeightUpdate(
                  << " no_local_vote_for_candidate digest="
                  << candidate->candidate_digest();
     }
+    MaybeBroadcastRemoteCandidateWeightUpdateVoteEquivocationForExperiment(
+        *candidate);
     return false;
   }
   if (WeightUpdateTraceEnabled()) {

@@ -19,6 +19,38 @@ namespace {
 constexpr const char* kQuorumRuleId = "old_weight_quorum_v1";
 constexpr int64_t kMinCandidateWeight = 1;
 constexpr int64_t kMaxCandidateWeight = 100;
+constexpr size_t kMaxLocalCandidates = 128;
+constexpr size_t kMaxCandidatesByDigest = 128;
+constexpr size_t kMaxVoteBuckets = 128;
+constexpr size_t kMaxPendingVoteDigests = 128;
+constexpr size_t kMaxPendingCerts = 64;
+constexpr size_t kMaxRecentCerts = 64;
+constexpr size_t kMaxAcceptedCerts = 128;
+constexpr size_t kMaxVotedDigests = 128;
+
+template <typename Map, typename Predicate>
+void EraseIf(Map* values, Predicate predicate) {
+  if (values == nullptr) {
+    return;
+  }
+  for (auto it = values->begin(); it != values->end();) {
+    if (predicate(*it)) {
+      it = values->erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+template <typename Map>
+void TrimMapToSize(Map* values, size_t limit) {
+  if (values == nullptr) {
+    return;
+  }
+  while (values->size() > limit) {
+    values->erase(values->begin());
+  }
+}
 
 bool EnvFlagEnabled(const char* name) {
   const char* raw = std::getenv(name);
@@ -88,6 +120,44 @@ std::string DigestForCandidateParts(
 
 }  // namespace
 
+void WeightUpdateController::PruneStaleStateLocked() {
+  if (weight_schedule_ == nullptr) {
+    return;
+  }
+  const uint64_t active_version = weight_schedule_->ActiveWeightVersion();
+  EraseIf(&local_candidates_, [active_version](const auto& entry) {
+    return entry.first.old_weight_version < active_version;
+  });
+  EraseIf(&candidates_by_digest_, [active_version](const auto& entry) {
+    return entry.second.old_weight_version() < active_version;
+  });
+  EraseIf(&vote_buckets_, [active_version](const auto& entry) {
+    const CandidateWeightUpdate& candidate = entry.second.candidate;
+    return !candidate.candidate_digest().empty() &&
+           candidate.old_weight_version() < active_version;
+  });
+  EraseIf(&pending_certs_, [active_version](const auto& entry) {
+    return entry.second.candidate().old_weight_version() < active_version;
+  });
+  EraseIf(&recent_certs_, [active_version](const auto& entry) {
+    return entry.second.candidate().old_weight_version() + 1 < active_version;
+  });
+  EraseIf(&accepted_cert_versions_, [active_version](const auto& entry) {
+    return entry.second + 1 < active_version;
+  });
+  EraseIf(&voted_digests_, [active_version](const auto& entry) {
+    return entry.second < active_version;
+  });
+  TrimMapToSize(&local_candidates_, kMaxLocalCandidates);
+  TrimMapToSize(&candidates_by_digest_, kMaxCandidatesByDigest);
+  TrimMapToSize(&vote_buckets_, kMaxVoteBuckets);
+  TrimMapToSize(&pending_votes_by_digest_, kMaxPendingVoteDigests);
+  TrimMapToSize(&pending_certs_, kMaxPendingCerts);
+  TrimMapToSize(&recent_certs_, kMaxRecentCerts);
+  TrimMapToSize(&accepted_cert_versions_, kMaxAcceptedCerts);
+  TrimMapToSize(&voted_digests_, kMaxVotedDigests);
+}
+
 std::vector<int> CandidateLeaderEpochLeaders(
     const CandidateWeightUpdate& candidate);
 
@@ -137,32 +207,6 @@ std::string WeightUpdateVotePayload(const WeightUpdateVote& vote) {
   return out.str();
 }
 
-std::unique_ptr<WeightUpdateVote> MakeConflictingWeightUpdateVoteForExperiment(
-    const WeightUpdateVote& vote, int node_id, SignatureVerifier* verifier) {
-  if (verifier == nullptr || vote.candidate_digest().empty()) {
-    return nullptr;
-  }
-  std::unique_ptr<WeightUpdateVote> conflicting =
-      std::make_unique<WeightUpdateVote>(vote);
-  const std::string material =
-      vote.candidate_digest() + "|td_hotstuff_weight_update_vote_equivocation|" +
-      std::to_string(node_id) + "|" + std::to_string(vote.old_weight_version()) +
-      "|" + std::to_string(vote.activation_view());
-  std::string digest =
-      resdb::consensus::reputation::HashHex(material);
-  if (digest == vote.candidate_digest()) {
-    digest = resdb::consensus::reputation::HashHex(material + "|retry");
-  }
-  conflicting->set_candidate_digest(digest);
-  conflicting->clear_signature();
-  auto signature_or = verifier->SignMessage(WeightUpdateVotePayload(*conflicting));
-  if (!signature_or.ok()) {
-    return nullptr;
-  }
-  *conflicting->mutable_signature() = *signature_or;
-  return conflicting;
-}
-
 WeightUpdateController::WeightUpdateController(
     int node_id, int total_replicas,
     std::shared_ptr<WeightSchedule> weight_schedule, SignatureVerifier* verifier,
@@ -192,6 +236,7 @@ bool WeightUpdateController::AddLocalCandidateAndMaybeCert(
     const resdb::consensus::reputation::ReputationCandidate& candidate,
     std::unique_ptr<WeightUpdateCert>* cert) {
   std::lock_guard<std::mutex> lk(mutex_);
+  PruneStaleStateLocked();
   CandidateWeightUpdate message = ToCandidateWeightUpdate(candidate);
   if (!ValidateCandidateStructure(message)) {
     LOG(WARNING) << "local reputation candidate failed structure guard";
@@ -218,6 +263,7 @@ bool WeightUpdateController::ObserveCandidate(
     const CandidateWeightUpdate& candidate,
     std::unique_ptr<WeightUpdateCert>* cert) {
   std::lock_guard<std::mutex> lk(mutex_);
+  PruneStaleStateLocked();
   if (!ValidateCandidateStructure(candidate)) {
     return false;
   }
@@ -239,6 +285,7 @@ bool WeightUpdateController::ObserveCandidate(
 std::unique_ptr<WeightUpdateVote> WeightUpdateController::HandleCandidate(
     const CandidateWeightUpdate& candidate) {
   std::lock_guard<std::mutex> lk(mutex_);
+  PruneStaleStateLocked();
   if (verifier_ == nullptr || !ValidateCandidateStructure(candidate)) {
     return nullptr;
   }
@@ -264,13 +311,15 @@ std::unique_ptr<WeightUpdateVote> WeightUpdateController::HandleCandidate(
     return nullptr;
   }
   *vote->mutable_signature() = *signature_or;
-  voted_digests_.insert(candidate.candidate_digest());
+  voted_digests_[candidate.candidate_digest()] =
+      candidate.old_weight_version();
   return vote;
 }
 
 std::unique_ptr<WeightUpdateCert> WeightUpdateController::HandleVote(
     const WeightUpdateVote& vote) {
   std::lock_guard<std::mutex> lk(mutex_);
+  PruneStaleStateLocked();
   auto candidate_it = candidates_by_digest_.find(vote.candidate_digest());
   if (candidate_it == candidates_by_digest_.end()) {
     if (vote.signer() >= 1 && vote.signer() <= total_replicas_ &&
@@ -292,11 +341,12 @@ std::unique_ptr<WeightUpdateCert> WeightUpdateController::HandleVote(
 
 bool WeightUpdateController::HandleCert(const WeightUpdateCert& cert) {
   std::lock_guard<std::mutex> lk(mutex_);
+  PruneStaleStateLocked();
   if (!ValidateCandidateStructure(cert.candidate())) {
     return false;
   }
   const std::string& digest = cert.candidate().candidate_digest();
-  if (accepted_cert_digests_.find(digest) != accepted_cert_digests_.end()) {
+  if (accepted_cert_versions_.find(digest) != accepted_cert_versions_.end()) {
     return false;
   }
   std::map<int, WeightUpdateVote> votes;
@@ -321,7 +371,7 @@ bool WeightUpdateController::HandleCert(const WeightUpdateCert& cert) {
   if (!StageCandidateSchedule(cert.candidate())) {
     return false;
   }
-  accepted_cert_digests_.insert(digest);
+  accepted_cert_versions_[digest] = cert.candidate().old_weight_version();
   pending_certs_[digest] = cert;
   recent_certs_[digest] = cert;
   candidates_by_digest_[digest] = cert.candidate();
@@ -357,6 +407,7 @@ std::unique_ptr<WeightUpdateCert> WeightUpdateController::LatestCertForProposal(
 
 bool WeightUpdateController::ActivateReady(int current_view) {
   std::lock_guard<std::mutex> lk(mutex_);
+  PruneStaleStateLocked();
   bool activated = false;
   for (auto it = pending_certs_.begin(); it != pending_certs_.end();) {
     const CandidateWeightUpdate& candidate = it->second.candidate();

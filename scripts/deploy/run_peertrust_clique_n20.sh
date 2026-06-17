@@ -13,6 +13,7 @@ cd "$DEPLOY_DIR"
 
 . ./script/env.sh
 . ./td_hotstuff_stable_env.sh
+. ./lib/benchmark_common.sh
 
 RESULT_DIR="${PEERTRUST_RESULT_DIR:-$DEPLOY_DIR/experiment_results/peertrust_clique_n20}"
 mkdir -p "$RESULT_DIR"
@@ -62,25 +63,33 @@ cleanup_all() {
 }
 
 collect_logs() {
-  rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
-  for ip in $SERVERS; do
-    for node_id in $(ssh -o StrictHostKeyChecking=no hyperchain@$ip "ls ~/resilientdb_app/ 2>/dev/null | grep -E '^[0-9]+$'" 2>/dev/null); do
-      scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/kv_server_performance.log result_${node_id}_log 2>/dev/null &
-      scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/'td_hotstuff_reputation_node_'*.jsonl result_${node_id}_reputation.jsonl 2>/dev/null || true &
-      scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/'td_hotstuff_qc_evidence_node_'*.jsonl result_${node_id}_qc_evidence.jsonl 2>/dev/null || true &
-    done
-  done
-  for d in "$DEPLOY_DIR"/resilientdb_app/*/; do
-    [ -d "$d" ] || continue
-    local node_id
-    node_id=$(basename "$d")
-    if [ -f "$d/kv_server_performance.log" ]; then
-      cp "$d/kv_server_performance.log" result_${node_id}_log 2>/dev/null &
-      cp "$d"/td_hotstuff_reputation_node_*.jsonl result_${node_id}_reputation.jsonl 2>/dev/null || true &
-      cp "$d"/td_hotstuff_qc_evidence_node_*.jsonl result_${node_id}_qc_evidence.jsonl 2>/dev/null || true &
-    fi
-  done
-  wait
+  td_hs_collect_logs "$DEPLOY_DIR" "$SERVERS"
+}
+
+client_load_started() {
+  td_hs_client_load_started "$DEPLOY_DIR/resilientdb_app" "$((N + 1))"
+}
+
+start_benchmark_clients() {
+  td_hs_start_benchmark_clients \
+    "$PWD/config_out" \
+    "${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools" \
+    -u TD_HS_SILENT_LEADER_IDS \
+    -u TD_HS_PEERTRUST_CLIQUE_IDS \
+    -u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS \
+    -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS \
+    -u TD_HS_DOUBLE_PROPOSAL_IDS \
+    -u TD_HS_DOUBLE_VOTE_IDS \
+    -u TD_HS_INVALID_QC_IDS \
+    -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
+    -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS \
+    -u TD_HS_INVALID_TC_PROPOSAL_IDS \
+    -u TD_HS_BAD_NODE_IDS \
+    -u TD_HS_BAD_NODE_COUNT
+}
+
+result_has_valid_throughput() {
+  td_hs_result_has_valid_throughput "$1"
 }
 
 derive_clique_reviewer_ids() {
@@ -208,21 +217,16 @@ generate_performance_server_conf($N)
   bash ./script/deploy_multi.sh "./config/performance.conf" 2>&1 | grep -E "(=== |Phase|deployed|started|ready|running)"
 
   echo "  Running benchmark client..."
-  for((i=1;;i++)); do
-    cf=$PWD/config_out/client${i}.config
-    if [ ! -f "$cf" ]; then break; fi
-    env -u TD_HS_SILENT_LEADER_IDS \
-        -u TD_HS_PEERTRUST_CLIQUE_IDS \
-        -u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS \
-        -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS \
-        -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS \
-        -u TD_HS_INVALID_QC_IDS \
-        -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
-        -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS \
-        -u TD_HS_INVALID_TC_PROPOSAL_IDS \
-        -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT \
-        ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
-  done
+  if ! start_benchmark_clients; then
+    echo "  >> Benchmark client failed to enter sustained load."
+    kill_nodes
+    collect_logs
+    local fail_dir="$RESULT_DIR/logs_TD-Hotstuff_peertrust_${mode}_clique${num_bad}_benchmark_start_failed"
+    rm -rf "$fail_dir"
+    mkdir -p "$fail_dir"
+    cp result_* "$fail_dir"/ 2>/dev/null || true
+    return 1
+  fi
 
   echo "  Sleeping ${SLEEP_TIME}s..."
   sleep "$SLEEP_TIME"
@@ -240,18 +244,25 @@ generate_performance_server_conf($N)
     tps=$(grep "^[0-9]" "$result_file" | head -1)
     lat=$(grep "^[0-9]" "$result_file" | tail -1)
     echo "  >> Throughput: $tps txn/s | Latency: $lat s"
+    if ! result_has_valid_throughput "$result_file"; then
+      echo "  >> Invalid throughput result; stopping instead of accepting an unhealthy row."
+      local invalid_dir="$RESULT_DIR/logs_TD-Hotstuff_peertrust_${mode}_clique${num_bad}_invalid"
+      rm -rf "$invalid_dir"
+      mkdir -p "$invalid_dir"
+      cp result_* "$invalid_dir"/ 2>/dev/null || true
+      return 1
+    fi
     local keep_dir="$RESULT_DIR/logs_TD-Hotstuff_peertrust_${mode}_clique${num_bad}"
     rm -rf "$keep_dir"
     mkdir -p "$keep_dir"
-    cp result_*_log "$keep_dir"/ 2>/dev/null || true
-    cp result_*_reputation.jsonl "$keep_dir"/ 2>/dev/null || true
-    cp result_*_qc_evidence.jsonl "$keep_dir"/ 2>/dev/null || true
-    echo "  >> Logs preserved in: $keep_dir"
-    rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
+    td_hs_copy_success_artifacts "$keep_dir"
+    echo "  >> Compact logs preserved in: $keep_dir"
+    td_hs_remove_result_artifacts
   else
     echo "  >> NO LOG FILES COLLECTED"
     echo "0" > "$result_file"
     echo "0" >> "$result_file"
+    return 1
   fi
 
   unset TD_HS_PEERTRUST_CLIQUE_IDS
@@ -267,7 +278,7 @@ bazel build //benchmark/protocols/td_hotstuff:kv_server_performance \
 
 for mode in "${PEERTRUST_MODES[@]}"; do
   for num_bad in "${PEERTRUST_CLIQUE_COUNTS[@]}"; do
-    run_single_experiment "$mode" "$num_bad"
+    run_single_experiment "$mode" "$num_bad" || exit 1
   done
 done
 
