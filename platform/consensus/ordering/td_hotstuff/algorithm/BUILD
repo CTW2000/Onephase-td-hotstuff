@@ -111,17 +111,33 @@ cc_library(
 )
 
 cc_library(
+    name = "certified_weight_update_pipeline",
+    srcs = ["certified_weight_update_pipeline.cpp"],
+    hdrs = ["certified_weight_update_pipeline.h"],
+    deps = [
+        ":leader_selection_schedule",
+        ":weight_schedule",
+        ":weight_update_controller",
+        ":weight_update_experiment",
+        "//common:glog",
+        "//common/crypto:signature_verifier",
+        "//platform/consensus/ordering/td_hotstuff/adapter:td_hotstuff_reputation_adapter",
+        "//platform/consensus/ordering/td_hotstuff/proto:proposal_cc_proto",
+        "//platform/consensus/reputation:reputation_algorithm",
+    ],
+)
+
+cc_library(
     name = "td_hotstuff",
     srcs = ["td_hotstuff.cpp"],
     hdrs = ["td_hotstuff.h"],
     deps = [
         ":async_consensus_verifier",
+        ":certified_weight_update_pipeline",
         ":leader_selection_schedule",
         ":proposal_manager",
         ":timeout_manager",
         ":weight_schedule",
-        ":weight_update_controller",
-        ":weight_update_experiment",
         "//common:comm",
         "//platform/consensus/ordering/td_hotstuff/adapter:td_hotstuff_reputation_adapter",
         "//platform/common/queue:lock_free_queue",
@@ -203,6 +219,20 @@ cc_test(
         ":weight_schedule",
         ":weight_update_controller",
         ":weight_update_experiment",
+        "//common/crypto:mock_signature_verifier",
+        "//common/test:test_main",
+        "//platform/consensus/reputation:reputation_algorithm",
+    ],
+)
+
+cc_test(
+    name = "certified_weight_update_pipeline_test",
+    srcs = ["certified_weight_update_pipeline_test.cpp"],
+    deps = [
+        ":certified_weight_update_pipeline",
+        ":leader_selection_schedule",
+        ":td_hotstuff_digest",
+        ":weight_schedule",
         "//common/crypto:mock_signature_verifier",
         "//common/test:test_main",
         "//platform/consensus/reputation:reputation_algorithm",

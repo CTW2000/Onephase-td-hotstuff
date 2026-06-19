@@ -78,6 +78,25 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertEqual(values["TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE"], "950")
         self.assertEqual(values["TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE"], "1050")
 
+    def test_stable_env_preserves_explicit_detector_overrides(self):
+        values = source_helper(
+            {
+                "TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE": "1",
+                "TD_HS_DOUBLE_VOTE_DETECT_ENABLE": "0",
+                "TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE": "1",
+                "TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE": "0",
+                "TD_HS_CONFLICTING_QC_DETECT_ENABLE": "1",
+            }
+        )
+
+        self.assertEqual(values["TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_DOUBLE_VOTE_DETECT_ENABLE"], "0")
+        self.assertEqual(values["TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE"], "1")
+        self.assertEqual(
+            values["TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE"], "0"
+        )
+        self.assertEqual(values["TD_HS_CONFLICTING_QC_DETECT_ENABLE"], "1")
+
     def test_silent_leader_ids_are_not_shared_with_all_replicas_or_clients(self):
         deploy_multi = os.path.join(REPO_ROOT, "scripts", "deploy", "script", "deploy_multi.sh")
         with open(deploy_multi) as fp:
@@ -97,8 +116,6 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertNotIn("TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS", shared_env_block)
         self.assertNotIn("TD_HS_INVALID_QC_IDS", shared_env_block)
         self.assertNotIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", shared_env_block)
-        self.assertNotIn("TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", shared_env_block)
-        self.assertNotIn("TD_HS_INVALID_TC_PROPOSAL_IDS", shared_env_block)
         self.assertIn("-u TD_HS_SILENT_LEADER_IDS", body)
         self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_IDS", body)
         self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", body)
@@ -113,8 +130,6 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("-u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS", body)
         self.assertIn("-u TD_HS_INVALID_QC_IDS", body)
         self.assertIn("-u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", body)
-        self.assertIn("-u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", body)
-        self.assertIn("-u TD_HS_INVALID_TC_PROPOSAL_IDS", body)
         self.assertIn("-u TD_HS_BAD_NODE_IDS", body)
         self.assertIn("-u TD_HS_BAD_NODE_COUNT", body)
         self.assertIn("TD_HS_SILENT_LEADER=1", body)
@@ -131,8 +146,8 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS=", body)
         self.assertIn("TD_HS_INVALID_QC=1", body)
         self.assertIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION=1", body)
-        self.assertIn("TD_HS_TIMEOUT_VOTE_EQUIVOCATION=1", body)
-        self.assertIn("TD_HS_INVALID_TC_PROPOSAL=1", body)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_TRIGGER_FILE=", body)
+        self.assertIn("td_hs_wue_trigger", body)
         self.assertIn("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_SYBIL_GRAPH_ENABLE", shared_env_block)
@@ -140,6 +155,9 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("TD_HS_REPUTATION_MIN_CANDIDATE_QCS", shared_env_block)
         self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE", shared_env_block)
         self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY", shared_env_block)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_MIN_START_VIEW", shared_env_block)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_START_VIEW", shared_env_block)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_ON_CANDIDATE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_VOTE_BETA_DECAY_PER_MILLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_MULTIPLICATIVE_WEIGHT_ENABLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_STAKE_TAU_PER_MILLE", shared_env_block)
@@ -157,8 +175,6 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("is_low_diversity_qc_node", body)
         self.assertIn("is_invalid_qc_node", body)
         self.assertIn("is_weight_update_vote_equivocation_node", body)
-        self.assertIn("is_timeout_vote_equivocation_node", body)
-        self.assertIn("is_invalid_tc_proposal_node", body)
 
         for script in [
             "run_slow_leader_n20.sh",
@@ -168,8 +184,6 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
             "run_invalid_qc_n20.sh",
             "run_low_diversity_n20.sh",
             "run_weight_update_vote_equivocation_n20.sh",
-            "run_timeout_vote_equivocation_n20.sh",
-            "run_invalid_tc_n20.sh",
         ]:
             with self.subTest(script=script):
                 with open(os.path.join(REPO_ROOT, "scripts", "deploy", script)) as fp:
@@ -183,8 +197,6 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
                 self.assertIn("-u TD_HS_LOW_DIVERSITY_REVIEWER_IDS", script_body)
                 self.assertIn("-u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS", script_body)
                 self.assertIn("-u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", script_body)
-                self.assertIn("-u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS", script_body)
-                self.assertIn("-u TD_HS_INVALID_TC_PROPOSAL_IDS", script_body)
 
 
     def test_weight_update_equivocation_runner_creates_vote_artifacts(self):
@@ -196,11 +208,100 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         )
         with open(runner) as fp:
             body = fp.read()
-        self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE_ON_ATTACK=1", body)
-        self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY=1", body)
-        self.assertIn('TD_HS_REPUTATION_WINDOW_SIZE="${TD_HS_REPUTATION_WINDOW_SIZE:-256}"', body)
-        self.assertIn('TD_HS_REPUTATION_MIN_CANDIDATE_QCS="${TD_HS_REPUTATION_MIN_CANDIDATE_QCS:-64}"', body)
+        self.assertNotIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE=1", body)
+        self.assertNotIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE_ON_ATTACK=1", body)
+        self.assertNotIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_ON_CANDIDATE=1", body)
+        self.assertIn('TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_START_VIEW="${TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_START_VIEW:-1024}"', body)
+        self.assertIn(
+            'TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS="${WEIGHT_UPDATE_VOTE_EQUIVOCATION_TIMEOUT_EMPTY_PROPOSAL_VIEWS:-512}"',
+            body,
+        )
+        self.assertNotIn(
+            'TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS="${TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS:-512}"',
+            body,
+        )
+        self.assertIn('TD_HS_REPUTATION_WINDOW_SIZE="${TD_HS_REPUTATION_WINDOW_SIZE:-1024}"', body)
+        self.assertIn('TD_HS_REPUTATION_MIN_CANDIDATE_QCS="${TD_HS_REPUTATION_MIN_CANDIDATE_QCS:-256}"', body)
         self.assertIn('TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS="${TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS:-256}"', body)
+
+    def test_wue_trigger_is_armed_after_benchmark_start_gate(self):
+        runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_strong_fault_v2_n20.sh")
+        with open(runner) as fp:
+            body = fp.read()
+
+        arm_idx = body.index('arm_weight_update_vote_equivocation_nodes "$bad_node_ids"')
+        start_idx = body.index("if ! start_benchmark_clients; then")
+        self.assertGreater(arm_idx, start_idx)
+
+    def test_double_vote_runner_uses_dedicated_empty_proposal_override(self):
+        runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_double_vote_n20.sh")
+        with open(runner) as fp:
+            body = fp.read()
+        self.assertIn(
+            'TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS="${DOUBLE_VOTE_TIMEOUT_EMPTY_PROPOSAL_VIEWS:-512}"',
+            body,
+        )
+        self.assertNotIn(
+            'TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS="${TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS:-512}"',
+            body,
+        )
+
+    def test_strong_fault_runner_enables_benchmark_retry(self):
+        runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_strong_fault_v2_n20.sh")
+        with open(runner) as fp:
+            body = fp.read()
+        self.assertIn(
+            'TD_HS_BENCHMARK_RETRY_ENABLE="${TD_HS_BENCHMARK_RETRY_ENABLE:-1}"',
+            body,
+        )
+        self.assertIn('TD_HS_BENCHMARK_REQUEST_TIMEOUT_MS="${TD_HS_BENCHMARK_REQUEST_TIMEOUT_MS:-100}"', body)
+        self.assertIn('local max_attempts="${BENCHMARK_START_ATTEMPTS:-3}"', body)
+
+    def test_strong_fault_runner_treats_start_gate_as_advisory_by_default(self):
+        runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_strong_fault_v2_n20.sh")
+        with open(runner) as fp:
+            body = fp.read()
+        self.assertIn('BENCHMARK_REQUIRE_START_GATE:-0', body)
+        self.assertIn('Continuing; final result parser will reject unhealthy throughput.', body)
+        self.assertIn('Retrying full cell deployment after benchmark-start failure.', body)
+
+    def test_strong_fault_runner_preserves_empty_proposal_override(self):
+        runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_strong_fault_v2_n20.sh")
+        with open(runner) as fp:
+            body = fp.read()
+        self.assertIn(
+            'TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS="${TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS:-20}"',
+            body,
+        )
+        self.assertNotIn("export TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS=20", body)
+
+    def test_strong_fault_runner_supports_bad_node_id_override(self):
+        runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_strong_fault_v2_n20.sh")
+        with open(runner) as fp:
+            body = fp.read()
+        self.assertIn("STRONG_FAULT_BAD_NODE_IDS_OVERRIDE", body)
+        self.assertIn('printf \'%s\' "${STRONG_FAULT_BAD_NODE_IDS_OVERRIDE}"', body)
+        self.assertIn("arm_weight_update_vote_equivocation_nodes", body)
+        self.assertIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS", body)
+        self.assertIn("td_hs_wue_trigger", body)
+
+    def test_strong_fault_runners_use_fast_activation_by_default(self):
+        expected_defaults = {
+            "run_double_proposal_n20.sh": "1",
+            "run_double_vote_n20.sh": "4",
+            "run_invalid_qc_n20.sh": "1",
+            "run_strong_fault_v2_n20.sh": "4",
+        }
+        for script, expected_delay in expected_defaults.items():
+            with self.subTest(script=script):
+                with open(os.path.join(REPO_ROOT, "scripts", "deploy", script)) as fp:
+                    body = fp.read()
+                self.assertIn(
+                    'TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY="${TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY:-'
+                    + expected_delay
+                    + '}"',
+                    body,
+                )
 
     def test_strong_fault_runners_can_enable_all_detectors(self):
         for script in [

@@ -21,12 +21,6 @@ std::vector<StrongFaultRecord> DetectWeightUpdateVoteEquivocationFaults(
     const std::vector<SignedWeightUpdateVoteEvidence>&
         signed_weight_update_vote_evidence);
 
-std::vector<StrongFaultRecord> DetectTimeoutVoteEquivocationFaults(
-    const std::vector<SignedTimeoutVoteEvidence>& signed_timeout_vote_evidence);
-
-std::vector<StrongFaultRecord> DetectInvalidTcProposalFaults(
-    const std::vector<InvalidTcProposalEvidence>& invalid_tc_proposal_evidence);
-
 std::vector<StrongFaultRecord> DetectConflictingQcFaults(
     const std::vector<VerifiedQcArtifactEvidence>& verified_qc_artifact_evidence,
     int total_replicas);

@@ -125,10 +125,8 @@ ReputationCandidate ComputeCandidate(
         {},
     const std::vector<SignedWeightUpdateVoteEvidence>&
         signed_weight_update_vote_evidence = {},
-    const std::vector<SignedTimeoutVoteEvidence>& signed_timeout_vote_evidence =
-        {},
-    const std::vector<InvalidTcProposalEvidence>& invalid_tc_proposal_evidence =
-        {},
+    const std::vector<int>& removed_strong_fault_evidence_a = {},
+    const std::vector<int>& removed_strong_fault_evidence_b = {},
     const std::vector<VerifiedQcArtifactEvidence>& verified_qc_artifact_evidence =
         {},
     const std::vector<int>& prior_peertrust_leader_debt = {},
@@ -143,8 +141,8 @@ ReputationCandidate ComputeCandidate(
   input.signed_vote_evidence = signed_vote_evidence;
   input.invalid_qc_proposal_evidence = invalid_qc_proposal_evidence;
   input.signed_weight_update_vote_evidence = signed_weight_update_vote_evidence;
-  input.signed_timeout_vote_evidence = signed_timeout_vote_evidence;
-  input.invalid_tc_proposal_evidence = invalid_tc_proposal_evidence;
+  (void)removed_strong_fault_evidence_a;
+  (void)removed_strong_fault_evidence_b;
   input.verified_qc_artifact_evidence = verified_qc_artifact_evidence;
   input.prior_peertrust_leader_debt = prior_peertrust_leader_debt;
   input.prior_sybil_graph_debt = prior_sybil_graph_debt;
@@ -210,38 +208,6 @@ SignedWeightUpdateVoteEvidence WeightUpdateVoteArtifact(
   artifact.activation_view = 64;
   artifact.candidate_digest = std::move(candidate_digest);
   artifact.signature_verified = signature_verified;
-  artifact.weight_version = 7;
-  artifact.active_weight_root = "old-root";
-  return artifact;
-}
-
-SignedTimeoutVoteEvidence TimeoutVoteArtifact(
-    int signer, int view, std::string high_qc_digest,
-    bool signature_verified = true) {
-  SignedTimeoutVoteEvidence artifact;
-  artifact.protocol_id = "td_hotstuff";
-  artifact.signer_id = signer;
-  artifact.view_or_round = view;
-  artifact.high_qc_digest = std::move(high_qc_digest);
-  artifact.signature_verified = signature_verified;
-  artifact.weight_version = 7;
-  artifact.active_weight_root = "old-root";
-  return artifact;
-}
-
-InvalidTcProposalEvidence InvalidTcArtifact(
-    int leader, int view, int slot, std::string proposal_hash,
-    bool proposal_signature_verified = true,
-    bool timeout_cert_verified = false) {
-  InvalidTcProposalEvidence artifact;
-  artifact.protocol_id = "td_hotstuff";
-  artifact.leader_id = leader;
-  artifact.view_or_round = view;
-  artifact.slot_or_height = slot;
-  artifact.proposal_hash = std::move(proposal_hash);
-  artifact.proposal_signature_verified = proposal_signature_verified;
-  artifact.timeout_cert_verified = timeout_cert_verified;
-  artifact.invalid_reason = "bad_tc";
   artifact.weight_version = 7;
   artifact.active_weight_root = "old-root";
   return artifact;
@@ -499,6 +465,92 @@ TEST(ReputationAlgorithmTest,
   EXPECT_LT(candidate.validators[19].vote_score, 30);
   EXPECT_EQ(candidate.validators[19].decay_applied, 0);
   EXPECT_EQ(candidate.validators[19].next_weight, 100);
+}
+
+TEST(ReputationAlgorithmTest,
+     NarrowAvailableSignerSamplesDoNotCreateVoteMisses) {
+  ReputationConfig config = TestConfig();
+  config.decay_per_epoch = 99;
+  config.max_recovery_per_epoch = 99;
+  config.bonus_per_epoch = 0;
+  config.multiplicative_weight_formula_enabled = true;
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 64; ++view) {
+    std::vector<int> signers;
+    if (view <= 17) {
+      for (int signer = 1; signer <= 13; ++signer) {
+        signers.push_back(signer);
+      }
+      signers.push_back(20);
+    } else {
+      const int start = ((view - 18) % 19) + 1;
+      for (int offset = 0; offset < 14; ++offset) {
+        signers.push_back(((start - 1 + offset) % 19) + 1);
+      }
+    }
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 20) + 1,
+                                   BitmapFromVector(signers, 20),
+                                   BitmapFromVector(signers, 20)));
+  }
+
+  ReputationWindowInput input = BuildWindowInput(
+      1, 20, 2, evidence, std::vector<int64_t>(20, 100), "old-root", 0,
+      64);
+  input.prior_vote_beta_counters.resize(20);
+  input.prior_vote_beta_counters[19].success = 1000;
+
+  const ReputationCandidate candidate =
+      ComputeReputationCandidate(input, config);
+
+  EXPECT_EQ(candidate.validators[19].inclusions, 17);
+  EXPECT_EQ(candidate.validators[19].opportunities,
+            candidate.validators[19].inclusions);
+  EXPECT_GE(candidate.validators[19].vote_score, 90);
+  EXPECT_EQ(candidate.validators[19].next_weight, 100);
+}
+
+TEST(ReputationAlgorithmTest,
+     NearZeroQuorumAvailableParticipationStillLosesRecovery) {
+  ReputationConfig config = TestConfig();
+  config.decay_per_epoch = 99;
+  config.max_recovery_per_epoch = 99;
+  config.bonus_per_epoch = 0;
+  config.multiplicative_weight_formula_enabled = true;
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 64; ++view) {
+    std::vector<int> signers;
+    if (view == 1) {
+      for (int signer = 1; signer <= 13; ++signer) {
+        signers.push_back(signer);
+      }
+      signers.push_back(20);
+    } else {
+      const int start = ((view - 2) % 19) + 1;
+      for (int offset = 0; offset < 14; ++offset) {
+        signers.push_back(((start - 1 + offset) % 19) + 1);
+      }
+    }
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 20) + 1,
+                                   BitmapFromVector(signers, 20),
+                                   BitmapFromVector(signers, 20)));
+  }
+
+  ReputationWindowInput input = BuildWindowInput(
+      1, 20, 2, evidence, std::vector<int64_t>(20, 100), "old-root", 0,
+      64);
+  input.prior_vote_beta_counters.resize(20);
+  input.prior_vote_beta_counters[19].success = 1000;
+
+  const ReputationCandidate candidate =
+      ComputeReputationCandidate(input, config);
+
+  EXPECT_EQ(candidate.validators[19].inclusions, 1);
+  EXPECT_GT(candidate.validators[19].opportunities,
+            candidate.validators[19].inclusions);
+  EXPECT_LT(candidate.validators[19].vote_score, 30);
+  EXPECT_LT(candidate.validators[19].next_weight, 100);
 }
 
 TEST(ReputationAlgorithmTest,
@@ -1986,65 +2038,6 @@ TEST(ReputationAlgorithmTest,
   }).empty());
 }
 
-TEST(ReputationAlgorithmTest, DetectsTimeoutVoteEquivocation) {
-  const std::vector<StrongFaultRecord> faults =
-      DetectTimeoutVoteEquivocationFaults({
-          TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-a"),
-          TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-b"),
-      });
-
-  ASSERT_EQ(faults.size(), 1);
-  EXPECT_EQ(faults[0].type, StrongFaultType::kTimeoutVoteEquivocation);
-  EXPECT_EQ(faults[0].validator_id, 3);
-  EXPECT_EQ(faults[0].view_or_round, 12);
-  EXPECT_EQ(faults[0].first_artifact_digest, "high-qc-a");
-  EXPECT_EQ(faults[0].second_artifact_digest, "high-qc-b");
-}
-
-TEST(ReputationAlgorithmTest, IgnoresDuplicateOrUnverifiedTimeoutVotes) {
-  EXPECT_TRUE(DetectTimeoutVoteEquivocationFaults({
-      TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-a"),
-      TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-a"),
-  }).empty());
-
-  EXPECT_TRUE(DetectTimeoutVoteEquivocationFaults({
-      TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-a"),
-      TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-b",
-                          /*signature_verified=*/false),
-  }).empty());
-
-  EXPECT_TRUE(DetectTimeoutVoteEquivocationFaults({
-      TimeoutVoteArtifact(/*signer=*/3, /*view=*/12, "high-qc-a"),
-      TimeoutVoteArtifact(/*signer=*/3, /*view=*/13, "high-qc-b"),
-  }).empty());
-}
-
-TEST(ReputationAlgorithmTest, DetectsInvalidTcProposal) {
-  const std::vector<StrongFaultRecord> faults =
-      DetectInvalidTcProposalFaults({
-          InvalidTcArtifact(/*leader=*/4, /*view=*/15, /*slot=*/0, "hash-a"),
-      });
-
-  ASSERT_EQ(faults.size(), 1);
-  EXPECT_EQ(faults[0].type, StrongFaultType::kInvalidTcProposal);
-  EXPECT_EQ(faults[0].validator_id, 4);
-  EXPECT_EQ(faults[0].view_or_round, 15);
-  EXPECT_EQ(faults[0].first_artifact_digest, "hash-a");
-}
-
-TEST(ReputationAlgorithmTest, IgnoresUnverifiedOrValidTcProposalArtifacts) {
-  EXPECT_TRUE(DetectInvalidTcProposalFaults({
-      InvalidTcArtifact(/*leader=*/4, /*view=*/15, /*slot=*/0, "hash-a",
-                        /*proposal_signature_verified=*/false),
-  }).empty());
-
-  EXPECT_TRUE(DetectInvalidTcProposalFaults({
-      InvalidTcArtifact(/*leader=*/4, /*view=*/15, /*slot=*/0, "hash-a",
-                        /*proposal_signature_verified=*/true,
-                        /*timeout_cert_verified=*/true),
-  }).empty());
-}
-
 TEST(ReputationAlgorithmTest, ConflictingQcsPenalizeOnlySignerIntersection) {
   const std::vector<StrongFaultRecord> faults = DetectConflictingQcFaults(
       {
@@ -2081,8 +2074,6 @@ TEST(ReputationAlgorithmTest, V2StrongFaultCandidatePenaltiesAreDeterministic) {
   ReputationConfig config = TestConfig();
   config.strong_fault_enabled = true;
   config.weight_update_vote_equivocation_detection_enabled = true;
-  config.timeout_vote_equivocation_detection_enabled = true;
-  config.invalid_tc_proposal_detection_enabled = true;
   config.conflicting_qc_detection_enabled = true;
   config.strong_fault_target_weight = 1;
   std::vector<TestEvidence> evidence;
@@ -2100,16 +2091,10 @@ TEST(ReputationAlgorithmTest, V2StrongFaultCandidatePenaltiesAreDeterministic) {
           WeightUpdateVoteArtifact(/*validator=*/1, "candidate-a"),
           WeightUpdateVoteArtifact(/*validator=*/1, "candidate-b"),
       },
+      {}, {},
       {
-          TimeoutVoteArtifact(/*signer=*/2, /*view=*/12, "high-qc-a"),
-          TimeoutVoteArtifact(/*signer=*/2, /*view=*/12, "high-qc-b"),
-      },
-      {
-          InvalidTcArtifact(/*leader=*/3, /*view=*/15, /*slot=*/0, "hash-a"),
-      },
-      {
-          QcArtifact(/*view=*/21, /*slot=*/0, "qc-a", Bitmap({3, 4}, 4)),
-          QcArtifact(/*view=*/21, /*slot=*/0, "qc-b", Bitmap({4}, 4)),
+          QcArtifact(/*view=*/21, /*slot=*/0, "qc-a", Bitmap({2, 3, 4}, 4)),
+          QcArtifact(/*view=*/21, /*slot=*/0, "qc-b", Bitmap({2, 3, 4}, 4)),
       });
 
   EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({1, 1, 1, 1}));

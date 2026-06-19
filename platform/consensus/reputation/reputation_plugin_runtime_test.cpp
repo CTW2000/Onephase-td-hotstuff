@@ -127,10 +127,11 @@ InvalidQcProposalEvidence InvalidQcEvidence(
 
 SignedWeightUpdateVoteEvidence WeightUpdateVoteEvidence(
     int activation_view, int validator, const std::string& candidate_digest,
-    bool signature_verified = true) {
+    bool signature_verified = true, int observed_view = 0) {
   SignedWeightUpdateVoteEvidence evidence;
   evidence.protocol_id = "td_hotstuff";
   evidence.validator_id = validator;
+  evidence.view_or_round = observed_view;
   evidence.old_weight_root = WeightRootHex({100, 100, 100, 100});
   evidence.old_weight_version = 0;
   evidence.activation_view = activation_view;
@@ -541,6 +542,57 @@ TEST(ReputationPluginRuntimeTest,
   ASSERT_EQ(candidates[0].strong_faults.size(), 1);
   EXPECT_EQ(candidates[0].strong_faults[0].type,
             StrongFaultType::kWeightUpdateVoteEquivocation);
+  EXPECT_EQ(candidates[0].strong_faults[0].validator_id, 2);
+  EXPECT_EQ(candidates[0].next_weights,
+            (std::vector<int64_t>{100, 1, 100, 100}));
+}
+
+TEST(ReputationPluginRuntimeTest,
+     FutureActivationWeightUpdateVoteConflictUsesObservedWindow) {
+  ReputationPluginRuntime runtime(WeightUpdateVoteRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/20, /*validator=*/2,
+                               "candidate-a", /*signature_verified=*/true,
+                               /*observed_view=*/1)));
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/20, /*validator=*/2,
+                               "candidate-b", /*signature_verified=*/true,
+                               /*observed_view=*/1)));
+  runtime.AdvanceWatermark(4);
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 2);
+  ASSERT_EQ(candidates[0].strong_faults.size(), 1);
+  EXPECT_EQ(candidates[0].strong_faults[0].validator_id, 2);
+  EXPECT_EQ(candidates[0].next_weights,
+            (std::vector<int64_t>{100, 1, 100, 100}));
+}
+
+TEST(ReputationPluginRuntimeTest,
+     LateWeightUpdateVoteConflictUsesCurrentOpenWindow) {
+  ReputationPluginRuntime runtime(WeightUpdateVoteRuntimeOptions());
+  runtime.Start();
+
+  EXPECT_TRUE(runtime.AdvanceWatermark(4));
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/20, /*validator=*/2,
+                               "candidate-a", /*signature_verified=*/true,
+                               /*observed_view=*/1)));
+  EXPECT_TRUE(runtime.RecordSignedWeightUpdateVoteEvidence(
+      WeightUpdateVoteEvidence(/*activation_view=*/20, /*validator=*/2,
+                               "candidate-b", /*signature_verified=*/true,
+                               /*observed_view=*/1)));
+  EXPECT_TRUE(runtime.AdvanceWatermark(8));
+  auto candidates = WaitForCandidates(&runtime, 1);
+  runtime.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 2);
+  ASSERT_EQ(candidates[0].strong_faults.size(), 1);
   EXPECT_EQ(candidates[0].strong_faults[0].validator_id, 2);
   EXPECT_EQ(candidates[0].next_weights,
             (std::vector<int64_t>{100, 1, 100, 100}));

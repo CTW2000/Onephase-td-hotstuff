@@ -82,8 +82,8 @@ start_benchmark_clients() {
     -u TD_HS_DOUBLE_VOTE_IDS \
     -u TD_HS_INVALID_QC_IDS \
     -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
-    -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS \
-    -u TD_HS_INVALID_TC_PROPOSAL_IDS \
+    \
+    \
     -u TD_HS_BAD_NODE_IDS \
     -u TD_HS_BAD_NODE_COUNT
 }

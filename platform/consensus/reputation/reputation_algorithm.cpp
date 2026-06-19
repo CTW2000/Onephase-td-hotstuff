@@ -63,10 +63,6 @@ std::string StrongFaultTypeName(StrongFaultType type) {
       return "invalid_qc_proposal";
     case StrongFaultType::kWeightUpdateVoteEquivocation:
       return "weight_update_vote_equivocation";
-    case StrongFaultType::kTimeoutVoteEquivocation:
-      return "timeout_vote_equivocation";
-    case StrongFaultType::kInvalidTcProposal:
-      return "invalid_tc_proposal";
     case StrongFaultType::kConflictingQc:
       return "conflicting_qc";
     case StrongFaultType::kUnknown:
@@ -511,8 +507,6 @@ bool HasStrongFaultEvidence(const ReputationWindowInput& input) {
          !input.signed_vote_evidence.empty() ||
          !input.invalid_qc_proposal_evidence.empty() ||
          !input.signed_weight_update_vote_evidence.empty() ||
-         !input.signed_timeout_vote_evidence.empty() ||
-         !input.invalid_tc_proposal_evidence.empty() ||
          !input.verified_qc_artifact_evidence.empty();
 }
 
@@ -546,6 +540,12 @@ bool HasQuorumAvailableSignerCoverage(
   return threshold > 0 && available_signers.size() >= threshold;
 }
 
+bool HasBroadAvailableSignerCoverage(
+    const std::vector<int>& available_signers, int total_replicas) {
+  const uint64_t threshold = WindowFairAvailableSignerThreshold(total_replicas);
+  return threshold > 0 && available_signers.size() >= threshold;
+}
+
 bool HasWindowFairAvailableSignerCoverage(
     const std::set<int>& available_signers, int total_replicas) {
   const uint64_t threshold = WindowFairAvailableSignerThreshold(total_replicas);
@@ -568,6 +568,8 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
   std::vector<uint64_t> signer_opportunity_count(
       std::max(total_replicas, 0), 0);
   std::vector<uint64_t> available_not_selected_count(
+      std::max(total_replicas, 0), 0);
+  std::vector<uint64_t> quorum_unavailable_count(
       std::max(total_replicas, 0), 0);
   std::set<int> window_quorum_available_signers;
   std::set<std::pair<int, std::string>> seen_certificates;
@@ -601,8 +603,21 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
     }
     std::set<int> signer_set(signers.begin(), signers.end());
     if (has_available_signer_evidence) {
-      if (HasQuorumAvailableSignerCoverage(available_signers,
-                                           total_replicas)) {
+      const bool quorum_available_signer_evidence =
+          HasQuorumAvailableSignerCoverage(available_signers, total_replicas);
+      const bool broad_available_signer_evidence =
+          HasBroadAvailableSignerCoverage(available_signers, total_replicas);
+      if (quorum_available_signer_evidence) {
+        const std::set<int> available_set(available_signers.begin(),
+                                          available_signers.end());
+        for (int validator_id = 1; validator_id <= total_replicas;
+             ++validator_id) {
+          if (available_set.find(validator_id) == available_set.end()) {
+            ++quorum_unavailable_count[validator_id - 1];
+          }
+        }
+      }
+      if (broad_available_signer_evidence) {
         broad_available_signer_slots += available_signers.size();
         ++broad_available_event_count;
         for (int signer : available_signers) {
@@ -617,10 +632,12 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
           ++signer_opportunity_count[signer - 1];
         }
       }
-      for (int signer : available_signers) {
-        if (signer >= 1 && signer <= total_replicas &&
-            signer_set.find(signer) == signer_set.end()) {
-          ++available_not_selected_count[signer - 1];
+      if (broad_available_signer_evidence) {
+        for (int signer : available_signers) {
+          if (signer >= 1 && signer <= total_replicas &&
+              signer_set.find(signer) == signer_set.end()) {
+            ++available_not_selected_count[signer - 1];
+          }
         }
       }
     } else {
@@ -669,9 +686,24 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
             ? broad_available_fair_opportunities -
                   excused_available_not_selected
             : 0;
+    const uint64_t quorum_unavailable_samples =
+        idx >= 0 && idx < static_cast<int>(quorum_unavailable_count.size())
+            ? quorum_unavailable_count[idx]
+            : 0;
+    const uint64_t quorum_participation_samples =
+        validator.inclusions + quorum_unavailable_samples;
+    const bool near_zero_quorum_participation =
+        quorum_unavailable_samples > 0 && quorum_participation_samples > 0 &&
+        validator.inclusions * 100 <= quorum_participation_samples * 10;
+    const uint64_t quorum_unavailable_opportunities =
+        broad_available_fair_opportunities == 0 &&
+                near_zero_quorum_participation
+            ? quorum_unavailable_samples
+            : 0;
     validator.opportunities =
-        std::max(direct_opportunities,
-                 adjusted_broad_available_fair_opportunities) +
+        std::max(std::max(direct_opportunities,
+                          adjusted_broad_available_fair_opportunities),
+                 quorum_unavailable_opportunities) +
         fair_opportunities;
   }
 
@@ -886,6 +918,8 @@ ReputationCandidate ComputeReputationCandidate(
       std::max(total_replicas, 0), 0);
   std::vector<uint64_t> available_not_selected_count(
       std::max(total_replicas, 0), 0);
+  std::vector<uint64_t> quorum_unavailable_count(
+      std::max(total_replicas, 0), 0);
   std::set<int> window_quorum_available_signers;
   std::set<std::pair<int, std::string>> seen_certificates;
   std::set<std::pair<int, int>> seen_leader_opportunities;
@@ -919,8 +953,21 @@ ReputationCandidate ComputeReputationCandidate(
     ++certificate_event_count;
     std::set<int> signer_set(signers.begin(), signers.end());
     if (has_available_signer_evidence) {
-      if (HasQuorumAvailableSignerCoverage(available_signers,
-                                           total_replicas)) {
+      const bool quorum_available_signer_evidence =
+          HasQuorumAvailableSignerCoverage(available_signers, total_replicas);
+      const bool broad_available_signer_evidence =
+          HasBroadAvailableSignerCoverage(available_signers, total_replicas);
+      if (quorum_available_signer_evidence) {
+        const std::set<int> available_set(available_signers.begin(),
+                                          available_signers.end());
+        for (int validator_id = 1; validator_id <= total_replicas;
+             ++validator_id) {
+          if (available_set.find(validator_id) == available_set.end()) {
+            ++quorum_unavailable_count[validator_id - 1];
+          }
+        }
+      }
+      if (broad_available_signer_evidence) {
         broad_available_signer_slots += available_signers.size();
         ++broad_available_event_count;
         for (int signer : available_signers) {
@@ -935,10 +982,12 @@ ReputationCandidate ComputeReputationCandidate(
           ++candidate.validators[signer - 1].inclusions;
         }
       }
-      for (int signer : available_signers) {
-        if (signer >= 1 && signer <= total_replicas &&
-            signer_set.find(signer) == signer_set.end()) {
-          ++available_not_selected_count[signer - 1];
+      if (broad_available_signer_evidence) {
+        for (int signer : available_signers) {
+          if (signer >= 1 && signer <= total_replicas &&
+              signer_set.find(signer) == signer_set.end()) {
+            ++available_not_selected_count[signer - 1];
+          }
         }
       }
     } else {
@@ -1030,9 +1079,24 @@ ReputationCandidate ComputeReputationCandidate(
             ? broad_available_fair_opportunities -
                   excused_available_not_selected
             : 0;
+    const uint64_t quorum_unavailable_samples =
+        idx >= 0 && idx < static_cast<int>(quorum_unavailable_count.size())
+            ? quorum_unavailable_count[idx]
+            : 0;
+    const uint64_t quorum_participation_samples =
+        validator.inclusions + quorum_unavailable_samples;
+    const bool near_zero_quorum_participation =
+        quorum_unavailable_samples > 0 && quorum_participation_samples > 0 &&
+        validator.inclusions * 100 <= quorum_participation_samples * 10;
+    const uint64_t quorum_unavailable_opportunities =
+        broad_available_fair_opportunities == 0 &&
+                near_zero_quorum_participation
+            ? quorum_unavailable_samples
+            : 0;
     validator.opportunities =
-        std::max(direct_opportunities,
-                 adjusted_broad_available_fair_opportunities) +
+        std::max(std::max(direct_opportunities,
+                          adjusted_broad_available_fair_opportunities),
+                 quorum_unavailable_opportunities) +
         fair_opportunities;
   }
 
@@ -1654,20 +1718,6 @@ ReputationCandidate ComputeReputationCandidate(
       candidate.strong_faults.insert(candidate.strong_faults.end(),
                                      weight_vote_faults.begin(),
                                      weight_vote_faults.end());
-    }
-    if (config.timeout_vote_equivocation_detection_enabled) {
-      std::vector<StrongFaultRecord> timeout_vote_faults =
-          DetectTimeoutVoteEquivocationFaults(input.signed_timeout_vote_evidence);
-      candidate.strong_faults.insert(candidate.strong_faults.end(),
-                                     timeout_vote_faults.begin(),
-                                     timeout_vote_faults.end());
-    }
-    if (config.invalid_tc_proposal_detection_enabled) {
-      std::vector<StrongFaultRecord> invalid_tc_faults =
-          DetectInvalidTcProposalFaults(input.invalid_tc_proposal_evidence);
-      candidate.strong_faults.insert(candidate.strong_faults.end(),
-                                     invalid_tc_faults.begin(),
-                                     invalid_tc_faults.end());
     }
     if (config.conflicting_qc_detection_enabled) {
       std::vector<StrongFaultRecord> conflicting_qc_faults =

@@ -15,12 +15,12 @@
 #include "platform/common/queue/lock_free_queue.h"
 #include "platform/consensus/ordering/common/algorithm/protocol_base.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/async_consensus_verifier.h"
+#include "platform/consensus/ordering/td_hotstuff/algorithm/certified_weight_update_pipeline.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/leader_selection_schedule.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/proposal_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/adapter/td_hotstuff_reputation_adapter.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/timeout_manager.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/weight_schedule.h"
-#include "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_controller.h"
 #include "platform/consensus/ordering/td_hotstuff/proto/proposal.pb.h"
 #include "platform/statistic/stats.h"
 
@@ -83,13 +83,6 @@ class HotStuff : public common::ProtocolBase {
   bool MaybeMakeInvalidQcProposalEvidenceSnapshotLocked(
       const Proposal& proposal, const ProposalValidationResult& validation,
       TdHotstuffInvalidQcProposalEvidenceSnapshot* snapshot);
-  bool MaybeMakeSignedWeightUpdateVoteEvidenceSnapshot(
-      const WeightUpdateVote& vote,
-      TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot* snapshot) const;
-  void MaybeBroadcastConflictingWeightUpdateVoteForExperiment(
-      const WeightUpdateVote& vote);
-  void MaybeBroadcastRemoteCandidateWeightUpdateVoteEquivocationForExperiment(
-      const CandidateWeightUpdate& candidate);
   bool MaybeMakeQcEvidenceSnapshotLocked(const QC& qc,
                                           TdHotstuffQcEvidenceSnapshot* snapshot);
   bool MaybeFormQcLocked(int view, const std::string& hash);
@@ -98,15 +91,6 @@ class HotStuff : public common::ProtocolBase {
   void MarkTimeoutProgressLocked();
   void BroadcastTimeoutVote(const TimeoutVote& vote);
   void BroadcastTimeoutCert(const TimeoutCert& cert);
-  void BroadcastCandidateWeightUpdate(const CandidateWeightUpdate& candidate);
-  void BroadcastWeightUpdateVote(const WeightUpdateVote& vote);
-  void BroadcastWeightUpdateCert(const WeightUpdateCert& cert);
-  void DrainCompletedWeightCandidates();
-  void ActivateReadyWeightUpdates();
-  void ProcessWeightUpdateCertFromProposal(const WeightUpdateCert& cert, int view);
-  void ActivateReadyWeightUpdates(int view);
-  void RefreshPendingWeightActivationView();
-  void MaybeActivateReadyWeightUpdatesAfterViewAdvance();
   bool ApplyTimeoutCertLocked(const TimeoutCert& cert);
   bool IsSilentLeaderForExperiment() const;
   bool IsDoubleProposalForExperiment() const;
@@ -116,7 +100,6 @@ class HotStuff : public common::ProtocolBase {
   bool ShouldUsePeerTrustCliqueForView(int view) const;
   bool ShouldUseLowDiversityQcForView(int view) const;
   bool IsInvalidQcForExperiment() const;
-  bool IsWeightUpdateVoteEquivocationForExperiment() const;
   std::unique_ptr<Proposal> MakeConflictingProposalForExperiment(
       const Proposal& proposal);
   std::unique_ptr<Proposal> MakeInvalidQcProposalForExperiment(
@@ -166,12 +149,7 @@ class HotStuff : public common::ProtocolBase {
   std::shared_ptr<LeaderSelectionSchedule> leader_schedule_;
   std::unique_ptr<AsyncConsensusVerifier> async_verifier_;
   std::unique_ptr<TdHotstuffReputationAdapter> reputation_adapter_;
-  std::unique_ptr<WeightUpdateController> weight_update_controller_;
-  bool weight_candidate_inflight_ = false;
-  uint64_t weight_candidate_inflight_version_ = 0;
-  std::mutex experiment_weight_update_vote_mutex_;
-  std::set<std::string> experiment_weight_update_vote_digests_;
-  std::atomic<int> next_pending_weight_activation_view_{0};
+  std::unique_ptr<CertifiedWeightUpdatePipeline> weight_update_pipeline_;
   std::unique_ptr<TimeoutManager> timeout_manager_;
   std::set<int> timeout_echoed_views_;
   std::thread timeout_thread_;

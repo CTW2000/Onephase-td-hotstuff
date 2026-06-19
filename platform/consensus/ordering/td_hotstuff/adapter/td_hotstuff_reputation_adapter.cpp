@@ -138,6 +138,7 @@ ToSignedWeightUpdateVoteEvidence(
   resdb::consensus::reputation::SignedWeightUpdateVoteEvidence evidence;
   evidence.protocol_id = "td_hotstuff";
   evidence.validator_id = snapshot.validator_id;
+  evidence.view_or_round = snapshot.view;
   evidence.old_weight_root = snapshot.old_weight_root;
   evidence.old_weight_version = snapshot.old_weight_version;
   evidence.activation_view = snapshot.activation_view;
@@ -243,10 +244,6 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
       EnvFlagEnabled("TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE");
   options.reputation_config.weight_update_vote_equivocation_detection_enabled =
       EnvFlagEnabled("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE");
-  options.reputation_config.timeout_vote_equivocation_detection_enabled =
-      EnvFlagEnabled("TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE");
-  options.reputation_config.invalid_tc_proposal_detection_enabled =
-      EnvFlagEnabled("TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE");
   options.reputation_config.conflicting_qc_detection_enabled =
       EnvFlagEnabled("TD_HS_CONFLICTING_QC_DETECT_ENABLE");
   options.reputation_config.strong_fault_target_weight = PositiveIntFromEnv(
@@ -390,6 +387,44 @@ bool TdHotstuffReputationAdapter::TryRecordSignedProposal(
       ToSignedProposalEvidence(snapshot));
 }
 
+void TdHotstuffReputationAdapter::PruneSignedVoteConflictCacheLocked(
+    int current_view) {
+  constexpr int kPruneIntervalViews = 64;
+  constexpr int kRetainedViewLag = 512;
+  if (current_view <= signed_vote_prune_watermark_ + kPruneIntervalViews) {
+    return;
+  }
+  signed_vote_prune_watermark_ = current_view;
+  const int min_view = current_view - kRetainedViewLag;
+  if (min_view <= 0) {
+    return;
+  }
+  for (auto it = first_signed_vote_by_key_.begin();
+       it != first_signed_vote_by_key_.end();) {
+    if (std::get<1>(it->first) < min_view) {
+      it = first_signed_vote_by_key_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  for (auto it = seen_signed_vote_digests_.begin();
+       it != seen_signed_vote_digests_.end();) {
+    if (std::get<1>(*it) < min_view) {
+      it = seen_signed_vote_digests_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  for (auto it = emitted_signed_vote_conflicts_.begin();
+       it != emitted_signed_vote_conflicts_.end();) {
+    if (std::get<1>(*it) < min_view) {
+      it = emitted_signed_vote_conflicts_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
 bool TdHotstuffReputationAdapter::TryRecordSignedVote(
     TdHotstuffSignedVoteEvidenceSnapshot snapshot) {
   if (!WantsSignedVoteEvidence() || runtime_ == nullptr) {
@@ -401,7 +436,42 @@ bool TdHotstuffReputationAdapter::TryRecordSignedVote(
   if (snapshot.local_node_id <= 0) {
     snapshot.local_node_id = local_node_id_;
   }
-  return runtime_->RecordSignedVoteEvidence(ToSignedVoteEvidence(snapshot));
+  if (snapshot.view < 0 || snapshot.signer_id <= 0 ||
+      snapshot.proposal_hash.empty() || !snapshot.signature_verified) {
+    return false;
+  }
+
+  std::vector<resdb::consensus::reputation::SignedVoteEvidence> conflicts;
+  {
+    std::lock_guard<std::mutex> lk(signed_vote_mutex_);
+    PruneSignedVoteConflictCacheLocked(snapshot.view);
+    const SignedVoteKey vote_key =
+        std::make_tuple(snapshot.signer_id, snapshot.view, snapshot.slot);
+    const SignedVoteDigestKey digest_key = std::make_tuple(
+        snapshot.signer_id, snapshot.view, snapshot.slot, snapshot.proposal_hash);
+    if (!seen_signed_vote_digests_.insert(digest_key).second) {
+      return false;
+    }
+    auto first_it = first_signed_vote_by_key_.find(vote_key);
+    if (first_it == first_signed_vote_by_key_.end()) {
+      first_signed_vote_by_key_.emplace(vote_key, std::move(snapshot));
+      return false;
+    }
+    if (first_it->second.proposal_hash == snapshot.proposal_hash) {
+      return false;
+    }
+    if (!emitted_signed_vote_conflicts_.insert(vote_key).second) {
+      return false;
+    }
+    conflicts.push_back(ToSignedVoteEvidence(first_it->second));
+    conflicts.push_back(ToSignedVoteEvidence(snapshot));
+  }
+
+  bool recorded = true;
+  for (auto& evidence : conflicts) {
+    recorded = runtime_->RecordSignedVoteEvidence(std::move(evidence)) && recorded;
+  }
+  return recorded;
 }
 
 bool TdHotstuffReputationAdapter::TryRecordSignedWeightUpdateVote(

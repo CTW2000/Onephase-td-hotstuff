@@ -75,6 +75,20 @@ class CalculateResultTest(unittest.TestCase):
             calculate_result.RESULT_WARMUP_SAMPLE_RATIO = old_ratio
             calculate_result.RESULT_COOLDOWN_SAMPLE_RATIO = old_cooldown_ratio
 
+    def test_read_tps_tolerates_non_utf8_log_bytes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_path = pathlib.Path(temp_dir) / "node.log"
+            log_path.write_bytes(
+                b"\xacnot-utf8\n"
+                b"I20260608 10:00:00.000000 txn:100 req client latency:0.010\n"
+                b"I20260608 10:00:31.000000 txn:300 req client latency:0.030\n"
+            )
+
+            samples = calculate_result.read_tps(str(log_path))
+
+        self.assertEqual(samples.tps, [100, 300])
+        self.assertEqual(samples.lat, [0.010, 0.030])
+
     def test_timestamped_logs_exclude_shutdown_cooldown_samples(self):
         old_warmup = calculate_result.RESULT_WARMUP_SECONDS
         old_cooldown = calculate_result.RESULT_COOLDOWN_SECONDS

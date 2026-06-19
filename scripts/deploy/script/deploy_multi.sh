@@ -24,7 +24,7 @@ server_path=${server_path:1}
 server_name=`echo "$server" | awk -F':' '{print $NF}'`
 server_bin=${server_name}
 
-local_server_env=(env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_SLOW_VOTE_IDS -u TD_HS_PEERTRUST_CLIQUE_IDS -u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS -u TD_HS_SYBIL_GRAPH_ATTACK_IDS -u TD_HS_SYBIL_GRAPH_REVIEWER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_LOW_DIVERSITY_QC_IDS -u TD_HS_LOW_DIVERSITY_TARGET_IDS -u TD_HS_LOW_DIVERSITY_REVIEWER_IDS -u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS -u TD_HS_LOW_DIVERSITY_QC_TRACE -u TD_HS_INVALID_QC_IDS -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS -u TD_HS_INVALID_TC_PROPOSAL_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT)
+local_server_env=(env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_SLOW_VOTE_IDS -u TD_HS_PEERTRUST_CLIQUE_IDS -u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS -u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS -u TD_HS_SYBIL_GRAPH_ATTACK_IDS -u TD_HS_SYBIL_GRAPH_REVIEWER_IDS -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_LOW_DIVERSITY_QC_IDS -u TD_HS_LOW_DIVERSITY_TARGET_IDS -u TD_HS_LOW_DIVERSITY_REVIEWER_IDS -u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS -u TD_HS_LOW_DIVERSITY_QC_TRACE -u TD_HS_INVALID_QC_IDS -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT)
 remote_server_env=""
 td_env_names=(
   TD_HS_WEIGHTS
@@ -70,16 +70,20 @@ td_env_names=(
   TD_HS_DOUBLE_VOTE_DETECT_ENABLE
   TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE
   TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE
-  TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE
-  TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE
+
+
   TD_HS_CONFLICTING_QC_DETECT_ENABLE
   TD_HS_STRONG_FAULT_TARGET_WEIGHT
   TD_HS_WEIGHT_UPDATE_ENABLE
   TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE
   TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY
+  TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_MIN_START_VIEW
+  TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_START_VIEW
+  TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_ON_CANDIDATE
   TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS
   TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY
   TD_HS_WEIGHT_UPDATE_TRACE
+  TD_HS_ROUND_FLOW_TRACE
   TD_HS_LEADER_SELECTION_ENABLE
   TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT
   TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE
@@ -160,18 +164,6 @@ is_invalid_qc_node() {
 is_weight_update_vote_equivocation_node() {
   local node_id="$1"
   local raw_ids=",${TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS:-},"
-  [[ "$raw_ids" == *",${node_id},"* ]]
-}
-
-is_timeout_vote_equivocation_node() {
-  local node_id="$1"
-  local raw_ids=",${TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS:-},"
-  [[ "$raw_ids" == *",${node_id},"* ]]
-}
-
-is_invalid_tc_proposal_node() {
-  local node_id="$1"
-  local raw_ids=",${TD_HS_INVALID_TC_PROPOSAL_IDS:-},"
   [[ "$raw_ids" == *",${node_id},"* ]]
 }
 
@@ -268,20 +260,7 @@ remote_env_for_node() {
     else
       env_prefix="env TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION=1 "
     fi
-  fi
-  if is_timeout_vote_equivocation_node "$node_id"; then
-    if [ -n "${env_prefix}" ]; then
-      env_prefix="${env_prefix}TD_HS_TIMEOUT_VOTE_EQUIVOCATION=1 "
-    else
-      env_prefix="env TD_HS_TIMEOUT_VOTE_EQUIVOCATION=1 "
-    fi
-  fi
-  if is_invalid_tc_proposal_node "$node_id"; then
-    if [ -n "${env_prefix}" ]; then
-      env_prefix="${env_prefix}TD_HS_INVALID_TC_PROPOSAL=1 "
-    else
-      env_prefix="env TD_HS_INVALID_TC_PROPOSAL=1 "
-    fi
+    env_prefix="${env_prefix}TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_TRIGGER_FILE=/home/hyperchain/resilientdb_app/${node_id}/td_hs_wue_trigger "
   fi
   printf '%s' "${env_prefix}"
 }
@@ -453,18 +432,7 @@ echo "Phase 3: Start nodes..."
             node_local_env=(env)
           fi
           node_local_env+=("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION=1")
-        fi
-        if is_timeout_vote_equivocation_node "$n"; then
-          if [ ${#node_local_env[@]} -eq 0 ]; then
-            node_local_env=(env)
-          fi
-          node_local_env+=("TD_HS_TIMEOUT_VOTE_EQUIVOCATION=1")
-        fi
-        if is_invalid_tc_proposal_node "$n"; then
-          if [ ${#node_local_env[@]} -eq 0 ]; then
-            node_local_env=(env)
-          fi
-          node_local_env+=("TD_HS_INVALID_TC_PROPOSAL=1")
+          node_local_env+=("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_TRIGGER_FILE=${DEPLOY_DIR}/resilientdb_app/${n}/td_hs_wue_trigger")
         fi
         (cd "${node_dir}" && "${node_local_env[@]}" setsid -f ./${server_bin} server.config cert/node_${n}.key.pri cert/cert_${n}.cert 0.0.0.0:${grafana_port} > ${server_bin}.log 2>&1 < /dev/null)
         ((grafana_port++))

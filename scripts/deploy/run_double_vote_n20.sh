@@ -93,6 +93,8 @@ run_single_experiment() {
   local bad_node_ids
   bad_node_ids=$(derive_bad_node_ids "$num_bad")
   local result_file="$RESULT_DIR/TD-Hotstuff_doublevote${num_bad}.txt"
+  local weight_update_enable_override="${TD_HS_WEIGHT_UPDATE_ENABLE:-}"
+  local double_vote_detect_override="${TD_HS_DOUBLE_VOTE_DETECT_ENABLE:-}"
 
   echo ""
   echo "======================================================================"
@@ -113,19 +115,17 @@ generate_performance_server_conf($N)
   export TEMPLATE_PATH=$PWD/config/td_hotstuff.config
   export server=//benchmark/protocols/td_hotstuff:kv_server_performance
   export TD_HS_REPUTATION_ENABLE=1
-  export TD_HS_WEIGHT_UPDATE_ENABLE=1
+  export TD_HS_WEIGHT_UPDATE_ENABLE="${weight_update_enable_override:-1}"
   export TD_HS_STRONG_FAULT_ENABLE=1
   export TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE=0
   export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=0
   export TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE=0
   export TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE=0
-  export TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE=0
-  export TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE=0
   export TD_HS_CONFLICTING_QC_DETECT_ENABLE=0
   if [ "${TD_HS_ALL_DETECTORS_ENABLE:-0}" = "1" ]; then
     td_hs_enable_all_detectors
   else
-    export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=1
+    export TD_HS_DOUBLE_VOTE_DETECT_ENABLE="${double_vote_detect_override:-1}"
   fi
   export TD_HS_STRONG_FAULT_TARGET_WEIGHT=1
   # Strong-fault experiments should punish only authenticated equivocation
@@ -145,7 +145,7 @@ generate_performance_server_conf($N)
   # experiment pacemaker on so equivocated views can still advance if needed.
   export TD_HS_TIMEOUT_ENABLE=1
   export TD_HS_TIMEOUT_MS=200
-  export TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS=20
+  export TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS="${DOUBLE_VOTE_TIMEOUT_EMPTY_PROPOSAL_VIEWS:-512}"
   export TD_HS_BAD_NODE_COUNT="$num_bad"
   export TD_HS_BAD_NODE_IDS="$bad_node_ids"
   if [ "$num_bad" -gt 0 ]; then
@@ -156,6 +156,11 @@ generate_performance_server_conf($N)
 
   bash ./script/deploy_multi.sh "./config/performance.conf" 2>&1 | grep -E "(=== |Phase|deployed|started|ready|running)"
 
+  if [ "${TD_HS_CLIENT_START_DELAY_SEC:-0}" -gt 0 ]; then
+    echo "  Waiting ${TD_HS_CLIENT_START_DELAY_SEC}s before benchmark client..."
+    sleep "$TD_HS_CLIENT_START_DELAY_SEC"
+  fi
+
   echo "  Running benchmark client..."
   for((i=1;;i++)); do
     cf=$PWD/config_out/client${i}.config
@@ -164,8 +169,8 @@ generate_performance_server_conf($N)
         -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS \
         -u TD_HS_INVALID_QC_IDS -u TD_HS_LOW_DIVERSITY_QC_IDS -u TD_HS_LOW_DIVERSITY_TARGET_IDS -u TD_HS_LOW_DIVERSITY_REVIEWER_IDS -u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS \
         -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
-        -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS \
-        -u TD_HS_INVALID_TC_PROPOSAL_IDS -u TD_HS_BAD_NODE_IDS \
+        \
+        -u TD_HS_BAD_NODE_IDS \
         -u TD_HS_BAD_NODE_COUNT \
         ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
   done
@@ -188,11 +193,15 @@ generate_performance_server_conf($N)
     echo "  >> Throughput: $tps txn/s | Latency: $lat s"
     local keep_dir="$RESULT_DIR/logs_TD-Hotstuff_doublevote${num_bad}"
     rm -rf "$keep_dir"
-    mkdir -p "$keep_dir"
-    cp result_*_log "$keep_dir"/ 2>/dev/null || true
-    cp result_*_reputation.jsonl "$keep_dir"/ 2>/dev/null || true
-    cp result_*_qc_evidence.jsonl "$keep_dir"/ 2>/dev/null || true
-    echo "  >> Logs preserved in: $keep_dir"
+    if [ "${KEEP_EXPERIMENT_LOGS:-1}" = "1" ]; then
+      mkdir -p "$keep_dir"
+      cp result_*_log "$keep_dir"/ 2>/dev/null || true
+      cp result_*_reputation.jsonl "$keep_dir"/ 2>/dev/null || true
+      cp result_*_qc_evidence.jsonl "$keep_dir"/ 2>/dev/null || true
+      echo "  >> Logs preserved in: $keep_dir"
+    else
+      echo "  >> Logs discarded (KEEP_EXPERIMENT_LOGS=0)"
+    fi
     rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
   else
     echo "  >> NO LOG FILES COLLECTED"

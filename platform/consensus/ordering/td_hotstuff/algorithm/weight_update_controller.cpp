@@ -26,7 +26,8 @@ constexpr size_t kMaxPendingVoteDigests = 128;
 constexpr size_t kMaxPendingCerts = 64;
 constexpr size_t kMaxRecentCerts = 64;
 constexpr size_t kMaxAcceptedCerts = 128;
-constexpr size_t kMaxVotedDigests = 128;
+constexpr size_t kMaxVotedScopes = 128;
+constexpr size_t kMaxEmittedCerts = 128;
 
 template <typename Map, typename Predicate>
 void EraseIf(Map* values, Predicate predicate) {
@@ -70,6 +71,29 @@ bool AllowNoOpCandidateForExperiment() {
 bool AllowNoOpCandidateInitialVersionOnlyForExperiment() {
   return EnvFlagEnabled(
       "TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY");
+}
+
+int AllowNoOpCandidateMinStartViewForExperiment() {
+  const char* raw =
+      std::getenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_MIN_START_VIEW");
+  if (raw == nullptr) {
+    return 0;
+  }
+  return std::max(0, std::atoi(raw));
+}
+
+bool WeightUpdateTraceEnabled() {
+  static const bool enabled = EnvFlagEnabled("TD_HS_WEIGHT_UPDATE_TRACE");
+  return enabled;
+}
+
+int WeightUpdateCertPiggybackLeadViews() {
+  const char* raw =
+      std::getenv("TD_HS_WEIGHT_UPDATE_CERT_PIGGYBACK_LEAD_VIEWS");
+  if (raw == nullptr || std::string(raw).empty()) {
+    return 64;
+  }
+  return std::max(0, std::atoi(raw));
 }
 
 std::string BuildBitmap(const std::vector<int>& signers, int total_replicas) {
@@ -142,20 +166,25 @@ void WeightUpdateController::PruneStaleStateLocked() {
   EraseIf(&recent_certs_, [active_version](const auto& entry) {
     return entry.second.candidate().old_weight_version() + 1 < active_version;
   });
-  EraseIf(&accepted_cert_versions_, [active_version](const auto& entry) {
-    return entry.second + 1 < active_version;
+  EraseIf(&accepted_cert_by_scope_, [active_version](const auto& entry) {
+    return entry.first.old_weight_version < active_version;
   });
-  EraseIf(&voted_digests_, [active_version](const auto& entry) {
-    return entry.second < active_version;
+  EraseIf(&voted_candidate_by_scope_, [active_version](const auto& entry) {
+    return entry.first.old_weight_version < active_version;
   });
+  EraseIf(&emitted_cert_version_by_digest_,
+          [active_version](const auto& entry) {
+            return entry.second < active_version;
+          });
   TrimMapToSize(&local_candidates_, kMaxLocalCandidates);
   TrimMapToSize(&candidates_by_digest_, kMaxCandidatesByDigest);
   TrimMapToSize(&vote_buckets_, kMaxVoteBuckets);
   TrimMapToSize(&pending_votes_by_digest_, kMaxPendingVoteDigests);
   TrimMapToSize(&pending_certs_, kMaxPendingCerts);
   TrimMapToSize(&recent_certs_, kMaxRecentCerts);
-  TrimMapToSize(&accepted_cert_versions_, kMaxAcceptedCerts);
-  TrimMapToSize(&voted_digests_, kMaxVotedDigests);
+  TrimMapToSize(&accepted_cert_by_scope_, kMaxAcceptedCerts);
+  TrimMapToSize(&voted_candidate_by_scope_, kMaxVotedScopes);
+  TrimMapToSize(&emitted_cert_version_by_digest_, kMaxEmittedCerts);
 }
 
 std::vector<int> CandidateLeaderEpochLeaders(
@@ -294,7 +323,10 @@ std::unique_ptr<WeightUpdateVote> WeightUpdateController::HandleCandidate(
   if (it == local_candidates_.end()) {
     return nullptr;
   }
-  if (voted_digests_.find(candidate.candidate_digest()) != voted_digests_.end()) {
+  const VoteScopeKey vote_scope{candidate.old_weight_root(),
+                                candidate.old_weight_version()};
+  auto voted_it = voted_candidate_by_scope_.find(vote_scope);
+  if (voted_it != voted_candidate_by_scope_.end()) {
     return nullptr;
   }
   candidates_by_digest_[candidate.candidate_digest()] = candidate;
@@ -311,8 +343,7 @@ std::unique_ptr<WeightUpdateVote> WeightUpdateController::HandleCandidate(
     return nullptr;
   }
   *vote->mutable_signature() = *signature_or;
-  voted_digests_[candidate.candidate_digest()] =
-      candidate.old_weight_version();
+  voted_candidate_by_scope_[vote_scope] = candidate.candidate_digest();
   return vote;
 }
 
@@ -342,39 +373,60 @@ std::unique_ptr<WeightUpdateCert> WeightUpdateController::HandleVote(
 bool WeightUpdateController::HandleCert(const WeightUpdateCert& cert) {
   std::lock_guard<std::mutex> lk(mutex_);
   PruneStaleStateLocked();
-  if (!ValidateCandidateStructure(cert.candidate())) {
+  auto reject = [&](const char* reason) {
+    if (WeightUpdateTraceEnabled()) {
+      const CandidateWeightUpdate& candidate = cert.candidate();
+      LOG(ERROR) << "[WeightUpdateTrace] node=" << node_id_
+                 << " handle_cert_reject reason=" << reason
+                 << " digest=" << candidate.candidate_digest()
+                 << " old_version=" << candidate.old_weight_version()
+                 << " active_version="
+                 << (weight_schedule_ == nullptr
+                         ? 0
+                         : weight_schedule_->ActiveWeightVersion())
+                 << " activation=" << candidate.activation_view();
+    }
     return false;
+  };
+  if (!ValidateCandidateStructure(cert.candidate())) {
+    return reject("candidate_structure");
   }
   const std::string& digest = cert.candidate().candidate_digest();
-  if (accepted_cert_versions_.find(digest) != accepted_cert_versions_.end()) {
-    return false;
+  const VoteScopeKey cert_scope{cert.candidate().old_weight_root(),
+                                cert.candidate().old_weight_version()};
+  auto accepted_it = accepted_cert_by_scope_.find(cert_scope);
+  if (accepted_it != accepted_cert_by_scope_.end()) {
+    return reject(accepted_it->second == digest ? "duplicate"
+                                                : "duplicate_scope");
   }
   std::map<int, WeightUpdateVote> votes;
   for (const WeightUpdateVote& vote : cert.votes()) {
     if (!VerifyVoteForCandidate(vote, cert.candidate())) {
-      return false;
+      return reject("vote_invalid");
     }
     votes.emplace(vote.signer(), vote);
   }
   if (VoteWeight(votes, cert.candidate().old_weight_version()) <
       weight_schedule_->QuorumWeightForVersion(
           cert.candidate().old_weight_version())) {
-    return false;
+    return reject("quorum_weight");
   }
   std::vector<int> signers;
   for (const auto& entry : votes) {
     signers.push_back(entry.first);
   }
   if (cert.signer_bitmap() != BuildBitmap(signers, total_replicas_)) {
-    return false;
+    return reject("signer_bitmap");
   }
   if (!StageCandidateSchedule(cert.candidate())) {
-    return false;
+    return reject("stage_candidate");
   }
-  accepted_cert_versions_[digest] = cert.candidate().old_weight_version();
+  accepted_cert_by_scope_[cert_scope] = digest;
   pending_certs_[digest] = cert;
   recent_certs_[digest] = cert;
   candidates_by_digest_[digest] = cert.candidate();
+  emitted_cert_version_by_digest_[digest] =
+      cert.candidate().old_weight_version();
   return true;
 }
 
@@ -382,10 +434,15 @@ std::unique_ptr<WeightUpdateCert> WeightUpdateController::LatestCertForProposal(
     int view) const {
   std::lock_guard<std::mutex> lk(mutex_);
   const WeightUpdateCert* best = nullptr;
+  const int piggyback_lead_views = WeightUpdateCertPiggybackLeadViews();
   auto consider = [&](const WeightUpdateCert& cert) {
     const CandidateWeightUpdate& candidate = cert.candidate();
     const int activation_view = candidate.activation_view();
     const int epoch_views = std::max(candidate.leader_epoch_views(), 1);
+    if (view < activation_view &&
+        view + piggyback_lead_views < activation_view) {
+      return;
+    }
     if (view > activation_view + epoch_views) {
       return;
     }
@@ -552,6 +609,10 @@ bool WeightUpdateController::ValidateCandidateStructure(
       if (!AllowNoOpCandidateForExperiment()) {
         return false;
       }
+      const int min_start_view = AllowNoOpCandidateMinStartViewForExperiment();
+      if (candidate.window_start() < min_start_view) {
+        return false;
+      }
       if (AllowNoOpCandidateInitialVersionOnlyForExperiment() &&
           candidate.old_weight_version() != 0) {
         return false;
@@ -645,13 +706,23 @@ void WeightUpdateController::AbsorbPendingVotesLocked(
 }
 
 std::unique_ptr<WeightUpdateCert> WeightUpdateController::MaybeFormCert(
-    VoteBucket* bucket) const {
+    VoteBucket* bucket) {
   if (bucket == nullptr ||
       VoteWeight(bucket->votes, bucket->candidate.old_weight_version()) <
           weight_schedule_->QuorumWeightForVersion(
               bucket->candidate.old_weight_version())) {
     return nullptr;
   }
+  const std::string& digest = bucket->candidate.candidate_digest();
+  if (digest.empty()) {
+    return nullptr;
+  }
+  if (emitted_cert_version_by_digest_.find(digest) !=
+      emitted_cert_version_by_digest_.end()) {
+    return nullptr;
+  }
+  emitted_cert_version_by_digest_[digest] =
+      bucket->candidate.old_weight_version();
   std::vector<int> signers;
   signers.reserve(bucket->votes.size());
   std::unique_ptr<WeightUpdateCert> cert = std::make_unique<WeightUpdateCert>();

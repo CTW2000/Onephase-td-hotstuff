@@ -69,8 +69,6 @@ configure_td_hotstuff_reputation_pipeline() {
   export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=1
   export TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE=1
   export TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE=1
-  export TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE=1
-  export TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE=1
   export TD_HS_CONFLICTING_QC_DETECT_ENABLE=1
   export TD_HS_STRONG_FAULT_TARGET_WEIGHT=1
   # Soft-fault experiments need to converge inside one benchmark run. Good
@@ -96,8 +94,6 @@ clear_td_hotstuff_reputation_pipeline() {
   unset TD_HS_DOUBLE_VOTE_DETECT_ENABLE
   unset TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE
   unset TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE
-  unset TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE
-  unset TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE
   unset TD_HS_CONFLICTING_QC_DETECT_ENABLE
   unset TD_HS_STRONG_FAULT_TARGET_WEIGHT
   unset TD_HS_REPUTATION_DECAY_PER_EPOCH
@@ -160,6 +156,11 @@ run_single_experiment() {
 
   bash ./script/deploy_multi.sh "$config_file" 2>&1 | grep -E "(=== |Phase|deployed|started|ready|running)"
 
+  if [ "${BENCHMARK_PRE_START_SLEEP:-0}" -gt 0 ] 2>/dev/null; then
+    echo "  Waiting ${BENCHMARK_PRE_START_SLEEP}s for benchmark client channels to settle..."
+    sleep "$BENCHMARK_PRE_START_SLEEP"
+  fi
+
   echo "  Running benchmark..."
   for((i=1;;i++)); do
     cf=$PWD/config_out/client${i}.config
@@ -167,8 +168,8 @@ run_single_experiment() {
     env -u TD_HS_SILENT_LEADER_IDS -u TD_HS_SLOW_VOTE_IDS \
         -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS -u TD_HS_INVALID_QC_IDS -u TD_HS_LOW_DIVERSITY_QC_IDS -u TD_HS_LOW_DIVERSITY_TARGET_IDS -u TD_HS_LOW_DIVERSITY_REVIEWER_IDS -u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS \
         -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
-        -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS \
-        -u TD_HS_INVALID_TC_PROPOSAL_IDS \
+        \
+        \
         -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT \
         ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" 2>/dev/null
   done

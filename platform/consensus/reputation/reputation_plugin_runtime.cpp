@@ -76,10 +76,6 @@ std::string AuditStrongFaultType(StrongFaultType type) {
       return "invalid_qc_proposal";
     case StrongFaultType::kWeightUpdateVoteEquivocation:
       return "weight_update_vote_equivocation";
-    case StrongFaultType::kTimeoutVoteEquivocation:
-      return "timeout_vote_equivocation";
-    case StrongFaultType::kInvalidTcProposal:
-      return "invalid_tc_proposal";
     case StrongFaultType::kConflictingQc:
       return "conflicting_qc";
     case StrongFaultType::kUnknown:
@@ -921,8 +917,14 @@ void ReputationPluginRuntime::ProcessSignedWeightUpdateVoteEvidence(
       evidence.candidate_digest.empty() || !evidence.signature_verified) {
     return;
   }
-  const uint64_t window_index = static_cast<uint64_t>(evidence.activation_view) /
-                                options_.window_size_views;
+  const int observed_view =
+      evidence.view_or_round > 0 ? evidence.view_or_round
+                                 : evidence.activation_view;
+  const int latest_watermark = last_watermark_.load();
+  const int effective_view =
+      observed_view < latest_watermark ? latest_watermark : observed_view;
+  const uint64_t window_index =
+      static_cast<uint64_t>(effective_view) / options_.window_size_views;
   const int window_start =
       static_cast<int>(window_index * options_.window_size_views);
   const int window_end =
@@ -1026,6 +1028,9 @@ void ReputationPluginRuntime::ProcessWatermark(int view_or_round) {
   std::vector<std::pair<WindowKey, WindowBuffer>> ready;
   {
     std::lock_guard<std::mutex> lk(mutex_);
+    if (view_or_round > last_watermark_.load()) {
+      last_watermark_.store(view_or_round);
+    }
     for (auto it = windows_.begin(); it != windows_.end();) {
       if (view_or_round >= it->second.end_view) {
         ready.emplace_back(it->first, std::move(it->second));

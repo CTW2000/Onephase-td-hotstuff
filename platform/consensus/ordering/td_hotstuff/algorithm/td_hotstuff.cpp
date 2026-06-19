@@ -14,7 +14,6 @@
 
 #include "common/utils/utils.h"
 #include "platform/consensus/ordering/td_hotstuff/algorithm/certificate_verifier.h"
-#include "platform/consensus/ordering/td_hotstuff/algorithm/weight_update_experiment.h"
 
 namespace resdb {
 namespace td_hotstuff {
@@ -64,17 +63,6 @@ std::vector<int64_t> InitialReplicaWeightsForMode(
     return replica_weights;
   }
   return std::vector<int64_t>(std::max(total_replicas, 0), 100);
-}
-
-std::string JoinInt64Vector(const std::vector<int64_t>& values) {
-  std::ostringstream oss;
-  for (size_t i = 0; i < values.size(); ++i) {
-    if (i > 0) {
-      oss << ',';
-    }
-    oss << values[i];
-  }
-  return oss.str();
 }
 
 std::string TimeoutCertDigest(const TimeoutCert& cert) {
@@ -167,10 +155,6 @@ std::string ProposalHashForExperiment(const Proposal& proposal) {
   return SignatureVerifier::CalculateHash(data);
 }
 
-bool WeightUpdateTraceEnabled() {
-  return EnvFlagEnabled("TD_HS_WEIGHT_UPDATE_TRACE");
-}
-
 }  // namespace
 
 HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
@@ -215,8 +199,27 @@ HotStuff::HotStuff(int id, int f, int total_num, SignatureVerifier* verifier,
         id_, total_num_, std::move(reputation_options));
     reputation_adapter_->Start();
     if (WeightUpdateEnabled()) {
-      weight_update_controller_ = std::make_unique<WeightUpdateController>(
-          id_, total_num_, weight_schedule_, verifier_, leader_schedule_);
+      CertifiedWeightUpdatePipeline::Callbacks callbacks;
+      callbacks.current_view = [this] { return CurrentView(); };
+      callbacks.broadcast_candidate =
+          [this](const CandidateWeightUpdate& candidate) {
+            if (broadcast_call_ != nullptr) {
+              broadcast_call_(MessageType::CandidateWeightUpdateMsg, candidate);
+            }
+          };
+      callbacks.broadcast_vote = [this](const WeightUpdateVote& vote) {
+        if (broadcast_call_ != nullptr) {
+          broadcast_call_(MessageType::WeightUpdateVoteMsg, vote);
+        }
+      };
+      callbacks.broadcast_cert = [this](const WeightUpdateCert& cert) {
+        if (broadcast_call_ != nullptr) {
+          broadcast_call_(MessageType::WeightUpdateCertMsg, cert);
+        }
+      };
+      weight_update_pipeline_ = std::make_unique<CertifiedWeightUpdatePipeline>(
+          id_, total_num_, weight_schedule_, leader_schedule_, verifier_,
+          reputation_adapter_.get(), std::move(callbacks));
     }
   }
   async_verifier_ = std::make_unique<AsyncConsensusVerifier>(
@@ -322,10 +325,6 @@ bool HotStuff::IsInvalidQcForExperiment() const {
   return EnvFlagEnabled("TD_HS_INVALID_QC");
 }
 
-bool HotStuff::IsWeightUpdateVoteEquivocationForExperiment() const {
-  return EnvFlagEnabled("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION");
-}
-
 std::unique_ptr<Proposal> HotStuff::MakeConflictingProposalForExperiment(
     const Proposal& proposal) {
   if (verifier_ == nullptr) {
@@ -404,7 +403,6 @@ bool HotStuff::Ready() {
 }
 
 void HotStuff::StartNewRound() {
-  MaybeActivateReadyWeightUpdatesAfterViewAdvance();
   std::unique_lock<std::mutex> lk(n_mutex_);
   has_sent_ = false;
   vote_cv_.notify_one();
@@ -538,7 +536,9 @@ void HotStuff::AsyncTimeout() {
 
 void HotStuff::AsyncSend() {
   while (!IsStop()) {
-    MaybeActivateReadyWeightUpdatesAfterViewAdvance();
+    if (weight_update_pipeline_ != nullptr) {
+      weight_update_pipeline_->MaybeActivateReadyAfterViewAdvance();
+    }
     {
       std::unique_lock<std::mutex> lk(n_mutex_);
       vote_cv_.wait_for(lk, std::chrono::microseconds(1000),
@@ -547,7 +547,9 @@ void HotStuff::AsyncSend() {
     if (IsStop()) {
       return;
     }
-    MaybeActivateReadyWeightUpdatesAfterViewAdvance();
+    if (weight_update_pipeline_ != nullptr) {
+      weight_update_pipeline_->MaybeActivateReadyAfterViewAdvance();
+    }
     if (!Ready()) {
       continue;
     }
@@ -559,12 +561,14 @@ void HotStuff::AsyncSend() {
     {
       std::unique_lock<std::mutex> lk(mutex_);
       const int view = proposal_manager_->CurrentView();
-      ActivateReadyWeightUpdates(view);
-      if (!IsLeader(view) || has_sent_) {
-      } else if (IsSilentLeaderForExperiment()) {
+      if (weight_update_pipeline_ != nullptr) {
+        weight_update_pipeline_->ActivateReady(view);
+      }
+      const bool is_leader = IsLeader(view);
+      if (is_leader && !has_sent_ && IsSilentLeaderForExperiment()) {
         silent_leader = true;
         has_sent_ = true;
-      } else {
+      } else if (is_leader && !has_sent_) {
         std::vector<std::unique_ptr<Transaction>> txns =
             TakeTransactionsForView(view, batch_size_);
         if (txns.empty() &&
@@ -573,10 +577,12 @@ void HotStuff::AsyncSend() {
           no_transactions_ready = true;
         } else {
           std::unique_ptr<WeightUpdateCert> weight_update_cert;
-          if (weight_update_controller_ != nullptr) {
-            weight_update_cert = weight_update_controller_->LatestCertForProposal(view);
+          if (weight_update_pipeline_ != nullptr) {
+            weight_update_cert =
+                weight_update_pipeline_->LatestCertForProposal(view);
           }
-          proposal = proposal_manager_->GenerateProposal(txns, weight_update_cert.get());
+          proposal =
+              proposal_manager_->GenerateProposal(txns, weight_update_cert.get());
           if (proposal != nullptr) {
             last_valid_proposal_view_ =
                 std::max(last_valid_proposal_view_, proposal->header().view());
@@ -599,7 +605,9 @@ void HotStuff::AsyncSend() {
     }
 
     if (proposal != nullptr) {
-      MaybeActivateReadyWeightUpdatesAfterViewAdvance();
+      if (weight_update_pipeline_ != nullptr) {
+        weight_update_pipeline_->MaybeActivateReadyAfterViewAdvance();
+      }
       const int proposal_view = proposal->header().view();
       const int active_leader = LeaderForView(proposal_view);
       if (proposal->sender() != active_leader) {
@@ -659,13 +667,17 @@ void HotStuff::AsyncWeightUpdates() {
   while (!IsStop() && !stop_weight_updates_.load()) {
     if (reputation_adapter_ != nullptr) {
       reputation_adapter_->AdvanceWatermark(CurrentView());
-      DrainCompletedWeightCandidates();
-      ActivateReadyWeightUpdates();
+    }
+    if (weight_update_pipeline_ != nullptr) {
+      weight_update_pipeline_->DrainCompletedCandidates();
+      weight_update_pipeline_->ActivateReady();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
-  DrainCompletedWeightCandidates();
-  ActivateReadyWeightUpdates();
+  if (weight_update_pipeline_ != nullptr) {
+    weight_update_pipeline_->DrainCompletedCandidates();
+    weight_update_pipeline_->ActivateReady();
+  }
 }
 
 void HotStuff::ProcessVerifiedConsensusEvent(VerifiedConsensusEvent event) {
@@ -693,8 +705,9 @@ bool HotStuff::ReceiveTransactionForView(std::unique_ptr<Transaction> txn,
   if (txn == nullptr) {
     return false;
   }
+  const int current_view = CurrentView();
   if (target_view <= 0) {
-    target_view = CurrentView();
+    target_view = current_view;
   }
   txn->set_reception_time(GetCurrentTime());
   txn->set_proposer(id_);
@@ -900,81 +913,6 @@ bool HotStuff::MaybeMakeSignedVoteEvidenceSnapshotLocked(
   return true;
 }
 
-bool HotStuff::MaybeMakeSignedWeightUpdateVoteEvidenceSnapshot(
-    const WeightUpdateVote& vote,
-    TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot* snapshot) const {
-  if (snapshot == nullptr || reputation_adapter_ == nullptr ||
-      !reputation_adapter_->WantsSignedWeightUpdateVoteEvidence() ||
-      verifier_ == nullptr || vote.signer() <= 0 ||
-      vote.old_weight_root().empty() || vote.activation_view() <= 0 ||
-      vote.candidate_digest().empty() ||
-      reputation_adapter_->IsPersistentStrongFaultValidator(vote.signer()) ||
-      !verifier_->VerifyMessage(WeightUpdateVotePayload(vote),
-                                vote.signature())) {
-    return false;
-  }
-  snapshot->local_node_id = id_;
-  snapshot->total_replicas = total_num_;
-  snapshot->validator_id = vote.signer();
-  snapshot->old_weight_root = vote.old_weight_root();
-  snapshot->old_weight_version = vote.old_weight_version();
-  snapshot->activation_view = vote.activation_view();
-  snapshot->candidate_digest = vote.candidate_digest();
-  snapshot->signature_verified = true;
-  snapshot->active_weight_root = vote.old_weight_root();
-  snapshot->active_weight_version = vote.old_weight_version();
-  return true;
-}
-
-void HotStuff::MaybeBroadcastConflictingWeightUpdateVoteForExperiment(
-    const WeightUpdateVote& vote) {
-  if (!IsWeightUpdateVoteEquivocationForExperiment()) {
-    return;
-  }
-  std::unique_ptr<WeightUpdateVote> conflicting =
-      MakeConflictingWeightUpdateVoteForExperiment(vote, id_, verifier_);
-  if (conflicting == nullptr) {
-    LOG(ERROR) << "failed to build TD-Hotstuff conflicting weight update vote";
-    return;
-  }
-  BroadcastWeightUpdateVote(*conflicting);
-}
-
-void HotStuff::MaybeBroadcastRemoteCandidateWeightUpdateVoteEquivocationForExperiment(
-    const CandidateWeightUpdate& candidate) {
-  if (!IsWeightUpdateVoteEquivocationForExperiment() || verifier_ == nullptr ||
-      candidate.candidate_digest().empty()) {
-    return;
-  }
-  const std::string key =
-      candidate.old_weight_root() + "|" +
-      std::to_string(candidate.old_weight_version()) + "|" +
-      std::to_string(candidate.activation_view()) + "|" +
-      candidate.candidate_digest();
-  {
-    std::lock_guard<std::mutex> lk(
-        experiment_weight_update_vote_mutex_);
-    if (!experiment_weight_update_vote_digests_.insert(key).second) {
-      return;
-    }
-  }
-  std::unique_ptr<WeightUpdateVote> vote =
-      MakeWeightUpdateVoteForCandidateDigestForExperiment(
-          candidate, candidate.candidate_digest(), id_, verifier_);
-  if (vote == nullptr) {
-    LOG(ERROR) << "failed to build TD-Hotstuff remote-candidate "
-                  "weight update vote for WUE";
-    return;
-  }
-  if (WeightUpdateTraceEnabled()) {
-    LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-               << " remote_candidate_experiment_vote digest="
-               << vote->candidate_digest();
-  }
-  BroadcastWeightUpdateVote(*vote);
-  MaybeBroadcastConflictingWeightUpdateVoteForExperiment(*vote);
-}
-
 bool HotStuff::MaybeMakeInvalidQcProposalEvidenceSnapshotLocked(
     const Proposal& proposal, const ProposalValidationResult& validation,
     TdHotstuffInvalidQcProposalEvidenceSnapshot* snapshot) {
@@ -1048,7 +986,8 @@ bool HotStuff::MaybeFormQcLocked(
   const int64_t quorum_weight =
       weight_schedule_ != nullptr ? weight_schedule_->QuorumWeightForView(view)
                                   : quorum_weight_;
-  if (CertificateWeight(certs, view) < quorum_weight) {
+  const int64_t cert_weight = CertificateWeight(certs, view);
+  if (cert_weight < quorum_weight) {
     return false;
   }
 
@@ -1138,17 +1077,20 @@ bool HotStuff::MaybeFormQcLocked(
     proposal_manager_->AddQC(std::move(qc));
     StartNewRound();
     qc_formed_ = proposal_received_ = false;
+    return true;
   } else {
     formed_qc_ = std::move(qc);
+    return false;
   }
-  return true;
 }
 
 bool HotStuff::ReceiveCertificate(std::unique_ptr<Certificate> cert) {
   if (cert == nullptr) {
     return false;
   }
-  if (async_verifier_ != nullptr && async_verifier_->TrySubmitVote(&cert)) {
+  const bool submitted_async =
+      async_verifier_ != nullptr && async_verifier_->TrySubmitVote(&cert);
+  if (submitted_async) {
     return true;
   }
   {
@@ -1184,8 +1126,9 @@ bool HotStuff::ProcessVerifiedCertificate(std::unique_ptr<Certificate> cert) {
       const bool crossed_quorum =
           previous_weight < quorum_weight && current_weight >= quorum_weight;
       if (view >= local_current_view && crossed_quorum) {
-        MarkTimeoutProgressLocked();
-        MaybeFormQcLocked(view, hash);
+        if (MaybeFormQcLocked(view, hash)) {
+          MarkTimeoutProgressLocked();
+        }
       }
     }
   }
@@ -1276,315 +1219,20 @@ void HotStuff::BroadcastTimeoutCert(const TimeoutCert& cert) {
   }
 }
 
-void HotStuff::BroadcastCandidateWeightUpdate(
-    const CandidateWeightUpdate& candidate) {
-  if (broadcast_call_ != nullptr) {
-    broadcast_call_(MessageType::CandidateWeightUpdateMsg, candidate);
-  }
-}
-
-void HotStuff::BroadcastWeightUpdateVote(const WeightUpdateVote& vote) {
-  if (broadcast_call_ != nullptr) {
-    broadcast_call_(MessageType::WeightUpdateVoteMsg, vote);
-  }
-}
-
-void HotStuff::BroadcastWeightUpdateCert(const WeightUpdateCert& cert) {
-  if (broadcast_call_ != nullptr) {
-    broadcast_call_(MessageType::WeightUpdateCertMsg, cert);
-  }
-}
-
-void HotStuff::DrainCompletedWeightCandidates() {
-  if (reputation_adapter_ == nullptr || weight_update_controller_ == nullptr ||
-      weight_schedule_ == nullptr) {
-    return;
-  }
-  const uint64_t active_version = weight_schedule_->ActiveWeightVersion();
-  if (weight_candidate_inflight_ &&
-      weight_candidate_inflight_version_ == active_version) {
-    return;
-  }
-  if (weight_candidate_inflight_ &&
-      weight_candidate_inflight_version_ != active_version) {
-    weight_candidate_inflight_ = false;
-  }
-  std::vector<resdb::consensus::reputation::ReputationCandidate> candidates =
-      reputation_adapter_->TakeCompletedCandidates();
-  std::sort(candidates.begin(), candidates.end(),
-            [](const auto& lhs, const auto& rhs) {
-              return std::tie(lhs.old_weight_version, lhs.activation_view,
-                              lhs.start_view, lhs.end_view,
-                              lhs.candidate_digest_hex) <
-                     std::tie(rhs.old_weight_version, rhs.activation_view,
-                              rhs.start_view, rhs.end_view,
-                              rhs.candidate_digest_hex);
-            });
-  for (const auto& candidate : candidates) {
-    if (candidate.old_weight_version != active_version) {
-      continue;
-    }
-    CandidateWeightUpdate message = ToCandidateWeightUpdate(candidate);
-    std::unique_ptr<WeightUpdateCert> buffered_cert;
-    if (!weight_update_controller_->AddLocalCandidateAndMaybeCert(
-            candidate, &buffered_cert)) {
-      continue;
-    }
-    if (WeightUpdateTraceEnabled()) {
-      LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-                 << " drain_candidate digest=" << message.candidate_digest()
-                 << " activation=" << message.activation_view();
-    }
-    if (buffered_cert != nullptr) {
-      if (WeightUpdateTraceEnabled()) {
-        LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-                   << " buffered_cert digest="
-                   << buffered_cert->candidate().candidate_digest();
-      }
-      if (weight_update_controller_->HandleCert(*buffered_cert)) {
-        RefreshPendingWeightActivationView();
-        weight_candidate_inflight_ = true;
-        weight_candidate_inflight_version_ = active_version;
-      }
-      BroadcastWeightUpdateCert(*buffered_cert);
-      ActivateReadyWeightUpdates();
-      return;
-    }
-    BroadcastCandidateWeightUpdate(message);
-    std::unique_ptr<WeightUpdateVote> vote =
-        weight_update_controller_->HandleCandidate(message);
-    if (vote == nullptr) {
-      weight_candidate_inflight_ = false;
-      continue;
-    }
-    if (WeightUpdateTraceEnabled()) {
-      LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-                 << " local_vote digest=" << vote->candidate_digest()
-                 << " signer=" << vote->signer();
-    }
-    weight_candidate_inflight_ = true;
-    weight_candidate_inflight_version_ = active_version;
-    std::unique_ptr<WeightUpdateCert> cert =
-        weight_update_controller_->HandleVote(*vote);
-    BroadcastWeightUpdateVote(*vote);
-    MaybeBroadcastConflictingWeightUpdateVoteForExperiment(*vote);
-    if (cert != nullptr) {
-      if (WeightUpdateTraceEnabled()) {
-        LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-                   << " local_cert digest="
-                   << cert->candidate().candidate_digest();
-      }
-      weight_update_controller_->HandleCert(*cert);
-      RefreshPendingWeightActivationView();
-      BroadcastWeightUpdateCert(*cert);
-      ActivateReadyWeightUpdates();
-    }
-    return;
-  }
-}
-
-void HotStuff::ActivateReadyWeightUpdates() {
-  ActivateReadyWeightUpdates(CurrentView());
-}
-
-void HotStuff::RefreshPendingWeightActivationView() {
-  const int pending_view =
-      weight_update_controller_ == nullptr
-          ? 0
-          : weight_update_controller_->EarliestPendingActivationView();
-  next_pending_weight_activation_view_.store(pending_view,
-                                             std::memory_order_release);
-}
-
-void HotStuff::MaybeActivateReadyWeightUpdatesAfterViewAdvance() {
-  const int pending_view = next_pending_weight_activation_view_.load(
-      std::memory_order_acquire);
-  if (pending_view <= 0 || proposal_manager_ == nullptr) {
-    return;
-  }
-  const int current_view = proposal_manager_->CurrentView();
-  if (current_view >= pending_view) {
-    ActivateReadyWeightUpdates(current_view);
-  }
-}
-
-void HotStuff::ActivateReadyWeightUpdates(int view) {
-  if (weight_update_controller_ == nullptr || weight_schedule_ == nullptr) {
-    return;
-  }
-  int pending_view = next_pending_weight_activation_view_.load(
-      std::memory_order_acquire);
-  if (pending_view <= 0) {
-    RefreshPendingWeightActivationView();
-    pending_view = next_pending_weight_activation_view_.load(
-        std::memory_order_acquire);
-  }
-  if (pending_view <= 0 || view < pending_view) {
-    return;
-  }
-  if (weight_update_controller_->ActivateReady(view) &&
-      reputation_adapter_ != nullptr) {
-    resdb::consensus::reputation::ReputationWeightSnapshot snapshot;
-    snapshot.weights = weight_schedule_->ActiveWeights();
-    snapshot.weight_root_hex = weight_schedule_->ActiveWeightRoot();
-    snapshot.weight_version = weight_schedule_->ActiveWeightVersion();
-    if (leader_schedule_ != nullptr) {
-      snapshot.leader_selection_enabled = leader_schedule_->enabled();
-      snapshot.leader_weights = leader_schedule_->ActiveLeaderWeights();
-      snapshot.leader_weight_root_hex = leader_schedule_->ActiveLeaderWeightRoot();
-      snapshot.leader_weight_version = leader_schedule_->ActiveLeaderVersion();
-      snapshot.leader_eligible_min_weight =
-          leader_schedule_->ActiveEligibleMinWeight();
-    }
-    const std::vector<int64_t> active_leader_weights =
-        leader_schedule_ == nullptr ? snapshot.weights
-                                    : leader_schedule_->ActiveLeaderWeights();
-    LOG(INFO) << "TD-Hotstuff activated certified weights view:" << view
-              << " weight_version:" << snapshot.weight_version
-              << " active_weights:[" << JoinInt64Vector(snapshot.weights) << "]"
-              << " leader_weights:[" << JoinInt64Vector(active_leader_weights)
-              << "]";
-    std::cout << "activated TD-Hotstuff weight update version:"
-              << snapshot.weight_version << " view:" << view
-              << " active_weights:[" << JoinInt64Vector(snapshot.weights) << "]"
-              << " leader_weights:[" << JoinInt64Vector(active_leader_weights)
-              << "]" << std::endl;
-    reputation_adapter_->UpdateActiveWeights(std::move(snapshot));
-    weight_candidate_inflight_ = false;
-  }
-  RefreshPendingWeightActivationView();
-}
-
-void HotStuff::ProcessWeightUpdateCertFromProposal(
-    const WeightUpdateCert& cert, int view) {
-  if (weight_update_controller_ == nullptr) {
-    return;
-  }
-  weight_update_controller_->HandleCert(cert);
-  if (WeightUpdateTraceEnabled()) {
-    LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-               << " proposal_cert digest="
-               << cert.candidate().candidate_digest() << " view=" << view;
-  }
-  RefreshPendingWeightActivationView();
-  ActivateReadyWeightUpdates(view);
-}
-
 bool HotStuff::ReceiveCandidateWeightUpdate(
     std::unique_ptr<CandidateWeightUpdate> candidate) {
-  if (candidate == nullptr || weight_update_controller_ == nullptr) {
-    return false;
-  }
-  std::unique_ptr<WeightUpdateCert> observed_cert;
-  if (!weight_update_controller_->ObserveCandidate(*candidate,
-                                                   &observed_cert)) {
-    if (WeightUpdateTraceEnabled()) {
-      LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-                 << " observe_candidate_reject digest="
-                 << candidate->candidate_digest();
-    }
-    return false;
-  }
-  if (WeightUpdateTraceEnabled()) {
-    LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-               << " observe_candidate digest="
-               << candidate->candidate_digest();
-  }
-  if (observed_cert != nullptr) {
-    if (WeightUpdateTraceEnabled()) {
-      LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-                 << " observed_cert digest="
-                 << observed_cert->candidate().candidate_digest();
-    }
-    if (weight_update_controller_->HandleCert(*observed_cert)) {
-      RefreshPendingWeightActivationView();
-    }
-    BroadcastWeightUpdateCert(*observed_cert);
-    ActivateReadyWeightUpdates();
-    return true;
-  }
-  std::unique_ptr<WeightUpdateVote> vote =
-      weight_update_controller_->HandleCandidate(*candidate);
-  if (vote == nullptr) {
-    if (WeightUpdateTraceEnabled()) {
-      LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-                 << " no_local_vote_for_candidate digest="
-                 << candidate->candidate_digest();
-    }
-    MaybeBroadcastRemoteCandidateWeightUpdateVoteEquivocationForExperiment(
-        *candidate);
-    return false;
-  }
-  if (WeightUpdateTraceEnabled()) {
-    LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-               << " remote_candidate_local_vote digest="
-               << vote->candidate_digest();
-  }
-  std::unique_ptr<WeightUpdateCert> cert =
-      weight_update_controller_->HandleVote(*vote);
-  BroadcastWeightUpdateVote(*vote);
-  MaybeBroadcastConflictingWeightUpdateVoteForExperiment(*vote);
-  if (cert != nullptr) {
-    if (WeightUpdateTraceEnabled()) {
-      LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-                 << " remote_candidate_cert digest="
-                 << cert->candidate().candidate_digest();
-    }
-    if (weight_update_controller_->HandleCert(*cert)) {
-      RefreshPendingWeightActivationView();
-    }
-    BroadcastWeightUpdateCert(*cert);
-    ActivateReadyWeightUpdates();
-  }
-  return true;
+  return weight_update_pipeline_ != nullptr &&
+         weight_update_pipeline_->ReceiveCandidate(std::move(candidate));
 }
 
 bool HotStuff::ReceiveWeightUpdateVote(std::unique_ptr<WeightUpdateVote> vote) {
-  if (vote == nullptr || weight_update_controller_ == nullptr) {
-    return false;
-  }
-  TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot evidence_snapshot;
-  const bool has_evidence_snapshot =
-      MaybeMakeSignedWeightUpdateVoteEvidenceSnapshot(*vote, &evidence_snapshot);
-  if (has_evidence_snapshot && reputation_adapter_ != nullptr) {
-    reputation_adapter_->TryRecordSignedWeightUpdateVote(
-        std::move(evidence_snapshot));
-  }
-  std::unique_ptr<WeightUpdateCert> cert =
-      weight_update_controller_->HandleVote(*vote);
-  if (WeightUpdateTraceEnabled()) {
-    LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-               << " receive_vote signer=" << vote->signer()
-               << " digest=" << vote->candidate_digest()
-               << " cert=" << (cert == nullptr ? 0 : 1);
-  }
-  if (cert != nullptr) {
-    if (weight_update_controller_->HandleCert(*cert)) {
-      RefreshPendingWeightActivationView();
-    }
-    BroadcastWeightUpdateCert(*cert);
-    ActivateReadyWeightUpdates();
-  }
-  return true;
+  return weight_update_pipeline_ != nullptr &&
+         weight_update_pipeline_->ReceiveVote(std::move(vote));
 }
 
 bool HotStuff::ReceiveWeightUpdateCert(std::unique_ptr<WeightUpdateCert> cert) {
-  if (cert == nullptr || weight_update_controller_ == nullptr) {
-    return false;
-  }
-  const bool accepted = weight_update_controller_->HandleCert(*cert);
-  if (WeightUpdateTraceEnabled()) {
-    LOG(ERROR) << "[WeightUpdateTrace] node=" << id_
-               << " receive_cert digest="
-               << cert->candidate().candidate_digest()
-               << " accepted=" << (accepted ? 1 : 0);
-  }
-  if (accepted) {
-    RefreshPendingWeightActivationView();
-    BroadcastWeightUpdateCert(*cert);
-    ActivateReadyWeightUpdates();
-  }
-  return accepted;
+  return weight_update_pipeline_ != nullptr &&
+         weight_update_pipeline_->ReceiveCert(std::move(cert));
 }
 
 bool HotStuff::ApplyTimeoutCertLocked(const TimeoutCert& cert) {
@@ -1639,12 +1287,12 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     if (id_ == NextLeader(view)) {
       proposal_received_ = true;
     }
-
     if (proposal->header().has_timeout_cert()) {
       ApplyTimeoutCertLocked(proposal->header().timeout_cert());
     }
-    if (proposal->header().has_weight_update_cert()) {
-      ProcessWeightUpdateCertFromProposal(
+    if (proposal->header().has_weight_update_cert() &&
+        weight_update_pipeline_ != nullptr) {
+      weight_update_pipeline_->ProcessCertFromProposal(
           proposal->header().weight_update_cert(), view);
     }
     const int local_current_view = proposal_manager_->CurrentView();
@@ -1675,7 +1323,9 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
             proposal->header().qc(), &proposal_qc_snapshot);
       }
       std::string safety_error;
-      if (!proposal_manager_->RecordVote(*proposal, &safety_error)) {
+      const bool recorded_vote =
+          proposal_manager_->RecordVote(*proposal, &safety_error);
+      if (!recorded_vote) {
         LOG_EVERY_N(WARNING, 1000) << "proposal vote safety rejected: " << safety_error;
         proposal_valid = false;
       }
@@ -1730,6 +1380,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
   }
   MaybeDelayVoteForExperiment();
   const int send_result = SendMessage(MessageType::Vote, *cert, next_leader);
+  (void)send_result;
   if (conflicting_cert != nullptr) {
     SendMessage(MessageType::Vote, *conflicting_cert, next_leader);
   }

@@ -41,6 +41,9 @@ RESULT_COOLDOWN_SECONDS = float(os.environ.get("TD_HS_RESULT_COOLDOWN_SECONDS", 
 RESULT_COOLDOWN_SAMPLE_RATIO = float(
     os.environ.get("TD_HS_RESULT_COOLDOWN_SAMPLE_RATIO", "0.05"))
 
+def open_log_text(path):
+    return open(path, encoding="utf-8", errors="replace")
+
 class ParsedLog:
     def __init__(self):
         self.tps = []
@@ -344,7 +347,7 @@ def find_global_threshold_time(files, bad_node_count, eligible_min_weight,
     threshold_time = None
     for file in files:
         try:
-            fh = open(file)
+            fh = open_log_text(file)
         except OSError:
             continue
         with fh:
@@ -430,7 +433,7 @@ def read_tps(file, threshold_time=None, bad_node_count=None,
     txn_records = []
     latency_records = []
     local_threshold_active = False
-    with open(file) as f:
+    with open_log_text(file) as f:
         for line in f:
             parsed_time = parse_timestamp(line)
             if parsed_time is not None:

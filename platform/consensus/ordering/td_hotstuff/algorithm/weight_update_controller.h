@@ -6,6 +6,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "common/crypto/signature_verifier.h"
@@ -69,6 +70,16 @@ class WeightUpdateController {
     std::map<int, WeightUpdateVote> votes;
   };
 
+  struct VoteScopeKey {
+    std::string old_weight_root;
+    uint64_t old_weight_version = 0;
+
+    bool operator<(const VoteScopeKey& other) const {
+      return std::tie(old_weight_root, old_weight_version) <
+             std::tie(other.old_weight_root, other.old_weight_version);
+    }
+  };
+
   CandidateKey KeyForCandidate(const CandidateWeightUpdate& candidate) const;
   bool ValidateCandidateStructure(const CandidateWeightUpdate& candidate) const;
   bool VerifyVoteForCandidate(const WeightUpdateVote& vote,
@@ -81,7 +92,7 @@ class WeightUpdateController {
                      uint64_t old_weight_version) const;
   void AbsorbPendingVotesLocked(const std::string& digest,
                                 const CandidateWeightUpdate& candidate);
-  std::unique_ptr<WeightUpdateCert> MaybeFormCert(VoteBucket* bucket) const;
+  std::unique_ptr<WeightUpdateCert> MaybeFormCert(VoteBucket* bucket);
   bool StageCandidateSchedule(const CandidateWeightUpdate& candidate) const;
   void PruneStaleStateLocked();
 
@@ -98,8 +109,9 @@ class WeightUpdateController {
   std::map<std::string, std::map<int, WeightUpdateVote>> pending_votes_by_digest_;
   std::map<std::string, WeightUpdateCert> pending_certs_;
   std::map<std::string, WeightUpdateCert> recent_certs_;
-  std::map<std::string, uint64_t> accepted_cert_versions_;
-  std::map<std::string, uint64_t> voted_digests_;
+  std::map<VoteScopeKey, std::string> accepted_cert_by_scope_;
+  std::map<VoteScopeKey, std::string> voted_candidate_by_scope_;
+  std::map<std::string, uint64_t> emitted_cert_version_by_digest_;
 };
 
 }  // namespace td_hotstuff

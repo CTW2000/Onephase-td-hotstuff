@@ -48,8 +48,6 @@ struct ReputationConfig {
   bool double_vote_detection_enabled = false;
   bool invalid_qc_proposal_detection_enabled = false;
   bool weight_update_vote_equivocation_detection_enabled = false;
-  bool timeout_vote_equivocation_detection_enabled = false;
-  bool invalid_tc_proposal_detection_enabled = false;
   bool conflicting_qc_detection_enabled = false;
   int64_t strong_fault_target_weight = 1;
   bool peertrust_enabled = false;
@@ -157,34 +155,12 @@ struct InvalidQcProposalEvidence {
 struct SignedWeightUpdateVoteEvidence {
   std::string protocol_id;
   int validator_id = 0;
+  int view_or_round = 0;
   std::string old_weight_root;
   uint64_t old_weight_version = 0;
   int activation_view = 0;
   std::string candidate_digest;
   bool signature_verified = false;
-  std::string active_weight_root;
-  uint64_t weight_version = 0;
-};
-
-struct SignedTimeoutVoteEvidence {
-  std::string protocol_id;
-  int signer_id = 0;
-  int view_or_round = 0;
-  std::string high_qc_digest;
-  bool signature_verified = false;
-  std::string active_weight_root;
-  uint64_t weight_version = 0;
-};
-
-struct InvalidTcProposalEvidence {
-  std::string protocol_id;
-  int leader_id = 0;
-  int view_or_round = 0;
-  int slot_or_height = 0;
-  std::string proposal_hash;
-  bool proposal_signature_verified = false;
-  bool timeout_cert_verified = false;
-  std::string invalid_reason;
   std::string active_weight_root;
   uint64_t weight_version = 0;
 };
@@ -235,8 +211,6 @@ struct ReputationWindowInput {
   std::vector<SignedVoteEvidence> signed_vote_evidence;
   std::vector<InvalidQcProposalEvidence> invalid_qc_proposal_evidence;
   std::vector<SignedWeightUpdateVoteEvidence> signed_weight_update_vote_evidence;
-  std::vector<SignedTimeoutVoteEvidence> signed_timeout_vote_evidence;
-  std::vector<InvalidTcProposalEvidence> invalid_tc_proposal_evidence;
   std::vector<VerifiedQcArtifactEvidence> verified_qc_artifact_evidence;
   std::vector<int> prior_peertrust_leader_debt;
   std::vector<int> prior_sybil_graph_debt;
@@ -248,9 +222,7 @@ enum class StrongFaultType {
   kDoubleVote = 2,
   kInvalidQcProposal = 3,
   kWeightUpdateVoteEquivocation = 4,
-  kTimeoutVoteEquivocation = 5,
-  kInvalidTcProposal = 6,
-  kConflictingQc = 7,
+  kConflictingQc = 5,
 };
 
 struct StrongFaultRecord {

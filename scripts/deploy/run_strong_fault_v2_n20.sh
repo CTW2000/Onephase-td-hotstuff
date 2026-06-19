@@ -118,8 +118,8 @@ start_benchmark_clients() {
           -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS \
           -u TD_HS_INVALID_QC_IDS \
           -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
-          -u TD_HS_TIMEOUT_VOTE_EQUIVOCATION_IDS \
-          -u TD_HS_INVALID_TC_PROPOSAL_IDS \
+          \
+          \
           -u TD_HS_BAD_NODE_IDS -u TD_HS_BAD_NODE_COUNT \
           ${BAZEL_WORKSPACE_PATH}/bazel-bin/benchmark/protocols/pbft/kv_service_tools "$cf" \
           > /tmp/td_hs_kv_service_tools.out 2>&1
@@ -181,6 +181,10 @@ PYCHECK
 
 derive_bad_node_ids() {
   local count="$1"
+  if [ -n "${STRONG_FAULT_BAD_NODE_IDS_OVERRIDE:-}" ]; then
+    printf '%s' "${STRONG_FAULT_BAD_NODE_IDS_OVERRIDE}"
+    return
+  fi
   local ids=""
   for ((i=1; i<=count; i++)); do
     if [ -n "$ids" ]; then
@@ -190,6 +194,35 @@ derive_bad_node_ids() {
     fi
   done
   printf '%s' "$ids"
+}
+
+node_ip_for_id() {
+  local node_id="$1"
+  if [ "$node_id" -lt 1 ] || [ "$node_id" -gt "$N" ]; then
+    return 1
+  fi
+  local ips=($SERVERS)
+  local idx=$(( (node_id - 1) / 4 ))
+  printf '%s' "${ips[$idx]}"
+}
+
+arm_weight_update_vote_equivocation_nodes() {
+  local ids_csv="$1"
+  if [ "$ATTACK_IDS_ENV" != "TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS" ] ||
+     [ -z "$ids_csv" ]; then
+    return 0
+  fi
+  local ids=()
+  IFS=',' read -r -a ids <<< "$ids_csv"
+  local node_id ip
+  for node_id in "${ids[@]}"; do
+    ip=$(node_ip_for_id "$node_id") || continue
+    ssh -o StrictHostKeyChecking=no hyperchain@$ip \
+      "touch /home/hyperchain/resilientdb_app/${node_id}/td_hs_wue_trigger" \
+      2>/dev/null &
+  done
+  wait
+  echo "  Armed WUE trigger for nodes: $ids_csv"
 }
 
 run_single_experiment() {
@@ -230,8 +263,6 @@ generate_performance_server_conf($N)
   export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=0
   export TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE=0
   export TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE=0
-  export TD_HS_TIMEOUT_VOTE_EQUIVOCATION_DETECT_ENABLE=0
-  export TD_HS_INVALID_TC_PROPOSAL_DETECT_ENABLE=0
   export TD_HS_CONFLICTING_QC_DETECT_ENABLE=0
   if [ "${TD_HS_ALL_DETECTORS_ENABLE:-0}" = "1" ]; then
     td_hs_enable_all_detectors
@@ -247,11 +278,13 @@ generate_performance_server_conf($N)
   export TD_HS_LEADER_SELECTION_ENABLE=1
   export TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT=10
   export TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE=1
+  export TD_HS_BENCHMARK_RETRY_ENABLE="${TD_HS_BENCHMARK_RETRY_ENABLE:-1}"
+  export TD_HS_BENCHMARK_REQUEST_TIMEOUT_MS="${TD_HS_BENCHMARK_REQUEST_TIMEOUT_MS:-100}"
   export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1
   export TD_HS_EVIDENCE_ENABLE=0
   export TD_HS_TIMEOUT_ENABLE=1
   export TD_HS_TIMEOUT_MS=200
-  export TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS=20
+  export TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS="${TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS:-20}"
   export TD_HS_BAD_NODE_COUNT="$num_bad"
   export TD_HS_BAD_NODE_IDS="$bad_node_ids"
   if [ "$num_bad" -gt 0 ]; then
@@ -286,18 +319,23 @@ generate_performance_server_conf($N)
   : > "$BENCHMARK_TOOL_LOG"
   if ! start_benchmark_clients; then
     echo "  >> Benchmark client failed to enter sustained load."
-    kill_nodes
-    collect_logs
-    local fail_dir="$RESULT_DIR/logs_TD-Hotstuff_${RESULT_NAME}${num_bad}_attempt${cell_attempt}_benchmark_start_failed"
-    rm -rf "$fail_dir"
-    mkdir -p "$fail_dir"
-    cp result_* "$fail_dir"/ 2>/dev/null || true
-    cp "$BENCHMARK_TOOL_LOG" "$fail_dir"/ 2>/dev/null || true
-    if [ "$cell_attempt" -lt "$max_cell_attempts" ]; then
-      echo "  >> Retrying full cell deployment after benchmark-start failure."
-      continue
+    if [ "${BENCHMARK_REQUIRE_START_GATE:-0}" = "1" ]; then
+      kill_nodes
+      collect_logs
+      local fail_dir="$RESULT_DIR/logs_TD-Hotstuff_${RESULT_NAME}${num_bad}_attempt${cell_attempt}_benchmark_start_failed"
+      rm -rf "$fail_dir"
+      mkdir -p "$fail_dir"
+      cp result_* "$fail_dir"/ 2>/dev/null || true
+      cp "$BENCHMARK_TOOL_LOG" "$fail_dir"/ 2>/dev/null || true
+      if [ "$cell_attempt" -lt "$max_cell_attempts" ]; then
+        echo "  >> Retrying full cell deployment after benchmark-start failure."
+        continue
+      fi
+      return 1
     fi
-    return 1
+    echo "  >> Continuing; final result parser will reject unhealthy throughput."
+  else
+    arm_weight_update_vote_equivocation_nodes "$bad_node_ids"
   fi
 
   echo "  Sleeping ${SLEEP_TIME}s..."
@@ -331,12 +369,16 @@ generate_performance_server_conf($N)
     fi
     local keep_dir="$RESULT_DIR/logs_TD-Hotstuff_${RESULT_NAME}${num_bad}"
     rm -rf "$keep_dir"
-    mkdir -p "$keep_dir"
-    cp result_*_log "$keep_dir"/ 2>/dev/null || true
-    cp result_*_reputation.jsonl "$keep_dir"/ 2>/dev/null || true
-    cp result_*_qc_evidence.jsonl "$keep_dir"/ 2>/dev/null || true
-    cp "$BENCHMARK_TOOL_LOG" "$keep_dir"/ 2>/dev/null || true
-    echo "  >> Logs preserved in: $keep_dir"
+    if [ "${KEEP_EXPERIMENT_LOGS:-1}" = "1" ]; then
+      mkdir -p "$keep_dir"
+      cp result_*_log "$keep_dir"/ 2>/dev/null || true
+      cp result_*_reputation.jsonl "$keep_dir"/ 2>/dev/null || true
+      cp result_*_qc_evidence.jsonl "$keep_dir"/ 2>/dev/null || true
+      cp "$BENCHMARK_TOOL_LOG" "$keep_dir"/ 2>/dev/null || true
+      echo "  >> Logs preserved in: $keep_dir"
+    else
+      echo "  >> Logs discarded (KEEP_EXPERIMENT_LOGS=0)"
+    fi
     rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
     unset "$ATTACK_IDS_ENV"
     return 0

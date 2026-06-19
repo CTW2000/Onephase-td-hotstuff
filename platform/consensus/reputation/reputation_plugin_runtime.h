@@ -192,6 +192,7 @@ class ReputationPluginRuntime {
   std::set<int> persistent_strong_fault_validators_;
   std::ofstream audit_file_;
 
+  std::atomic<int> last_watermark_{0};
   std::atomic<uint64_t> queued_count_{0};
   std::atomic<uint64_t> dropped_count_{0};
   std::atomic<uint64_t> computed_window_count_{0};

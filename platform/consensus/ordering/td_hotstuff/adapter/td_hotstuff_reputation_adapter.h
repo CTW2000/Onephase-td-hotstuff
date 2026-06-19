@@ -2,8 +2,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
+#include <mutex>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "platform/consensus/reputation/reputation_plugin_runtime.h"
@@ -66,6 +70,7 @@ struct TdHotstuffSignedVoteEvidenceSnapshot {
 struct TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot {
   int local_node_id = 0;
   int total_replicas = 0;
+  int view = 0;
   int validator_id = 0;
   std::string old_weight_root;
   uint64_t old_weight_version = 0;
@@ -192,6 +197,10 @@ class TdHotstuffReputationAdapter {
   static std::shared_ptr<resdb::consensus::reputation::ReputationPluginRuntime>
   RuntimeFromOptions(int local_node_id, int total_replicas,
                      const TdHotstuffReputationAdapterOptions& options);
+  using SignedVoteKey = std::tuple<int, int, int>;
+  using SignedVoteDigestKey = std::tuple<int, int, int, std::string>;
+
+  void PruneSignedVoteConflictCacheLocked(int current_view);
 
   const int local_node_id_;
   const int total_replicas_;
@@ -202,6 +211,12 @@ class TdHotstuffReputationAdapter {
   bool invalid_qc_proposal_evidence_enabled_ = false;
   std::shared_ptr<resdb::consensus::reputation::ReputationPluginRuntime>
       runtime_;
+  std::mutex signed_vote_mutex_;
+  std::map<SignedVoteKey, TdHotstuffSignedVoteEvidenceSnapshot>
+      first_signed_vote_by_key_;
+  std::set<SignedVoteDigestKey> seen_signed_vote_digests_;
+  std::set<SignedVoteKey> emitted_signed_vote_conflicts_;
+  int signed_vote_prune_watermark_ = 0;
 };
 
 }  // namespace td_hotstuff

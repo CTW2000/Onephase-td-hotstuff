@@ -160,6 +160,34 @@ TEST(WeightUpdateControllerTest, AllowsNoOpLocalCandidateForExperiment) {
 }
 
 TEST(WeightUpdateControllerTest,
+     RejectsNoOpLocalCandidateBeforeConfiguredExperimentStartView) {
+  setenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE", "1", /*overwrite=*/1);
+  setenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_MIN_START_VIEW", "16",
+         /*overwrite=*/1);
+  auto schedule = std::make_shared<WeightSchedule>(
+      4, std::vector<int64_t>{1, 1, 1, 1});
+  MockSignatureVerifier verifier;
+  WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
+                                    schedule, &verifier);
+  auto early_candidate = NoOpCandidate();
+  auto late_candidate = NoOpCandidate();
+  late_candidate.window_index = 4;
+  late_candidate.start_view = 16;
+  late_candidate.end_view = 20;
+  late_candidate.activation_view = 24;
+  late_candidate.leader_epoch_start_view = 0;
+  late_candidate.leader_epoch_views = 0;
+  resdb::consensus::reputation::RecomputeReputationCandidateRoots(
+      &late_candidate);
+
+  EXPECT_FALSE(controller.AddLocalCandidate(early_candidate));
+  EXPECT_TRUE(controller.AddLocalCandidate(late_candidate));
+
+  unsetenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE");
+  unsetenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_MIN_START_VIEW");
+}
+
+TEST(WeightUpdateControllerTest,
      AllowsNoOpLocalCandidateOnlyForInitialVersionWhenConfigured) {
   setenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE", "1", /*overwrite=*/1);
   setenv("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY", "1",
@@ -267,6 +295,83 @@ TEST(WeightUpdateControllerTest, VotesOnlyForMatchingLocalCandidate) {
   EXPECT_EQ(controller.HandleCandidate(wrong_leader_root), nullptr);
 }
 
+TEST(WeightUpdateControllerTest,
+     VotesAtMostOnceForEachOldWeightRootAndVersion) {
+  auto schedule = std::make_shared<WeightSchedule>(
+      4, std::vector<int64_t>{1, 1, 1, 1});
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(_)).WillOnce(Return(SignatureFor(1)));
+  WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
+                                    schedule, &verifier);
+  auto first = Candidate();
+  auto second = Candidate();
+  second.window_index = 1;
+  second.start_view = 4;
+  second.end_view = 8;
+  second.activation_view = 12;
+  second.leader_epoch_start_view = 0;
+  second.leader_epoch_views = 0;
+  resdb::consensus::reputation::RecomputeReputationCandidateRoots(&second);
+  ASSERT_NE(first.candidate_digest_hex, second.candidate_digest_hex);
+  ASSERT_EQ(first.old_weight_root_hex, second.old_weight_root_hex);
+  ASSERT_EQ(first.old_weight_version, second.old_weight_version);
+
+  ASSERT_TRUE(controller.AddLocalCandidate(first));
+  std::unique_ptr<WeightUpdateVote> first_vote =
+      controller.HandleCandidate(CandidateMessage(first));
+  ASSERT_NE(first_vote, nullptr);
+  EXPECT_EQ(first_vote->candidate_digest(), first.candidate_digest_hex);
+
+  ASSERT_TRUE(controller.AddLocalCandidate(second));
+  EXPECT_EQ(controller.HandleCandidate(CandidateMessage(second)), nullptr);
+}
+
+TEST(WeightUpdateControllerTest,
+     AcceptsAtMostOneCertForEachOldWeightRootAndVersion) {
+  auto schedule = std::make_shared<WeightSchedule>(
+      4, std::vector<int64_t>{1, 1, 1, 1});
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+  WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
+                                    schedule, &verifier);
+  auto first = Candidate();
+  auto second = Candidate();
+  second.window_index = 1;
+  second.start_view = 4;
+  second.end_view = 8;
+  second.activation_view = 12;
+  second.leader_epoch_start_view = 0;
+  second.leader_epoch_views = 0;
+  resdb::consensus::reputation::RecomputeReputationCandidateRoots(&second);
+  ASSERT_NE(first.candidate_digest_hex, second.candidate_digest_hex);
+  ASSERT_EQ(first.old_weight_root_hex, second.old_weight_root_hex);
+  ASSERT_EQ(first.old_weight_version, second.old_weight_version);
+
+  auto make_cert =
+      [](const resdb::consensus::reputation::ReputationCandidate& candidate) {
+        WeightUpdateCert cert;
+        *cert.mutable_candidate() = CandidateMessage(candidate);
+        cert.set_signer_bitmap(std::string(1, static_cast<char>(0x07)));
+        cert.set_quorum_rule_id("old_weight_quorum_v1");
+        for (int signer : {1, 2, 3}) {
+          WeightUpdateVote* vote = cert.add_votes();
+          vote->set_signer(signer);
+          vote->set_old_weight_root(candidate.old_weight_root_hex);
+          vote->set_old_weight_version(candidate.old_weight_version);
+          vote->set_activation_view(candidate.activation_view);
+          vote->set_candidate_digest(candidate.candidate_digest_hex);
+          *vote->mutable_signature() = SignatureFor(signer);
+        }
+        return cert;
+      };
+
+  WeightUpdateCert first_cert = make_cert(first);
+  WeightUpdateCert second_cert = make_cert(second);
+  EXPECT_TRUE(controller.HandleCert(first_cert));
+  EXPECT_FALSE(controller.HandleCert(second_cert));
+  EXPECT_FALSE(controller.HandleCert(first_cert));
+}
+
 TEST(WeightUpdateControllerTest, RejectsLeaderEpochScheduleRootMismatch) {
   auto schedule = std::make_shared<WeightSchedule>(
       4, std::vector<int64_t>{1, 1, 1, 1});
@@ -361,6 +466,80 @@ TEST(WeightUpdateControllerTest, FormsCertAfterOldWeightQuorumVotes) {
   EXPECT_FALSE(cert->signer_bitmap().empty());
 }
 
+TEST(WeightUpdateControllerTest, EmitsCertOnlyOnceAfterQuorum) {
+  auto schedule =
+      std::make_shared<WeightSchedule>(4, std::vector<int64_t>{1, 1, 1, 1});
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(_)).WillOnce(Return(SignatureFor(1)));
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+  WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
+                                    schedule, &verifier);
+  auto candidate = Candidate();
+  CandidateWeightUpdate message = CandidateMessage(candidate);
+  controller.AddLocalCandidate(candidate);
+  ASSERT_NE(controller.HandleCandidate(message), nullptr);
+
+  std::unique_ptr<WeightUpdateCert> cert;
+  for (int signer : {1, 2, 3}) {
+    WeightUpdateVote vote;
+    vote.set_signer(signer);
+    vote.set_old_weight_root(candidate.old_weight_root_hex);
+    vote.set_old_weight_version(candidate.old_weight_version);
+    vote.set_activation_view(candidate.activation_view);
+    vote.set_candidate_digest(candidate.candidate_digest_hex);
+    *vote.mutable_signature() = SignatureFor(signer);
+    cert = controller.HandleVote(vote);
+  }
+  ASSERT_NE(cert, nullptr);
+
+  WeightUpdateVote extra_vote;
+  extra_vote.set_signer(4);
+  extra_vote.set_old_weight_root(candidate.old_weight_root_hex);
+  extra_vote.set_old_weight_version(candidate.old_weight_version);
+  extra_vote.set_activation_view(candidate.activation_view);
+  extra_vote.set_candidate_digest(candidate.candidate_digest_hex);
+  *extra_vote.mutable_signature() = SignatureFor(4);
+  EXPECT_EQ(controller.HandleVote(extra_vote), nullptr);
+  EXPECT_TRUE(controller.HandleCert(*cert));
+  EXPECT_EQ(controller.HandleVote(extra_vote), nullptr);
+}
+
+TEST(WeightUpdateControllerTest, AcceptedRemoteCertSuppressesLocalReemission) {
+  auto schedule =
+      std::make_shared<WeightSchedule>(4, std::vector<int64_t>{1, 1, 1, 1});
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+  WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
+                                    schedule, &verifier);
+  auto candidate = Candidate();
+  WeightUpdateCert cert;
+  *cert.mutable_candidate() = CandidateMessage(candidate);
+  cert.set_signer_bitmap(std::string(1, static_cast<char>(0x07)));
+  cert.set_quorum_rule_id("old_weight_quorum_v1");
+  for (int signer : {1, 2, 3}) {
+    WeightUpdateVote* vote = cert.add_votes();
+    vote->set_signer(signer);
+    vote->set_old_weight_root(candidate.old_weight_root_hex);
+    vote->set_old_weight_version(candidate.old_weight_version);
+    vote->set_activation_view(candidate.activation_view);
+    vote->set_candidate_digest(candidate.candidate_digest_hex);
+    *vote->mutable_signature() = SignatureFor(signer);
+  }
+  ASSERT_TRUE(controller.HandleCert(cert));
+
+  std::unique_ptr<WeightUpdateCert> emitted;
+  for (int signer : {1, 2, 3, 4}) {
+    WeightUpdateVote vote;
+    vote.set_signer(signer);
+    vote.set_old_weight_root(candidate.old_weight_root_hex);
+    vote.set_old_weight_version(candidate.old_weight_version);
+    vote.set_activation_view(candidate.activation_view);
+    vote.set_candidate_digest(candidate.candidate_digest_hex);
+    *vote.mutable_signature() = SignatureFor(signer);
+    emitted = controller.HandleVote(vote);
+    EXPECT_EQ(emitted, nullptr);
+  }
+}
 
 
 
@@ -590,6 +769,47 @@ TEST(WeightUpdateControllerTest,
       controller.LatestCertForProposal(candidate.activation_view + 1);
   ASSERT_NE(recent, nullptr);
   EXPECT_EQ(recent->candidate().candidate_digest(), candidate.candidate_digest_hex);
+}
+
+TEST(WeightUpdateControllerTest, LatestCertForProposalHonorsPiggybackLead) {
+  setenv("TD_HS_WEIGHT_UPDATE_CERT_PIGGYBACK_LEAD_VIEWS", "2",
+         /*overwrite=*/1);
+  auto schedule = std::make_shared<WeightSchedule>(
+      4, std::vector<int64_t>{1, 1, 1, 1});
+  auto leader_schedule = std::make_shared<LeaderSelectionSchedule>(
+      4, std::vector<int64_t>{1, 1, 1, 1}, /*enabled=*/true,
+      /*eligible_min_weight=*/10);
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, VerifyMessage(_, _)).WillRepeatedly(Return(true));
+  WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
+                                    schedule, &verifier, leader_schedule);
+  auto candidate = Candidate();
+  candidate.activation_view = 16;
+  candidate.leader_epoch_start_view = 0;
+  candidate.leader_epoch_views = 0;
+  resdb::consensus::reputation::RecomputeReputationCandidateRoots(&candidate);
+  WeightUpdateCert cert;
+  *cert.mutable_candidate() = CandidateMessage(candidate);
+  cert.set_signer_bitmap(std::string(1, static_cast<char>(0x07)));
+  cert.set_quorum_rule_id("old_weight_quorum_v1");
+  for (int signer : {1, 2, 3}) {
+    WeightUpdateVote* vote = cert.add_votes();
+    vote->set_signer(signer);
+    vote->set_old_weight_root(candidate.old_weight_root_hex);
+    vote->set_old_weight_version(candidate.old_weight_version);
+    vote->set_activation_view(candidate.activation_view);
+    vote->set_candidate_digest(candidate.candidate_digest_hex);
+    *vote->mutable_signature() = SignatureFor(signer);
+  }
+
+  ASSERT_TRUE(controller.HandleCert(cert));
+  EXPECT_EQ(controller.LatestCertForProposal(13), nullptr);
+  std::unique_ptr<WeightUpdateCert> near_activation =
+      controller.LatestCertForProposal(14);
+  ASSERT_NE(near_activation, nullptr);
+  EXPECT_EQ(near_activation->candidate().candidate_digest(),
+            candidate.candidate_digest_hex);
+  unsetenv("TD_HS_WEIGHT_UPDATE_CERT_PIGGYBACK_LEAD_VIEWS");
 }
 
 TEST(WeightUpdateControllerTest, InvalidCertDoesNotPoisonLaterValidCert) {

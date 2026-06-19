@@ -108,10 +108,12 @@ TdHotstuffInvalidQcProposalEvidenceSnapshot InvalidQcSnapshot(
 }
 
 TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot WeightUpdateVoteSnapshot(
-    int activation_view, int validator, const std::string& candidate_digest) {
+    int activation_view, int validator, const std::string& candidate_digest,
+    int observed_view = 1) {
   TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot snapshot;
   snapshot.local_node_id = 1;
   snapshot.total_replicas = 4;
+  snapshot.view = observed_view;
   snapshot.validator_id = validator;
   snapshot.old_weight_root = "old-root";
   snapshot.old_weight_version = 7;
@@ -331,6 +333,43 @@ TEST(TdHotstuffReputationAdapterTest, ConvertsVoteSnapshotToSignedVoteEvidence) 
 }
 
 TEST(TdHotstuffReputationAdapterTest,
+     SignedVoteEvidenceQueuesOnlyConflictPairs) {
+  TdHotstuffReputationAdapterOptions options = TestOptions(/*window_size=*/4);
+  options.initial_weights = {100, 100, 100, 100};
+  options.initial_weight_root = "old-root";
+  options.initial_weight_version = 7;
+  options.reputation_config.strong_fault_enabled = true;
+  options.reputation_config.double_vote_detection_enabled = true;
+  options.reputation_config.strong_fault_target_weight = 1;
+  options.signed_vote_evidence_enabled = true;
+  TdHotstuffReputationAdapter adapter(/*local_node_id=*/1, /*total_replicas=*/4,
+                                      options);
+  adapter.Start();
+
+  EXPECT_FALSE(adapter.TryRecordSignedVote(
+      VoteSnapshot(/*view=*/1, /*signer=*/2, "proposal-a")));
+  EXPECT_EQ(adapter.queued_count(), 0);
+  EXPECT_FALSE(adapter.TryRecordSignedVote(
+      VoteSnapshot(/*view=*/1, /*signer=*/2, "proposal-a")));
+  EXPECT_EQ(adapter.queued_count(), 0);
+
+  ASSERT_TRUE(adapter.TryRecordSignedVote(
+      VoteSnapshot(/*view=*/1, /*signer=*/2, "proposal-b")));
+  ASSERT_TRUE(adapter.AdvanceWatermark(4));
+
+  auto candidates = WaitForCandidates(&adapter, 1);
+  adapter.Stop();
+
+  ASSERT_EQ(candidates.size(), 1);
+  EXPECT_EQ(candidates[0].event_count, 2);
+  ASSERT_EQ(candidates[0].strong_faults.size(), 1);
+  EXPECT_EQ(candidates[0].strong_faults[0].type,
+            resdb::consensus::reputation::StrongFaultType::kDoubleVote);
+  EXPECT_EQ(candidates[0].next_weights,
+            (std::vector<int64_t>{100, 1, 100, 100}));
+}
+
+TEST(TdHotstuffReputationAdapterTest,
      ConvertsInvalidQcSnapshotToInvalidQcEvidence) {
   const TdHotstuffInvalidQcProposalEvidenceSnapshot snapshot =
       InvalidQcSnapshot(/*view=*/9, /*leader=*/3, "proposal-a");
@@ -353,12 +392,13 @@ TEST(TdHotstuffReputationAdapterTest,
      ConvertsWeightUpdateVoteSnapshotToSignedEvidence) {
   const TdHotstuffSignedWeightUpdateVoteEvidenceSnapshot snapshot =
       WeightUpdateVoteSnapshot(/*activation_view=*/64, /*validator=*/2,
-                               "candidate-a");
+                               "candidate-a", /*observed_view=*/32);
 
   const auto evidence = ToSignedWeightUpdateVoteEvidence(snapshot);
 
   EXPECT_EQ(evidence.protocol_id, "td_hotstuff");
   EXPECT_EQ(evidence.validator_id, 2);
+  EXPECT_EQ(evidence.view_or_round, 32);
   EXPECT_EQ(evidence.old_weight_root, "old-root");
   EXPECT_EQ(evidence.old_weight_version, 7);
   EXPECT_EQ(evidence.activation_view, 64);
