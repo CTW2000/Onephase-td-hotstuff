@@ -88,6 +88,26 @@ TestEvidence TimeoutEvidence(int view, int leader) {
   return event;
 }
 
+TestEvidence CertifyOnlyEvidence(int view, int leader) {
+  TestEvidence event;
+  event.is_leader_outcome = true;
+  event.leader_outcome.view_or_round = view;
+  event.leader_outcome.leader_id = leader;
+  event.leader_outcome.outcome_class = OutcomeClass::kCertifyOnly;
+  event.leader_outcome.artifact_digest = "certify-only-" + std::to_string(view);
+  return event;
+}
+
+TestEvidence CommittedLeaderEvidence(int view, int leader) {
+  TestEvidence event;
+  event.is_leader_outcome = true;
+  event.leader_outcome.view_or_round = view;
+  event.leader_outcome.leader_id = leader;
+  event.leader_outcome.outcome_class = OutcomeClass::kCommitted;
+  event.leader_outcome.artifact_digest = "commit-" + std::to_string(view);
+  return event;
+}
+
 ReputationWindowInput BuildWindowInput(
     int node_id, int total_replicas, uint64_t window_index,
     const std::vector<TestEvidence>& evidence,
@@ -740,6 +760,63 @@ TEST(ReputationAlgorithmTest, SingleTransientTimeoutDoesNotReduceLeaderRecovery)
   EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 0);
   EXPECT_GE(candidate.validators[1].vote_score, 40);
   EXPECT_EQ(candidate.validators[1].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest,
+     ExplicitTimeoutOutcomeDoesNotAffectLeaderPosteriorByDefault) {
+  ReputationConfig config = TestConfig();
+  config.min_leader_opportunities = 1;
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, {TimeoutEvidence(2, 2)}, {30, 30, 30, 30}, config,
+      "old-root", 0, 64);
+
+  EXPECT_EQ(candidate.validators[1].leader_dirichlet_timeout, 0);
+  EXPECT_EQ(candidate.validators[1].leader_score, 100);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+}
+
+TEST(ReputationAlgorithmTest,
+     DirichletLeaderPosteriorRanksCommitCertifyOnlyAndTimeout) {
+  ReputationConfig config = TestConfig();
+  config.leader_timeout_outcome_enabled = true;
+  config.leader_dirichlet_scoring_enabled = true;
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1,
+      {CommittedLeaderEvidence(1, 1), CertifyOnlyEvidence(2, 2),
+       TimeoutEvidence(3, 3)},
+      {30, 30, 30, 30}, config, "old-root", 0, 64);
+
+  EXPECT_GT(candidate.validators[0].leader_score,
+            candidate.validators[1].leader_score);
+  EXPECT_GT(candidate.validators[1].leader_score,
+            candidate.validators[2].leader_score);
+  EXPECT_GT(candidate.validators[1].leader_score, 0);
+  EXPECT_LT(candidate.validators[1].leader_score, 100);
+}
+
+TEST(ReputationAlgorithmTest,
+     ScheduledLeaderMissesBecomeDirichletTimeoutMass) {
+  ReputationConfig config = TestConfig();
+  config.leader_dirichlet_scoring_enabled = true;
+  config.min_leader_opportunities = 3;
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 4, 1, evidence, {100, 100, 100, 100}, config, "old-root", 0, 64,
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
+
+  EXPECT_GT(candidate.validators[1].leader_dirichlet_timeout, 0);
+  EXPECT_EQ(candidate.validators[1].leader_dirichlet_commit, 0);
+  EXPECT_LT(candidate.validators[1].leader_score,
+            candidate.validators[0].leader_score);
+  EXPECT_GT(candidate.validators[1].leader_score, 0);
+  EXPECT_LT(candidate.leader_weights[1], candidate.leader_weights[0]);
 }
 
 TEST(ReputationAlgorithmTest, SilentLeaderLosesLeaderRecovery) {

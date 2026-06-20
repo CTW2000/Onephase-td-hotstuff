@@ -21,6 +21,8 @@ enum class OutcomeClass {
   kNone = 0,
   kCertified = 1,
   kTimeoutOrViewChange = 2,
+  kCommitted = 3,
+  kCertifyOnly = 4,
 };
 
 struct ReputationConfig {
@@ -31,6 +33,14 @@ struct ReputationConfig {
   int64_t max_weight = 100;
   uint64_t min_decay_opportunities = 1;
   int vote_beta_decay_per_mille = 900;
+  int leader_dirichlet_decay_per_mille = 900;
+  int leader_dirichlet_alpha_commit = 2;
+  int leader_dirichlet_alpha_certify_only = 1;
+  int leader_dirichlet_alpha_timeout = 1;
+  int leader_certify_only_score = 70;
+  int leader_timeout_score = 0;
+  bool leader_timeout_outcome_enabled = false;
+  bool leader_dirichlet_scoring_enabled = false;
   bool multiplicative_weight_formula_enabled = true;
   int stake_exponent_tau_per_mille = 1000;
   int stake_factor_min_per_mille = 1000;
@@ -74,6 +84,12 @@ struct ParticipationBetaCounter {
   uint64_t failure = 0;
 };
 
+struct LeaderDirichletCounter {
+  uint64_t commit = 0;
+  uint64_t certify_only = 0;
+  uint64_t timeout = 0;
+};
+
 struct ValidatorReputation {
   int validator_id = 0;
   uint64_t opportunities = 0;
@@ -88,6 +104,9 @@ struct ValidatorReputation {
   int direct_penalty_factor_per_mille = 1000;
   uint64_t leader_certified_count = 0;
   uint64_t leader_opportunity_count = 0;
+  uint64_t leader_dirichlet_commit = 0;
+  uint64_t leader_dirichlet_certify_only = 0;
+  uint64_t leader_dirichlet_timeout = 0;
   int leader_score = 100;
   int leader_diversity_score = 100;
   int peertrust_score = 100;
@@ -207,6 +226,7 @@ struct ReputationWindowInput {
   std::vector<int> stake_factors_per_mille;
   std::vector<int> identity_factors_per_mille;
   std::vector<ParticipationBetaCounter> prior_vote_beta_counters;
+  std::vector<LeaderDirichletCounter> prior_leader_dirichlet_counters;
   std::vector<SignedProposalEvidence> signed_proposal_evidence;
   std::vector<SignedVoteEvidence> signed_vote_evidence;
   std::vector<InvalidQcProposalEvidence> invalid_qc_proposal_evidence;

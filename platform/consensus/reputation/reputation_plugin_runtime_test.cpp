@@ -937,7 +937,7 @@ TEST(ReputationPluginRuntimeTest,
             first_candidates[0].validators[0].next_weight);
 }
 
-TEST(ReputationPluginRuntimeTest, DrainsOnlyEarliestCandidatePerWeightVersion) {
+TEST(ReputationPluginRuntimeTest, DrainsLatestCandidatePerWeightVersion) {
   ReputationPluginRuntime runtime(RuntimeOptions());
   runtime.Start();
 
@@ -950,7 +950,7 @@ TEST(ReputationPluginRuntimeTest, DrainsOnlyEarliestCandidatePerWeightVersion) {
   runtime.Stop();
 
   ASSERT_EQ(candidates.size(), 1);
-  EXPECT_EQ(candidates[0].window_index, 0);
+  EXPECT_EQ(candidates[0].window_index, 1);
   EXPECT_EQ(candidates[0].old_weight_version, 0);
   EXPECT_EQ(runtime.computed_window_count(), 2);
 }

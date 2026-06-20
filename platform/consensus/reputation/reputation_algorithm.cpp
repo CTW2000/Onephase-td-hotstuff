@@ -261,8 +261,23 @@ int VoteBetaDecayPerMille(const ReputationConfig& config) {
   return std::max(0, std::min(1000, config.vote_beta_decay_per_mille));
 }
 
+int LeaderDirichletDecayPerMille(const ReputationConfig& config) {
+  return std::max(0, std::min(1000, config.leader_dirichlet_decay_per_mille));
+}
+
 uint64_t ScaledObservationCount(uint64_t count) {
   return count * kVoteBetaCounterScale;
+}
+
+uint64_t DecayLeaderDirichletCounter(uint64_t counter,
+                                     const ReputationConfig& config) {
+  const int decay_per_mille = LeaderDirichletDecayPerMille(config);
+  if (counter == 0 || decay_per_mille == 0) {
+    return 0;
+  }
+  return (counter * static_cast<uint64_t>(decay_per_mille) +
+          kVoteBetaCounterScale / 2) /
+         kVoteBetaCounterScale;
 }
 
 uint64_t DecayVoteBetaCounter(uint64_t counter, const ReputationConfig& config) {
@@ -299,6 +314,56 @@ void UpdateVoteBetaCounters(ValidatorReputation* validator,
       ScaledObservationCount(misses);
   validator->vote_score = VoteScoreFromBetaCounters(
       validator->vote_beta_success, validator->vote_beta_failure);
+}
+
+int UpdateLeaderDirichletCounters(
+    ValidatorReputation* validator, const ReputationConfig& config,
+    uint64_t certify_only_observations, uint64_t timeout_observations) {
+  if (validator == nullptr) {
+    return 100;
+  }
+  const uint64_t commit_observations = validator->leader_certified_count;
+  uint64_t timeout_total = timeout_observations;
+  const uint64_t observed_outcomes =
+      commit_observations + certify_only_observations + timeout_total;
+  if (validator->leader_opportunity_count > observed_outcomes) {
+    timeout_total += validator->leader_opportunity_count - observed_outcomes;
+  }
+  validator->leader_dirichlet_commit =
+      DecayLeaderDirichletCounter(validator->leader_dirichlet_commit, config) +
+      ScaledObservationCount(commit_observations);
+  validator->leader_dirichlet_certify_only =
+      DecayLeaderDirichletCounter(validator->leader_dirichlet_certify_only,
+                                  config) +
+      ScaledObservationCount(certify_only_observations);
+  validator->leader_dirichlet_timeout =
+      DecayLeaderDirichletCounter(validator->leader_dirichlet_timeout, config) +
+      ScaledObservationCount(timeout_total);
+  LeaderDirichletCounter counter;
+  counter.commit = validator->leader_dirichlet_commit;
+  counter.certify_only = validator->leader_dirichlet_certify_only;
+  counter.timeout = validator->leader_dirichlet_timeout;
+  if (validator->leader_opportunity_count > 0 &&
+      validator->leader_certified_count ==
+          validator->leader_opportunity_count &&
+      counter.certify_only == 0 && counter.timeout == 0) {
+    return 100;
+  }
+  return LeaderDirichletScore(counter, config);
+}
+
+void CountLeaderOutcomeOpportunity(
+    int view_or_round, int leader, bool has_scheduled_leader_counts,
+    std::set<std::pair<int, int>>* seen_leader_opportunities,
+    ReputationCandidate* candidate) {
+  if (candidate == nullptr || seen_leader_opportunities == nullptr ||
+      leader < 1 || leader > candidate->total_replicas) {
+    return;
+  }
+  if (!has_scheduled_leader_counts &&
+      seen_leader_opportunities->insert({view_or_round, leader}).second) {
+    ++candidate->validators[leader - 1].leader_opportunity_count;
+  }
 }
 
 int CoreRecoveryCreditForScore(int score, int max_recovery_per_epoch) {
@@ -721,8 +786,13 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
     const bool had_vote_history =
         validator.vote_beta_success > 0 || validator.vote_beta_failure > 0;
     UpdateVoteBetaCounters(&validator, config);
-    validator.leader_score = LeaderCertifiedScore(
-        validator.leader_certified_count, validator.leader_opportunity_count);
+    const int dirichlet_leader_score =
+        UpdateLeaderDirichletCounters(&validator, config, 0, 0);
+    validator.leader_score =
+        config.leader_dirichlet_scoring_enabled
+            ? dirichlet_leader_score
+            : LeaderCertifiedScore(validator.leader_certified_count,
+                                   validator.leader_opportunity_count);
     int recovery_score = validator.vote_score;
     const bool carryover_decay =
         validator.opportunities == 0 &&
@@ -850,6 +920,14 @@ ReputationCandidate ComputeReputationCandidate(
       validator.vote_beta_success = input.prior_vote_beta_counters[i].success;
       validator.vote_beta_failure = input.prior_vote_beta_counters[i].failure;
     }
+    if (i < static_cast<int>(input.prior_leader_dirichlet_counters.size())) {
+      validator.leader_dirichlet_commit =
+          input.prior_leader_dirichlet_counters[i].commit;
+      validator.leader_dirichlet_certify_only =
+          input.prior_leader_dirichlet_counters[i].certify_only;
+      validator.leader_dirichlet_timeout =
+          input.prior_leader_dirichlet_counters[i].timeout;
+    }
     if (config.peertrust_enabled &&
         i < static_cast<int>(input.prior_peertrust_leader_debt.size())) {
       validator.peertrust_leader_debt = std::max(
@@ -908,6 +986,10 @@ ReputationCandidate ComputeReputationCandidate(
       std::max(total_replicas, 0), 100);
   std::vector<bool> peertrust_has_credible_public_choice(
       std::max(total_replicas, 0), false);
+  std::vector<uint64_t> leader_certify_only_observations(
+      std::max(total_replicas, 0), 0);
+  std::vector<uint64_t> leader_timeout_observations(
+      std::max(total_replicas, 0), 0);
 
   uint64_t legacy_selected_signer_slots = 0;
   uint64_t legacy_certificate_event_count = 0;
@@ -926,6 +1008,33 @@ ReputationCandidate ComputeReputationCandidate(
   for (const CoreEvidenceEvent& event : ordered_events) {
     const int leader = event.leader_id;
     const int diversity_leader = leader;
+
+    if (leader >= 1 && leader <= total_replicas &&
+        event.signer_bitmap.empty()) {
+      if (event.outcome_class == OutcomeClass::kCommitted) {
+        CountLeaderOutcomeOpportunity(event.view_or_round, leader,
+                                      has_scheduled_leader_counts,
+                                      &seen_leader_opportunities, &candidate);
+        ++candidate.validators[leader - 1].leader_certified_count;
+        continue;
+      }
+      if (event.outcome_class == OutcomeClass::kCertifyOnly) {
+        CountLeaderOutcomeOpportunity(event.view_or_round, leader,
+                                      has_scheduled_leader_counts,
+                                      &seen_leader_opportunities, &candidate);
+        ++leader_certify_only_observations[leader - 1];
+        continue;
+      }
+      if (event.outcome_class == OutcomeClass::kTimeoutOrViewChange) {
+        if (config.leader_timeout_outcome_enabled) {
+          CountLeaderOutcomeOpportunity(event.view_or_round, leader,
+                                        has_scheduled_leader_counts,
+                                        &seen_leader_opportunities, &candidate);
+          ++leader_timeout_observations[leader - 1];
+        }
+        continue;
+      }
+    }
 
     if (event.outcome_class != OutcomeClass::kCertified ||
         event.signer_bitmap.empty()) {
@@ -1377,19 +1486,32 @@ ReputationCandidate ComputeReputationCandidate(
     }
 
     const uint64_t leader_opportunities = validator.leader_opportunity_count;
+    const uint64_t certify_only_observations =
+        idx >= 0 && idx < static_cast<int>(leader_certify_only_observations.size())
+            ? leader_certify_only_observations[idx]
+            : 0;
+    const uint64_t timeout_observations =
+        idx >= 0 && idx < static_cast<int>(leader_timeout_observations.size())
+            ? leader_timeout_observations[idx]
+            : 0;
+    const int dirichlet_leader_score = UpdateLeaderDirichletCounters(
+        &validator, config, certify_only_observations, timeout_observations);
     const int certified_leader_score = LeaderCertifiedScore(
         validator.leader_certified_count, leader_opportunities);
+    const int raw_leader_score = config.leader_dirichlet_scoring_enabled
+                                     ? dirichlet_leader_score
+                                     : certified_leader_score;
     const bool has_enough_leader_opportunities =
         leader_opportunities >= config.min_leader_opportunities;
     const bool has_repeated_uncertified_leader_opportunities =
         leader_opportunities >= kMinNoCertifiedLeaderOpportunities &&
-        validator.leader_certified_count == 0 && certified_leader_score < 50;
+        validator.leader_certified_count == 0 && raw_leader_score < 50;
     const bool has_leader_recovery_evidence =
         config.leader_recovery_enabled &&
         (has_enough_leader_opportunities ||
          has_repeated_uncertified_leader_opportunities);
     validator.leader_score =
-        has_leader_recovery_evidence ? certified_leader_score : 100;
+        has_leader_recovery_evidence ? raw_leader_score : 100;
     const bool low_leader_diversity_gate =
         config.leader_recovery_enabled && has_credible_available_signer_evidence &&
         validator.leader_certified_count > 0 &&
@@ -1623,7 +1745,7 @@ ReputationCandidate ComputeReputationCandidate(
         validator.current_weight <= config.leader_eligible_min_weight;
     const bool has_good_leader_reentry_evidence =
         leader_opportunities >= config.min_leader_opportunities &&
-        certified_leader_score >= 95;
+        validator.leader_score >= 95;
     const bool leader_reentry_bonus_allowed =
         !at_leader_reentry_boundary || has_good_leader_reentry_evidence;
     const int64_t peertrust_soft_floor = std::max<int64_t>(

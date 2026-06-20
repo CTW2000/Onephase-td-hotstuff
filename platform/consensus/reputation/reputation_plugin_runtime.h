@@ -184,6 +184,9 @@ class ReputationPluginRuntime {
   std::map<std::pair<std::string, uint64_t>,
            std::vector<ParticipationBetaCounter>>
       prior_vote_beta_counters_;
+  std::map<std::pair<std::string, uint64_t>,
+           std::vector<LeaderDirichletCounter>>
+      prior_leader_dirichlet_counters_;
   std::map<std::pair<std::string, uint64_t>, std::vector<int>>
       prior_peertrust_leader_debt_;
   std::map<WindowKey, WindowBuffer> windows_;

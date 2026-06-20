@@ -7,6 +7,20 @@
 namespace resdb {
 namespace consensus {
 namespace reputation {
+namespace {
+
+constexpr uint64_t kLeaderDirichletCounterScale = 1000;
+
+int BoundLeaderScore(int value) {
+  return std::max(0, std::min(100, value));
+}
+
+uint64_t ScaledLeaderAlpha(int alpha) {
+  return static_cast<uint64_t>(std::max(0, alpha)) *
+         kLeaderDirichletCounterScale;
+}
+
+}  // namespace
 
 int VoteScore(uint64_t inclusions, uint64_t opportunities) {
   const uint64_t numerator = 100 * (1 + inclusions);
@@ -22,6 +36,27 @@ int LeaderCertifiedScore(uint64_t certified_count,
   return std::max(
       0, std::min(100, RoundedDivide(certified_count * 100,
                                      leader_opportunities)));
+}
+
+int LeaderDirichletScore(const LeaderDirichletCounter& counter,
+                         const ReputationConfig& config) {
+  const uint64_t commit =
+      counter.commit + ScaledLeaderAlpha(config.leader_dirichlet_alpha_commit);
+  const uint64_t certify_only = counter.certify_only +
+                                ScaledLeaderAlpha(
+                                    config.leader_dirichlet_alpha_certify_only);
+  const uint64_t timeout =
+      counter.timeout + ScaledLeaderAlpha(config.leader_dirichlet_alpha_timeout);
+  const uint64_t total = commit + certify_only + timeout;
+  if (total == 0) {
+    return 100;
+  }
+  const uint64_t numerator =
+      commit * 100 +
+      certify_only * static_cast<uint64_t>(BoundLeaderScore(
+                         config.leader_certify_only_score)) +
+      timeout * static_cast<uint64_t>(BoundLeaderScore(config.leader_timeout_score));
+  return BoundLeaderScore(static_cast<int>(RoundedDivide(numerator, total)));
 }
 
 uint64_t FairExpectedSignerOpportunities(uint64_t selected_signer_slots,

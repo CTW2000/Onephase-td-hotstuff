@@ -34,6 +34,9 @@ std::string MetricCanonical(const ReputationCandidate& candidate) {
         << validator.direct_penalty_factor_per_mille << ':'
         << validator.leader_certified_count << ':'
         << validator.leader_opportunity_count << ':'
+        << validator.leader_dirichlet_commit << ':'
+        << validator.leader_dirichlet_certify_only << ':'
+        << validator.leader_dirichlet_timeout << ':'
         << validator.leader_score << ':' << validator.leader_diversity_score
         << ':' << validator.peertrust_score << ':'
         << validator.reviewer_credibility_score << ':'
@@ -75,7 +78,10 @@ std::string ReputationCanonical(const ReputationCandidate& candidate) {
         << validator.community_context_score << ':'
         << validator.reviewer_entropy_score << ':'
         << validator.cross_leader_independence_score << ':'
-        << validator.reviewer_overuse_score << ':' << validator.feedback_count;
+        << validator.reviewer_overuse_score << ':' << validator.feedback_count
+        << ':' << validator.leader_dirichlet_commit << ':'
+        << validator.leader_dirichlet_certify_only << ':'
+        << validator.leader_dirichlet_timeout;
     out << ':' << validator.sybil_rank_score << ':' << validator.sybil_cut_score
         << ':' << validator.sybil_graph_score << ':'
         << validator.sybil_graph_debt << ':'

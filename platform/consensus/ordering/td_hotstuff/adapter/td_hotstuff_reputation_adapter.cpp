@@ -193,6 +193,31 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.reputation_config.vote_beta_decay_per_mille = PositiveIntFromEnv(
       "TD_HS_REPUTATION_VOTE_BETA_DECAY_PER_MILLE",
       options.reputation_config.vote_beta_decay_per_mille);
+  options.reputation_config.leader_dirichlet_decay_per_mille = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_LEADER_DIRICHLET_DECAY_PER_MILLE",
+      options.reputation_config.leader_dirichlet_decay_per_mille);
+  options.reputation_config.leader_dirichlet_alpha_commit = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_LEADER_DIRICHLET_ALPHA_COMMIT",
+      options.reputation_config.leader_dirichlet_alpha_commit);
+  options.reputation_config.leader_dirichlet_alpha_certify_only =
+      PositiveIntFromEnv(
+          "TD_HS_REPUTATION_LEADER_DIRICHLET_ALPHA_CERTIFY_ONLY",
+          options.reputation_config.leader_dirichlet_alpha_certify_only);
+  options.reputation_config.leader_dirichlet_alpha_timeout = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_LEADER_DIRICHLET_ALPHA_TIMEOUT",
+      options.reputation_config.leader_dirichlet_alpha_timeout);
+  options.reputation_config.leader_certify_only_score = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_LEADER_CERTIFY_ONLY_SCORE",
+      options.reputation_config.leader_certify_only_score);
+  options.reputation_config.leader_timeout_score = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_LEADER_TIMEOUT_SCORE",
+      options.reputation_config.leader_timeout_score);
+  options.reputation_config.leader_timeout_outcome_enabled = BoolFromEnv(
+      "TD_HS_REPUTATION_LEADER_TIMEOUT_OUTCOME_ENABLE",
+      options.reputation_config.leader_timeout_outcome_enabled);
+  options.reputation_config.leader_dirichlet_scoring_enabled = BoolFromEnv(
+      "TD_HS_REPUTATION_LEADER_DIRICHLET_SCORING_ENABLE",
+      options.reputation_config.leader_dirichlet_scoring_enabled);
   options.reputation_config.multiplicative_weight_formula_enabled = BoolFromEnv(
       "TD_HS_REPUTATION_MULTIPLICATIVE_WEIGHT_ENABLE",
       options.reputation_config.multiplicative_weight_formula_enabled);
