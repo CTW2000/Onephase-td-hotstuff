@@ -1262,6 +1262,55 @@ TEST(ReputationAlgorithmTest, PeerTrustAllGoodRotatingFeedbackStaysHigh) {
   EXPECT_EQ(candidate.validators[0].next_weight, 30);
 }
 
+
+TEST(ReputationAlgorithmTest,
+     PeerTrustRepeatedCliqueFromBroadAvailableSetCreatesDebt) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  config.decay_per_epoch = 2;
+  config.max_recovery_per_epoch = 2;
+  const std::string all_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+  const std::vector<int> clique = {1, 2, 3, 4, 5, 6, 7,
+                                   8, 9, 10, 11, 12, 13, 14};
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, BitmapFromVector(clique, 20),
+                                   all_available));
+  }
+  for (int view = 9; view <= 12; ++view) {
+    evidence.push_back(CertifiedQc(
+        view, 1, BitmapFromVector(ConsecutiveModuloSigners(view, 14, 20), 20),
+        all_available));
+  }
+  for (int view = 13; view <= 24; ++view) {
+    evidence.push_back(CertifiedQc(
+        view, 2, BitmapFromVector(ConsecutiveModuloSigners(view, 14, 20), 20),
+        all_available));
+  }
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 100), config,
+      "old-root", 0, 64);
+
+  const ValidatorReputation& clique_leader = candidate.validators[0];
+  const ValidatorReputation& rotating_leader = candidate.validators[1];
+  EXPECT_GT(clique_leader.feedback_count, 0);
+  EXPECT_GT(rotating_leader.feedback_count, 0);
+  EXPECT_LE(clique_leader.peertrust_score, config.peertrust_debt_trigger_score);
+  EXPECT_LT(clique_leader.community_context_score,
+            rotating_leader.community_context_score);
+  EXPECT_GT(rotating_leader.peertrust_score, 95);
+  EXPECT_EQ(clique_leader.peertrust_leader_debt,
+            config.peertrust_debt_increment);
+  EXPECT_LT(clique_leader.next_weight, rotating_leader.next_weight);
+  EXPECT_GT(clique_leader.next_weight, config.peertrust_soft_min_weight);
+  EXPECT_EQ(clique_leader.strong_fault_count, 0);
+  EXPECT_EQ(clique_leader.penalty_points, 0);
+}
+
 TEST(ReputationAlgorithmTest,
      PeerTrustQuorumSizedAvailabilityDoesNotCreateDebt) {
   ReputationConfig config = TestConfig();
@@ -1404,7 +1453,7 @@ TEST(ReputationAlgorithmTest,
 }
 
 TEST(ReputationAlgorithmTest,
-     PeerTrustLowScoreMovesHighWeightDirectlyToSoftFloor) {
+     PeerTrustLowScoreDecaysHighWeightGradually) {
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = true;
   const std::string all_available =
@@ -1426,10 +1475,49 @@ TEST(ReputationAlgorithmTest,
 
   EXPECT_EQ(candidate.validators[0].peertrust_score, 0);
   EXPECT_EQ(candidate.validators[1].peertrust_score, 0);
+  EXPECT_LT(candidate.validators[0].next_weight, 100);
+  EXPECT_LT(candidate.validators[1].next_weight, 100);
+  EXPECT_GT(candidate.validators[0].next_weight,
+            config.peertrust_soft_min_weight);
+  EXPECT_GT(candidate.validators[1].next_weight,
+            config.peertrust_soft_min_weight);
   EXPECT_EQ(candidate.validators[0].next_weight,
-            config.peertrust_soft_min_weight);
+            100 - config.decay_per_epoch);
   EXPECT_EQ(candidate.validators[1].next_weight,
-            config.peertrust_soft_min_weight);
+            100 - config.decay_per_epoch);
+  EXPECT_EQ(candidate.validators[14].next_weight, 100);
+}
+
+TEST(ReputationAlgorithmTest,
+     PeerTrustDebtSoftlyReducesRecoveryForHealthyVoter) {
+  ReputationConfig config = TestConfig();
+  config.peertrust_enabled = true;
+  config.peertrust_debt_trigger_score = 85;
+  const std::string all_available =
+      Bitmap({1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+              11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+             20);
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 8; ++view) {
+    evidence.push_back(CertifiedQc(view, 1, all_available, all_available));
+  }
+  std::vector<int> prior_peertrust_debt(20, 0);
+  prior_peertrust_debt[0] = 20;
+
+  const ReputationCandidate candidate = ComputeCandidate(
+      1, 20, 1, evidence, std::vector<int64_t>(20, 100), config,
+      "old-root", 0, 64, {}, {}, {}, {}, {}, {}, {},
+      prior_peertrust_debt);
+
+  const ValidatorReputation& target = candidate.validators[0];
+  EXPECT_EQ(target.peertrust_score, 100);
+  EXPECT_EQ(target.peertrust_leader_debt,
+            20 - config.peertrust_debt_recovery);
+  EXPECT_EQ(target.decay_applied, config.decay_per_epoch);
+  EXPECT_LT(target.next_weight, 100);
+  EXPECT_GT(target.next_weight, config.peertrust_soft_min_weight);
+  EXPECT_EQ(target.strong_fault_count, 0);
+  EXPECT_EQ(target.penalty_points, 0);
   EXPECT_EQ(candidate.validators[14].next_weight, 100);
 }
 
@@ -1628,7 +1716,8 @@ TEST(ReputationAlgorithmTest,
               candidate.validators[19].community_context_score);
     EXPECT_LT(candidate.validators[leader - 1].peertrust_score,
               candidate.validators[19].peertrust_score);
-    EXPECT_EQ(candidate.validators[leader - 1].next_weight, 30);
+    EXPECT_LT(candidate.validators[leader - 1].next_weight, 30);
+    EXPECT_GT(candidate.validators[leader - 1].next_weight, config.min_weight);
   }
   EXPECT_EQ(candidate.validators[19].next_weight, 30);
 }

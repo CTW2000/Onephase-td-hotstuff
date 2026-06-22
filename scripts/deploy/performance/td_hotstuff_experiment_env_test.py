@@ -150,12 +150,21 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("td_hs_wue_trigger", body)
         self.assertIn("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE", shared_env_block)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_DEBT_INCREMENT", shared_env_block)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_DEBT_RECOVERY", shared_env_block)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_DEBT_MAX", shared_env_block)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_DEBT_TRIGGER_SCORE", shared_env_block)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_SOFT_MIN_WEIGHT", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_SYBIL_GRAPH_ENABLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_SYBIL_GRAPH_DEBT_INCREMENT", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_MIN_CANDIDATE_QCS", shared_env_block)
         self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_CANDIDATE", shared_env_block)
         self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_INITIAL_VERSION_ONLY", shared_env_block)
         self.assertIn("TD_HS_WEIGHT_UPDATE_ALLOW_NOOP_MIN_START_VIEW", shared_env_block)
+        self.assertIn("TD_HS_STRONG_FAULT_ATTACK_START_VIEW", shared_env_block)
+        self.assertIn("TD_HS_DOUBLE_PROPOSAL_START_VIEW", shared_env_block)
+        self.assertIn("TD_HS_DOUBLE_VOTE_START_VIEW", shared_env_block)
+        self.assertIn("TD_HS_INVALID_QC_START_VIEW", shared_env_block)
         self.assertIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_START_VIEW", shared_env_block)
         self.assertIn("TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_ON_CANDIDATE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_VOTE_BETA_DECAY_PER_MILLE", shared_env_block)
@@ -220,9 +229,31 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
             'TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS="${TD_HS_TIMEOUT_EMPTY_PROPOSAL_VIEWS:-512}"',
             body,
         )
-        self.assertIn('TD_HS_REPUTATION_WINDOW_SIZE="${TD_HS_REPUTATION_WINDOW_SIZE:-1024}"', body)
-        self.assertIn('TD_HS_REPUTATION_MIN_CANDIDATE_QCS="${TD_HS_REPUTATION_MIN_CANDIDATE_QCS:-256}"', body)
-        self.assertIn('TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS="${TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS:-256}"', body)
+        self.assertIn('TD_HS_REPUTATION_WINDOW_SIZE="${TD_HS_REPUTATION_WINDOW_SIZE:-256}"', body)
+        self.assertIn('TD_HS_REPUTATION_MIN_CANDIDATE_QCS="${TD_HS_REPUTATION_MIN_CANDIDATE_QCS:-64}"', body)
+        self.assertIn('TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS="${TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS:-128}"', body)
+        self.assertIn(
+            'TD_HS_STRONG_FAULT_ATTACK_START_VIEW="${TD_HS_STRONG_FAULT_ATTACK_START_VIEW:-1024}"',
+            body,
+        )
+
+    def test_strong_fault_attack_hooks_support_delayed_start(self):
+        td_hotstuff = os.path.join(
+            REPO_ROOT,
+            "platform",
+            "consensus",
+            "ordering",
+            "td_hotstuff",
+            "algorithm",
+            "td_hotstuff.cpp",
+        )
+        with open(td_hotstuff) as fp:
+            body = fp.read()
+        self.assertIn("StrongFaultExperimentStartedAtView", body)
+        self.assertIn('"TD_HS_STRONG_FAULT_ATTACK_START_VIEW"', body)
+        self.assertIn('"TD_HS_DOUBLE_PROPOSAL_START_VIEW"', body)
+        self.assertIn('"TD_HS_DOUBLE_VOTE_START_VIEW"', body)
+        self.assertIn('"TD_HS_INVALID_QC_START_VIEW"', body)
 
     def test_wue_trigger_is_armed_after_benchmark_start_gate(self):
         runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_strong_fault_v2_n20.sh")
@@ -302,6 +333,10 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
                     + '}"',
                     body,
                 )
+                self.assertIn(
+                    'TD_HS_STRONG_FAULT_ATTACK_START_VIEW="${TD_HS_STRONG_FAULT_ATTACK_START_VIEW:-1024}"',
+                    body,
+                )
 
     def test_strong_fault_runners_can_enable_all_detectors(self):
         for script in [
@@ -324,6 +359,7 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=0", body)
         self.assertIn("TD_HS_PEERTRUST_CLIQUE_IDS", body)
         self.assertIn("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", body)
+        self.assertIn("TD_HS_PEERTRUST_CLIQUE_START_VIEW", body)
         self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_IDS", body)
         self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", body)
         self.assertIn("-u TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS", body)
@@ -337,9 +373,16 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_SIGNERS=1", body)
         self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_MIN_SIGNERS=", body)
         self.assertIn("unset TD_HS_REPUTATION_AUDIT_JSONL_ENABLE", body)
+        self.assertIn("unset TD_HS_PEERTRUST_CLIQUE_START_VIEW", body)
         self.assertNotIn("unset TD_HS_PEERTRUST_BROAD_QC_SIGNERS", body)
         self.assertNotIn("unset TD_HS_PEERTRUST_BROAD_QC_MIN_SIGNERS", body)
-        self.assertIn("group_size=14", body)
+        self.assertIn("PEERTRUST_CLIQUE_REVIEWER_MODE:-all", body)
+        self.assertIn("group_size=16", body)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_DEBT_TRIGGER_SCORE", body)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_DEBT_INCREMENT", body)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_DEBT_RECOVERY", body)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_SOFT_MIN_WEIGHT", body)
+        self.assertIn("TD_HS_REPUTATION_DECAY_PER_EPOCH:-2", body)
         self.assertIn('ids="${ids},${i}"', body)
 
     def test_peertrust_clique_hook_is_consumed_by_td_hotstuff(self):
@@ -355,7 +398,10 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         with open(td_hotstuff) as fp:
             body = fp.read()
         self.assertIn('EnvFlagEnabled("TD_HS_PEERTRUST_CLIQUE")', body)
+        self.assertIn('ExperimentStartedAtView("TD_HS_PEERTRUST_CLIQUE_START_VIEW"', body)
         self.assertIn('EnvListContainsId("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS"', body)
+        self.assertIn("SelectLowDiversityQcSigners(certs, view, quorum_weight)", body)
+        self.assertIn("clique_selected=", body)
         self.assertIn("shared_qc_metadata=public_available_set", body)
         self.assertIn("qc->set_available_signer_bitmap", body)
         self.assertNotIn("certs.find(reviewer_id)", body)

@@ -1401,17 +1401,46 @@ ReputationCandidate ComputeReputationCandidate(
             ? RoundedDivide(unique_signers_by_leader[idx].size() * 100,
                             static_cast<uint64_t>(total_replicas))
             : 100;
+    const int average_signer_coverage_score =
+        idx < static_cast<int>(signer_set_coverage_sum.size()) &&
+                diversity_count[idx] > 0
+            ? RoundedDivide(signer_set_coverage_sum[idx],
+                            diversity_count[idx])
+            : signer_coverage_score;
+    const int average_available_coverage_score =
+        idx < static_cast<int>(available_signer_set_coverage_sum.size()) &&
+                diversity_count[idx] > 0
+            ? RoundedDivide(available_signer_set_coverage_sum[idx],
+                            diversity_count[idx])
+            : available_coverage_score;
     const bool has_broad_available_reviewer_set =
         !unique_available_signers_by_leader[idx].empty() &&
         available_coverage_score >= 95;
-    const bool selected_narrower_than_available =
+    const int frequency_balance_score =
+        idx >= 0 && idx < static_cast<int>(signer_frequency_by_leader.size()) &&
+                has_broad_available_reviewer_set
+            ? SignerFrequencyBalanceScore(
+                  signer_frequency_by_leader[idx],
+                  unique_available_signers_by_leader[idx])
+            : 100;
+    const bool unique_selected_narrower_than_available =
         has_broad_available_reviewer_set &&
         signer_coverage_score + 10 < available_coverage_score;
+    const bool per_qc_selected_narrower_than_available =
+        has_broad_available_reviewer_set &&
+        average_signer_coverage_score + 10 < average_available_coverage_score;
+    const bool reviewer_frequency_concentrated = frequency_balance_score < 90;
+    const bool selected_narrower_than_available =
+        unique_selected_narrower_than_available ||
+        (per_qc_selected_narrower_than_available &&
+         reviewer_frequency_concentrated);
     peertrust_has_credible_public_choice[idx] =
         selected_narrower_than_available;
     const int reviewer_coverage_score =
         selected_narrower_than_available
-            ? signer_coverage_score
+            ? (unique_selected_narrower_than_available
+                   ? signer_coverage_score
+                   : frequency_balance_score)
             : (has_broad_available_reviewer_set
                    ? 100
                    : std::min(available_coverage_score,
@@ -1423,12 +1452,13 @@ ReputationCandidate ComputeReputationCandidate(
       peertrust_community_context_scores[idx] = 100;
       continue;
     }
+    const int unique_reviewer_entropy_score = WeightedEffectiveDiversityScore(
+        SetToOrderedVector(unique_signers_by_leader[idx]), weights,
+        total_replicas);
     peertrust_reviewer_entropy_scores[idx] =
         has_broad_available_reviewer_set
-            ? 100
-            : WeightedEffectiveDiversityScore(
-                  SetToOrderedVector(unique_signers_by_leader[idx]), weights,
-                  total_replicas);
+            ? std::min(unique_reviewer_entropy_score, frequency_balance_score)
+            : unique_reviewer_entropy_score;
 
     int max_overlap_score = 0;
     for (int other = 0;
@@ -1443,9 +1473,8 @@ ReputationCandidate ComputeReputationCandidate(
                                  total_replicas));
     }
     peertrust_cross_leader_independence_scores[idx] =
-        has_broad_available_reviewer_set || signer_coverage_score >= 95
-            ? 100
-            : std::max(0, 100 - max_overlap_score);
+        signer_coverage_score >= 95 ? 100
+                                    : std::max(0, 100 - max_overlap_score);
 
     int max_reviewer_overuse = 1;
     for (int signer : unique_signers_by_leader[idx]) {
@@ -1455,7 +1484,7 @@ ReputationCandidate ComputeReputationCandidate(
       }
     }
     peertrust_reviewer_overuse_scores[idx] =
-        has_broad_available_reviewer_set || signer_coverage_score >= 95
+        signer_coverage_score >= 95
             ? 100
             : std::max(0, std::min(100,
                                   RoundedDivide(100,
@@ -1665,8 +1694,8 @@ ReputationCandidate ComputeReputationCandidate(
       int next_peertrust_debt = previous_peertrust_debt;
       if (validator.feedback_count > 0) {
         low_peertrust =
-            validator.peertrust_score < config.peertrust_debt_trigger_score ||
-            validator.community_context_score <
+            validator.peertrust_score <= config.peertrust_debt_trigger_score ||
+            validator.community_context_score <=
                 config.peertrust_debt_trigger_score;
         broad_good_peertrust =
             validator.peertrust_score >= 95 &&
@@ -1778,6 +1807,27 @@ ReputationCandidate ComputeReputationCandidate(
             : std::min(validator.decay_applied,
                        RecoveryCreditForScore(
                            recovery_score, config.max_recovery_per_epoch));
+    if (config.peertrust_enabled && validator.decay_applied > 0 &&
+        (validator.feedback_count > 0 || validator.peertrust_leader_debt > 0)) {
+      int peertrust_recovery_score = 100;
+      if (validator.feedback_count > 0) {
+        peertrust_recovery_score =
+            std::min(peertrust_recovery_score, validator.peertrust_score);
+      }
+      if (validator.peertrust_leader_debt > 0) {
+        peertrust_recovery_score = std::min(
+            peertrust_recovery_score,
+            std::max(0, 100 - validator.peertrust_leader_debt));
+      }
+      if (peertrust_recovery_score < 95) {
+        const int peertrust_recovery_cap = static_cast<int>(
+            (static_cast<int64_t>(validator.decay_applied) *
+             peertrust_recovery_score) /
+            100);
+        validator.recovery_credit =
+            std::min(validator.recovery_credit, peertrust_recovery_cap);
+      }
+    }
     const bool below_mean_weight =
         validator.current_weight < mean_current_weight;
     const bool fully_recovered_decay =
@@ -1824,8 +1874,7 @@ ReputationCandidate ComputeReputationCandidate(
             validator.recovery_credit + validator.bonus_credit,
         config);
     validator.next_weight = smoothed_next_weight;
-    const bool force_score_factor =
-        low_peertrust || validator.peertrust_leader_debt > 0;
+    const bool force_score_factor = false;
     MaybeApplyMultiplicativeWeightFormula(
         &validator, config, recovery_score, smoothed_next_weight,
         force_score_factor);
@@ -1842,11 +1891,6 @@ ReputationCandidate ComputeReputationCandidate(
         config.peertrust_enabled &&
         validator.vote_score >= kHealthyCatchUpScore &&
         validator.sybil_graph_debt == 0;
-    if (peertrust_soft_floor_eligible && low_peertrust &&
-        validator.current_weight > peertrust_soft_floor &&
-        validator.next_weight > peertrust_soft_floor) {
-      validator.next_weight = peertrust_soft_floor;
-    }
     if (peertrust_floor_applies && peertrust_soft_floor_eligible &&
         validator.current_weight + validator.decay_applied >=
             peertrust_soft_floor &&

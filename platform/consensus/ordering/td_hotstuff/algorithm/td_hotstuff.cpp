@@ -49,6 +49,14 @@ bool ExperimentStartedAtView(const char* env_name, int view) {
   return view >= NonNegativeIntFromEnv(env_name, 0);
 }
 
+bool StrongFaultExperimentStartedAtView(const char* env_name, int view) {
+  const char* raw = std::getenv(env_name);
+  if (raw != nullptr && !std::string(raw).empty()) {
+    return view >= NonNegativeIntFromEnv(env_name, 0);
+  }
+  return ExperimentStartedAtView("TD_HS_STRONG_FAULT_ATTACK_START_VIEW", view);
+}
+
 bool EnvFlagEnabled(const char* name) {
   const char* raw = std::getenv(name);
   if (raw == nullptr) {
@@ -295,13 +303,17 @@ bool HotStuff::IsSilentLeaderForExperiment(int view) const {
           EnvListContainsId("TD_HS_SILENT_LEADER_IDS", id_));
 }
 
-bool HotStuff::IsDoubleProposalForExperiment() const {
-  return EnvFlagEnabled("TD_HS_DOUBLE_PROPOSAL") ||
-         EnvListContainsId("TD_HS_DOUBLE_PROPOSAL_IDS", id_);
+bool HotStuff::IsDoubleProposalForExperiment(int view) const {
+  return StrongFaultExperimentStartedAtView("TD_HS_DOUBLE_PROPOSAL_START_VIEW",
+                                            view) &&
+         (EnvFlagEnabled("TD_HS_DOUBLE_PROPOSAL") ||
+          EnvListContainsId("TD_HS_DOUBLE_PROPOSAL_IDS", id_));
 }
 
-bool HotStuff::IsDoubleVoteForExperiment() const {
-  return EnvFlagEnabled("TD_HS_DOUBLE_VOTE");
+bool HotStuff::IsDoubleVoteForExperiment(int view) const {
+  return StrongFaultExperimentStartedAtView("TD_HS_DOUBLE_VOTE_START_VIEW",
+                                            view) &&
+         EnvFlagEnabled("TD_HS_DOUBLE_VOTE");
 }
 
 bool HotStuff::IsSlowVoteForExperiment(int view) const {
@@ -319,7 +331,8 @@ void HotStuff::MaybeDelayVoteForExperiment(int view) const {
 }
 
 bool HotStuff::ShouldUsePeerTrustCliqueForView(int view) const {
-  if (!EnvFlagEnabled("TD_HS_PEERTRUST_CLIQUE")) {
+  if (!EnvFlagEnabled("TD_HS_PEERTRUST_CLIQUE") ||
+      !ExperimentStartedAtView("TD_HS_PEERTRUST_CLIQUE_START_VIEW", view)) {
     return false;
   }
   const int leader = leader_schedule_ != nullptr
@@ -340,8 +353,10 @@ bool HotStuff::ShouldUseLowDiversityQcForView(int view) const {
          EnvListContainsId("TD_HS_LOW_DIVERSITY_TARGET_IDS", leader);
 }
 
-bool HotStuff::IsInvalidQcForExperiment() const {
-  return EnvFlagEnabled("TD_HS_INVALID_QC");
+bool HotStuff::IsInvalidQcForExperiment(int view) const {
+  return StrongFaultExperimentStartedAtView("TD_HS_INVALID_QC_START_VIEW",
+                                            view) &&
+         EnvFlagEnabled("TD_HS_INVALID_QC");
 }
 
 std::unique_ptr<Proposal> HotStuff::MakeConflictingProposalForExperiment(
@@ -608,14 +623,14 @@ void HotStuff::AsyncSend() {
           }
           has_sent_ = true;
           MarkTimeoutProgressLocked();
-          if (proposal != nullptr && IsInvalidQcForExperiment()) {
+          if (proposal != nullptr && IsInvalidQcForExperiment(view)) {
             std::unique_ptr<Proposal> invalid_qc_proposal =
                 MakeInvalidQcProposalForExperiment(*proposal);
             if (invalid_qc_proposal != nullptr) {
               proposal = std::move(invalid_qc_proposal);
             }
           }
-          if (proposal != nullptr && IsDoubleProposalForExperiment()) {
+          if (proposal != nullptr && IsDoubleProposalForExperiment(view)) {
             conflicting_proposal =
                 MakeConflictingProposalForExperiment(*proposal);
           }
@@ -1044,6 +1059,11 @@ bool HotStuff::MaybeFormQcLocked(
                  << " low_diversity_qc_metadata=public_available_set";
     }
   } else if (ShouldUsePeerTrustCliqueForView(view)) {
+    const std::vector<int> peertrust_signers =
+        SelectLowDiversityQcSigners(certs, view, quorum_weight);
+    if (!peertrust_signers.empty()) {
+      selected_signers = peertrust_signers;
+    }
     available_signers.clear();
     for (int signer = 1; signer <= total_num_; ++signer) {
       if (WeightForSigner(signer, view) > 0) {
@@ -1054,6 +1074,7 @@ bool HotStuff::MaybeFormQcLocked(
       LOG(ERROR) << "[PeerTrustCliqueEvidence] view=" << view
                  << " selected_count=" << selected_signers.size()
                  << " available_count=" << available_signers.size()
+                 << " clique_selected=" << (!peertrust_signers.empty())
                  << " shared_qc_metadata=public_available_set";
     }
   }
@@ -1357,7 +1378,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
       if (cert == nullptr) {
         proposal_valid = false;
       } else {
-        if (IsDoubleVoteForExperiment()) {
+        if (IsDoubleVoteForExperiment(view)) {
           conflicting_cert = MakeConflictingCertificateForExperiment(*cert);
         }
         std::vector<std::unique_ptr<Proposal>> committed_p_list =

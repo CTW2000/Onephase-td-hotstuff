@@ -746,9 +746,12 @@ TEST(ReputationPluginRuntimeTest,
   EXPECT_EQ(second[0].old_weight_version, snapshot.weight_version);
   EXPECT_EQ(second[0].validators[0].peertrust_leader_debt, 40);
   EXPECT_EQ(second[0].validators[0].peertrust_debt_delta, 20);
-  EXPECT_EQ(first[0].validators[0].next_weight,
+  EXPECT_LT(first[0].validators[0].next_weight, 100);
+  EXPECT_GT(first[0].validators[0].next_weight,
             options.config.peertrust_soft_min_weight);
-  EXPECT_EQ(second[0].validators[0].next_weight,
+  EXPECT_LT(second[0].validators[0].next_weight,
+            first[0].validators[0].next_weight);
+  EXPECT_GT(second[0].validators[0].next_weight,
             options.config.peertrust_soft_min_weight);
   EXPECT_EQ(second[0].leader_weights[0], first[0].leader_weights[0]);
 }

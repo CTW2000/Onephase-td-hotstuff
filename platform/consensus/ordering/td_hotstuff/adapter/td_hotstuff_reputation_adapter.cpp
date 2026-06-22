@@ -259,6 +259,21 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
       EnvFlagEnabled("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE");
   options.reputation_config.peertrust_enabled =
       EnvFlagEnabled("TD_HS_REPUTATION_PEERTRUST_ENABLE");
+  options.reputation_config.peertrust_debt_increment = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_PEERTRUST_DEBT_INCREMENT",
+      options.reputation_config.peertrust_debt_increment);
+  options.reputation_config.peertrust_debt_recovery = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_PEERTRUST_DEBT_RECOVERY",
+      options.reputation_config.peertrust_debt_recovery);
+  options.reputation_config.peertrust_debt_max = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_PEERTRUST_DEBT_MAX",
+      options.reputation_config.peertrust_debt_max);
+  options.reputation_config.peertrust_debt_trigger_score = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_PEERTRUST_DEBT_TRIGGER_SCORE",
+      options.reputation_config.peertrust_debt_trigger_score);
+  options.reputation_config.peertrust_soft_min_weight = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_PEERTRUST_SOFT_MIN_WEIGHT",
+      options.reputation_config.peertrust_soft_min_weight);
   options.reputation_config.strong_fault_enabled =
       EnvFlagEnabled("TD_HS_STRONG_FAULT_ENABLE");
   options.reputation_config.double_proposal_detection_enabled =

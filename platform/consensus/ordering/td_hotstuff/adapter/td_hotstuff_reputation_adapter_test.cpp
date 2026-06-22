@@ -157,6 +157,11 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   setenv("TD_HS_REPUTATION_STAKE_MAX_PER_MILLE", "1100", 1);
   setenv("TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE", "950", 1);
   setenv("TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE", "1050", 1);
+  setenv("TD_HS_REPUTATION_PEERTRUST_DEBT_INCREMENT", "12", 1);
+  setenv("TD_HS_REPUTATION_PEERTRUST_DEBT_RECOVERY", "2", 1);
+  setenv("TD_HS_REPUTATION_PEERTRUST_DEBT_MAX", "60", 1);
+  setenv("TD_HS_REPUTATION_PEERTRUST_DEBT_TRIGGER_SCORE", "85", 1);
+  setenv("TD_HS_REPUTATION_PEERTRUST_SOFT_MIN_WEIGHT", "80", 1);
 
   const TdHotstuffReputationAdapterOptions options =
       TdHotstuffReputationAdapter::OptionsFromEnv();
@@ -179,6 +184,11 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   EXPECT_EQ(options.reputation_config.stake_factor_max_per_mille, 1100);
   EXPECT_EQ(options.reputation_config.identity_factor_min_per_mille, 950);
   EXPECT_EQ(options.reputation_config.identity_factor_max_per_mille, 1050);
+  EXPECT_EQ(options.reputation_config.peertrust_debt_increment, 12);
+  EXPECT_EQ(options.reputation_config.peertrust_debt_recovery, 2);
+  EXPECT_EQ(options.reputation_config.peertrust_debt_max, 60);
+  EXPECT_EQ(options.reputation_config.peertrust_debt_trigger_score, 85);
+  EXPECT_EQ(options.reputation_config.peertrust_soft_min_weight, 80);
 
   unsetenv("TD_HS_REPUTATION_ENABLE");
   unsetenv("TD_HS_REPUTATION_DECAY_PER_EPOCH");
@@ -198,6 +208,11 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   unsetenv("TD_HS_REPUTATION_STAKE_MAX_PER_MILLE");
   unsetenv("TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE");
   unsetenv("TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE");
+  unsetenv("TD_HS_REPUTATION_PEERTRUST_DEBT_INCREMENT");
+  unsetenv("TD_HS_REPUTATION_PEERTRUST_DEBT_RECOVERY");
+  unsetenv("TD_HS_REPUTATION_PEERTRUST_DEBT_MAX");
+  unsetenv("TD_HS_REPUTATION_PEERTRUST_DEBT_TRIGGER_SCORE");
+  unsetenv("TD_HS_REPUTATION_PEERTRUST_SOFT_MIN_WEIGHT");
 }
 
 

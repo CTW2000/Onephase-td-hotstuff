@@ -128,6 +128,8 @@ generate_performance_server_conf($N)
     export TD_HS_DOUBLE_VOTE_DETECT_ENABLE="${double_vote_detect_override:-1}"
   fi
   export TD_HS_STRONG_FAULT_TARGET_WEIGHT=1
+  export TD_HS_STRONG_FAULT_ATTACK_START_VIEW="${TD_HS_STRONG_FAULT_ATTACK_START_VIEW:-1024}"
+  export TD_HS_DOUBLE_VOTE_START_VIEW="${TD_HS_DOUBLE_VOTE_START_VIEW:-${TD_HS_STRONG_FAULT_ATTACK_START_VIEW}}"
   # Strong-fault experiments should punish only authenticated equivocation
   # evidence. Keep soft decay inactive to avoid unrelated honest-node drift.
   export TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES=1000000
