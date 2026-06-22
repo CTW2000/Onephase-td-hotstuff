@@ -32,6 +32,23 @@ int PositiveIntFromEnv(const char* name, int default_value) {
   }
 }
 
+int NonNegativeIntFromEnv(const char* name, int default_value) {
+  const char* raw = std::getenv(name);
+  if (raw == nullptr || std::string(raw).empty()) {
+    return default_value;
+  }
+  try {
+    const int value = std::stoi(raw);
+    return value >= 0 ? value : default_value;
+  } catch (...) {
+    return default_value;
+  }
+}
+
+bool ExperimentStartedAtView(const char* env_name, int view) {
+  return view >= NonNegativeIntFromEnv(env_name, 0);
+}
+
 bool EnvFlagEnabled(const char* name) {
   const char* raw = std::getenv(name);
   if (raw == nullptr) {
@@ -272,9 +289,10 @@ int HotStuff::NextLeader(int view) { return LeaderForView(view + 1); }
 
 bool HotStuff::IsLeader(int view) { return LeaderForView(view) == id_; }
 
-bool HotStuff::IsSilentLeaderForExperiment() const {
-  return EnvFlagEnabled("TD_HS_SILENT_LEADER") ||
-         EnvListContainsId("TD_HS_SILENT_LEADER_IDS", id_);
+bool HotStuff::IsSilentLeaderForExperiment(int view) const {
+  return ExperimentStartedAtView("TD_HS_SILENT_LEADER_START_VIEW", view) &&
+         (EnvFlagEnabled("TD_HS_SILENT_LEADER") ||
+          EnvListContainsId("TD_HS_SILENT_LEADER_IDS", id_));
 }
 
 bool HotStuff::IsDoubleProposalForExperiment() const {
@@ -286,12 +304,13 @@ bool HotStuff::IsDoubleVoteForExperiment() const {
   return EnvFlagEnabled("TD_HS_DOUBLE_VOTE");
 }
 
-bool HotStuff::IsSlowVoteForExperiment() const {
-  return EnvFlagEnabled("TD_HS_SLOW_VOTE");
+bool HotStuff::IsSlowVoteForExperiment(int view) const {
+  return ExperimentStartedAtView("TD_HS_SLOW_VOTE_START_VIEW", view) &&
+         EnvFlagEnabled("TD_HS_SLOW_VOTE");
 }
 
-void HotStuff::MaybeDelayVoteForExperiment() const {
-  if (!IsSlowVoteForExperiment()) {
+void HotStuff::MaybeDelayVoteForExperiment(int view) const {
+  if (!IsSlowVoteForExperiment(view)) {
     return;
   }
   const int delay_us =
@@ -565,7 +584,7 @@ void HotStuff::AsyncSend() {
         weight_update_pipeline_->ActivateReady(view);
       }
       const bool is_leader = IsLeader(view);
-      if (is_leader && !has_sent_ && IsSilentLeaderForExperiment()) {
+      if (is_leader && !has_sent_ && IsSilentLeaderForExperiment(view)) {
         silent_leader = true;
         has_sent_ = true;
       } else if (is_leader && !has_sent_) {
@@ -1378,7 +1397,7 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     }
     return false;
   }
-  MaybeDelayVoteForExperiment();
+  MaybeDelayVoteForExperiment(view);
   const int send_result = SendMessage(MessageType::Vote, *cert, next_leader);
   (void)send_result;
   if (conflicting_cert != nullptr) {

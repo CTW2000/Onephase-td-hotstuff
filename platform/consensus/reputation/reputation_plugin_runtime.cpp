@@ -1392,6 +1392,7 @@ void ReputationPluginRuntime::WriteAudit(const ReputationCandidate& candidate) {
   audit_file_ << "\"activation_view\":" << candidate.activation_view << ',';
   audit_file_ << "\"candidate_digest\":\"" << candidate.candidate_digest_hex << "\",";
   audit_file_ << "\"next_weights\":" << AuditWeightsJson(candidate.next_weights) << ',';
+  audit_file_ << "\"leader_weights\":" << AuditWeightsJson(candidate.leader_weights) << ',';
   audit_file_ << "\"strong_faults\":"
               << AuditStrongFaultsJson(candidate.strong_faults) << ',';
   audit_file_ << "\"validators\":" << AuditValidatorsJson(candidate.validators);

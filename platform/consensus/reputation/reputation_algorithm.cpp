@@ -397,6 +397,15 @@ bool HasLeaderRecoveryEvidence(const ValidatorReputation& validator,
           has_repeated_uncertified_leader_opportunities);
 }
 
+bool HasDirectLeaderProfileCap(const ValidatorReputation& validator,
+                               const ReputationConfig& config) {
+  if (!config.leader_recovery_enabled || validator.strong_fault_count > 0) {
+    return false;
+  }
+  return validator.leader_certified_count > 0 &&
+         validator.leader_diversity_score < kLeaderDiversityGateThreshold;
+}
+
 bool IsLeaderWeightIneligible(const ValidatorReputation& validator,
                               const ReputationConfig& config,
                               int64_t current_leader_weight) {
@@ -413,10 +422,7 @@ bool IsLeaderWeightIneligible(const ValidatorReputation& validator,
       !has_good_leader_reentry_evidence) {
     return true;
   }
-  const bool only_low_diversity_gate =
-      validator.leader_certified_count > 0 &&
-      validator.leader_diversity_score < kLeaderDiversityGateThreshold;
-  return !only_low_diversity_gate &&
+  return !HasDirectLeaderProfileCap(validator, config) &&
          HasLeaderRecoveryEvidence(validator, config) &&
          validator.next_weight <= config.leader_eligible_min_weight;
 }
@@ -441,10 +447,7 @@ int LeaderSelectionScore(const ValidatorReputation& validator,
   }
 
   int score = validator.leader_score;
-  const bool only_low_diversity_gate =
-      validator.leader_certified_count > 0 &&
-      validator.leader_diversity_score < kLeaderDiversityGateThreshold;
-  if (only_low_diversity_gate) {
+  if (HasDirectLeaderProfileCap(validator, config)) {
     score = std::max<int>(score, static_cast<int>(std::max<int64_t>(
                                      config.min_weight,
                                      std::min<int64_t>(
@@ -484,6 +487,48 @@ bool ShouldPreserveSoftLeaderCap(const ValidatorReputation& validator,
   return current_leader_weight >= min_leader_weight;
 }
 
+int LeaderRecoveryCreditForScore(int score, int max_recovery_per_epoch) {
+  if (max_recovery_per_epoch <= 0) {
+    return 0;
+  }
+  const int bounded_score = std::max(0, std::min(100, score));
+  if (bounded_score >= 95) {
+    return max_recovery_per_epoch;
+  }
+  return static_cast<int>((static_cast<int64_t>(bounded_score) *
+                           max_recovery_per_epoch) /
+                          100);
+}
+
+bool HasSoftLeaderRecoveryFault(const ValidatorReputation& validator,
+                                const ReputationConfig& config) {
+  if (!config.leader_recovery_enabled || validator.strong_fault_count > 0) {
+    return false;
+  }
+  if (HasDirectLeaderProfileCap(validator, config)) {
+    return false;
+  }
+  const bool has_leader_opportunities =
+      validator.leader_opportunity_count >= config.min_leader_opportunities ||
+      validator.leader_opportunity_count >= kMinNoCertifiedLeaderOpportunities;
+  return validator.leader_certified_count == 0 && has_leader_opportunities &&
+         LeaderSelectionScore(validator, config) < 95;
+}
+
+int64_t SmoothedLeaderWeightForScore(const ValidatorReputation& validator,
+                                     const ReputationConfig& config,
+                                     int64_t current_leader_weight) {
+  const int64_t current = ClampWeight(current_leader_weight, config);
+  const int64_t available_decay =
+      std::max<int64_t>(0, current - config.min_weight);
+  const int decay = static_cast<int>(
+      std::min<int64_t>(available_decay, config.decay_per_epoch));
+  const int recovery = std::min(
+      decay, LeaderRecoveryCreditForScore(LeaderSelectionScore(validator, config),
+                                          config.max_recovery_per_epoch));
+  return ClampWeight(current - decay + recovery, config);
+}
+
 std::vector<int64_t> LeaderWeightsForCandidate(
     const std::vector<ValidatorReputation>& validators,
     const ReputationConfig& config,
@@ -500,7 +545,8 @@ std::vector<int64_t> LeaderWeightsForCandidate(
       all_validators_eligible = false;
       break;
     }
-    if (LeaderSelectionScore(validator, config) < 100) {
+    if (HasSoftLeaderRecoveryFault(validator, config) ||
+        HasDirectLeaderProfileCap(validator, config)) {
       all_validators_eligible = false;
       break;
     }
@@ -521,7 +567,10 @@ std::vector<int64_t> LeaderWeightsForCandidate(
     } else if (IsLeaderWeightIneligible(validator, config,
                                         current_leader_weight)) {
       leader_weights.push_back(ineligible_leader_weight);
-    } else if (LeaderSelectionScore(validator, config) < 100) {
+    } else if (HasSoftLeaderRecoveryFault(validator, config)) {
+      leader_weights.push_back(
+          SmoothedLeaderWeightForScore(validator, config, current_leader_weight));
+    } else if (HasDirectLeaderProfileCap(validator, config)) {
       leader_weights.push_back(ClampWeight(LeaderSelectionScore(validator, config),
                                            config));
     } else if (ShouldPreserveSoftLeaderCap(validator, config,
@@ -1775,14 +1824,8 @@ ReputationCandidate ComputeReputationCandidate(
             validator.recovery_credit + validator.bonus_credit,
         config);
     validator.next_weight = smoothed_next_weight;
-    const bool low_vote_score =
-        validator.sybil_graph_debt == 0 &&
-        validator_has_enough_decay_evidence && config.decay_per_epoch > 0 &&
-        validator.inclusions == 0 &&
-        validator.vote_score < kFormulaFullReputationScore;
     const bool force_score_factor =
-        low_peertrust || validator.peertrust_leader_debt > 0 ||
-        low_vote_score;
+        low_peertrust || validator.peertrust_leader_debt > 0;
     MaybeApplyMultiplicativeWeightFormula(
         &validator, config, recovery_score, smoothed_next_weight,
         force_score_factor);

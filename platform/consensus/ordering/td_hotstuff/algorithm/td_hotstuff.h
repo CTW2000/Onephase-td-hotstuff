@@ -92,11 +92,11 @@ class HotStuff : public common::ProtocolBase {
   void BroadcastTimeoutVote(const TimeoutVote& vote);
   void BroadcastTimeoutCert(const TimeoutCert& cert);
   bool ApplyTimeoutCertLocked(const TimeoutCert& cert);
-  bool IsSilentLeaderForExperiment() const;
+  bool IsSilentLeaderForExperiment(int view) const;
   bool IsDoubleProposalForExperiment() const;
   bool IsDoubleVoteForExperiment() const;
-  bool IsSlowVoteForExperiment() const;
-  void MaybeDelayVoteForExperiment() const;
+  bool IsSlowVoteForExperiment(int view) const;
+  void MaybeDelayVoteForExperiment(int view) const;
   bool ShouldUsePeerTrustCliqueForView(int view) const;
   bool ShouldUseLowDiversityQcForView(int view) const;
   bool IsInvalidQcForExperiment() const;
