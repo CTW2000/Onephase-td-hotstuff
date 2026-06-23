@@ -72,7 +72,7 @@ class HotStuff : public common::ProtocolBase {
   std::vector<int> CertificateSigners(
       const std::map<int, std::unique_ptr<Certificate>>& certs,
       int view) const;
-  std::vector<int> SelectLowDiversityQcSigners(
+  std::vector<int> SelectPeerTrustCliqueSigners(
       const std::map<int, std::unique_ptr<Certificate>>& certs, int view,
       int64_t quorum_weight) const;
   bool MaybeMakeSignedProposalEvidenceSnapshotLocked(
@@ -98,7 +98,6 @@ class HotStuff : public common::ProtocolBase {
   bool IsSlowVoteForExperiment(int view) const;
   void MaybeDelayVoteForExperiment(int view) const;
   bool ShouldUsePeerTrustCliqueForView(int view) const;
-  bool ShouldUseLowDiversityQcForView(int view) const;
   bool IsInvalidQcForExperiment(int view) const;
   std::unique_ptr<Proposal> MakeConflictingProposalForExperiment(
       const Proposal& proposal);

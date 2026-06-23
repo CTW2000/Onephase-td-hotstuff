@@ -158,7 +158,7 @@ generate_performance_server_conf($N)
     if [ ! -f "$cf" ]; then break; fi
     env -u TD_HS_SILENT_LEADER_IDS \
         -u TD_HS_DOUBLE_PROPOSAL_IDS -u TD_HS_DOUBLE_VOTE_IDS \
-        -u TD_HS_INVALID_QC_IDS -u TD_HS_LOW_DIVERSITY_QC_IDS -u TD_HS_LOW_DIVERSITY_TARGET_IDS -u TD_HS_LOW_DIVERSITY_REVIEWER_IDS -u TD_HS_LOW_DIVERSITY_MIN_AVAILABLE_SIGNERS \
+        -u TD_HS_INVALID_QC_IDS \
         -u TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_IDS \
         \
         -u TD_HS_BAD_NODE_IDS \

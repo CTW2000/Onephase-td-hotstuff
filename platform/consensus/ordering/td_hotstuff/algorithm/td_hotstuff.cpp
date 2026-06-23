@@ -342,17 +342,6 @@ bool HotStuff::ShouldUsePeerTrustCliqueForView(int view) const {
          EnvListContainsId("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", leader);
 }
 
-bool HotStuff::ShouldUseLowDiversityQcForView(int view) const {
-  if (!EnvFlagEnabled("TD_HS_LOW_DIVERSITY_QC")) {
-    return false;
-  }
-  const int leader = leader_schedule_ != nullptr
-                         ? leader_schedule_->LeaderForView(view)
-                         : DefaultLeaderForView(view, total_num_);
-  return leader > 0 &&
-         EnvListContainsId("TD_HS_LOW_DIVERSITY_TARGET_IDS", leader);
-}
-
 bool HotStuff::IsInvalidQcForExperiment(int view) const {
   return StrongFaultExperimentStartedAtView("TD_HS_INVALID_QC_START_VIEW",
                                             view) &&
@@ -873,13 +862,11 @@ std::vector<int> HotStuff::CertificateSigners(
   return signers;
 }
 
-std::vector<int> HotStuff::SelectLowDiversityQcSigners(
+std::vector<int> HotStuff::SelectPeerTrustCliqueSigners(
     const std::map<int, std::unique_ptr<Certificate>>& certs, int view,
     int64_t quorum_weight) const {
-  std::vector<int> reviewers = IntListFromEnv("TD_HS_LOW_DIVERSITY_REVIEWER_IDS");
-  if (reviewers.empty()) {
-    reviewers = IntListFromEnv("TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS");
-  }
+  std::vector<int> reviewers =
+      IntListFromEnv("TD_HS_PEERTRUST_CLIQUE_REVIEWER_IDS");
   std::set<int> seen;
   std::vector<int> selected_signers;
   int64_t selected_weight = 0;
@@ -1040,27 +1027,9 @@ bool HotStuff::MaybeFormQcLocked(
   if (available_signers.empty()) {
     available_signers = selected_signers;
   }
-  if (ShouldUseLowDiversityQcForView(view)) {
-    const std::vector<int> low_diversity_signers =
-        SelectLowDiversityQcSigners(certs, view, quorum_weight);
-    if (!low_diversity_signers.empty()) {
-      selected_signers = low_diversity_signers;
-    }
-    available_signers.clear();
-    for (int signer = 1; signer <= total_num_; ++signer) {
-      if (WeightForSigner(signer, view) > 0) {
-        available_signers.push_back(signer);
-      }
-    }
-    if (EnvFlagEnabled("TD_HS_LOW_DIVERSITY_QC_TRACE")) {
-      LOG(ERROR) << "[LowDiversityQcEvidence] view=" << view
-                 << " selected_count=" << selected_signers.size()
-                 << " available_count=" << available_signers.size()
-                 << " low_diversity_qc_metadata=public_available_set";
-    }
-  } else if (ShouldUsePeerTrustCliqueForView(view)) {
+  if (ShouldUsePeerTrustCliqueForView(view)) {
     const std::vector<int> peertrust_signers =
-        SelectLowDiversityQcSigners(certs, view, quorum_weight);
+        SelectPeerTrustCliqueSigners(certs, view, quorum_weight);
     if (!peertrust_signers.empty()) {
       selected_signers = peertrust_signers;
     }
