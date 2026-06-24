@@ -80,6 +80,12 @@ bool LeaderSelectionEnabled() {
   return EnvFlagEnabled("TD_HS_LEADER_SELECTION_ENABLE");
 }
 
+int ReputationBootstrapWeightFromEnv() {
+  return PositiveIntFromEnv(
+      "TD_HS_REPUTATION_BOOTSTRAP_WEIGHT",
+      20);
+}
+
 std::vector<int64_t> InitialReplicaWeightsForMode(
     const std::vector<int64_t>& replica_weights, int total_replicas) {
   if (!replica_weights.empty() ||
@@ -87,7 +93,8 @@ std::vector<int64_t> InitialReplicaWeightsForMode(
        !LeaderSelectionEnabled())) {
     return replica_weights;
   }
-  return std::vector<int64_t>(std::max(total_replicas, 0), 100);
+  return std::vector<int64_t>(std::max(total_replicas, 0),
+                              ReputationBootstrapWeightFromEnv());
 }
 
 std::string TimeoutCertDigest(const TimeoutCert& cert) {
@@ -1387,9 +1394,21 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     }
     return false;
   }
-  MaybeDelayVoteForExperiment(view);
-  const int send_result = SendMessage(MessageType::Vote, *cert, next_leader);
-  (void)send_result;
+  int send_result = 0;
+  if (IsSlowVoteForExperiment(view)) {
+    const int delay_us =
+        PositiveIntFromEnv("TD_HS_SLOW_VOTE_DELAY_US", 10000);
+    Certificate delayed_vote = *cert;
+    std::thread([this, delayed_vote = std::move(delayed_vote), next_leader,
+                 delay_us]() mutable {
+      std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
+      if (!IsStop()) {
+        SendMessage(MessageType::Vote, delayed_vote, next_leader);
+      }
+    }).detach();
+  } else {
+    send_result = SendMessage(MessageType::Vote, *cert, next_leader);
+  }
   if (conflicting_cert != nullptr) {
     SendMessage(MessageType::Vote, *conflicting_cert, next_leader);
   }

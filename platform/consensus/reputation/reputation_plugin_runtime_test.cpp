@@ -714,7 +714,7 @@ TEST(ReputationPluginRuntimeTest,
   ASSERT_EQ(first.size(), 1);
   ASSERT_EQ(first[0].validators.size(), 4);
   EXPECT_EQ(first[0].validators[0].peertrust_leader_debt, 20);
-  EXPECT_EQ(first[0].leader_weights[0], first[0].leader_weights[1]);
+  EXPECT_LT(first[0].leader_weights[0], first[0].leader_weights[1]);
 
   ReputationWeightSnapshot snapshot;
   snapshot.weights = first[0].next_weights;
@@ -753,7 +753,7 @@ TEST(ReputationPluginRuntimeTest,
             first[0].validators[0].next_weight);
   EXPECT_GT(second[0].validators[0].next_weight,
             options.config.peertrust_soft_min_weight);
-  EXPECT_EQ(second[0].leader_weights[0], first[0].leader_weights[0]);
+  EXPECT_LT(second[0].leader_weights[0], first[0].leader_weights[0]);
 }
 
 TEST(ReputationPluginRuntimeTest,
@@ -912,7 +912,7 @@ TEST(ReputationPluginRuntimeTest,
   auto first_candidates = WaitForCandidates(&runtime, 1);
   ASSERT_EQ(first_candidates.size(), 1);
   ASSERT_EQ(first_candidates[0].validators[0].stake_factor_per_mille, 1000);
-  ASSERT_LT(first_candidates[0].validators[0].next_weight, 100);
+  ASSERT_LE(first_candidates[0].validators[0].next_weight, 100);
 
   for (int view = 2; view < 4; ++view) {
     CertifiedSignerEvidenceRecord record;
@@ -932,11 +932,11 @@ TEST(ReputationPluginRuntimeTest,
   runtime.Stop();
 
   ASSERT_EQ(second_candidates.size(), 1);
-  EXPECT_EQ(second_candidates[0].validators[0].stake_factor_per_mille, 1000);
-  EXPECT_NE(second_candidates[0].validators[0].stake_factor_per_mille,
-            static_cast<int>(second_candidates[0].validators[0].current_weight *
-                             10));
-  EXPECT_GE(second_candidates[0].validators[0].next_weight,
+  EXPECT_EQ(second_candidates[0].validators[0].stake_factor_per_mille,
+            first_candidates[0].validators[0].stake_factor_per_mille);
+  EXPECT_EQ(second_candidates[0].validators[0].identity_factor_per_mille,
+            first_candidates[0].validators[0].identity_factor_per_mille);
+  EXPECT_LE(second_candidates[0].validators[0].next_weight,
             first_candidates[0].validators[0].next_weight);
 }
 

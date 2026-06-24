@@ -50,9 +50,9 @@ TEST(LeaderSelectionScheduleTest, DisabledMatchesRoundRobinAndEmptyContext) {
   }
 }
 
-TEST(LeaderSelectionScheduleTest, EqualEnabledWeightsMatchRoundRobin) {
+TEST(LeaderSelectionScheduleTest, EqualEnabledWeightsAboveThresholdMatchRoundRobin) {
   LeaderSelectionSchedule schedule(/*total_replicas=*/4,
-                                   std::vector<int64_t>{10, 10, 10, 10},
+                                   std::vector<int64_t>{20, 20, 20, 20},
                                    /*enabled=*/true,
                                    /*eligible_min_weight=*/10);
   for (int view = 1; view <= 40; ++view) {
@@ -63,7 +63,7 @@ TEST(LeaderSelectionScheduleTest, EqualEnabledWeightsMatchRoundRobin) {
 
 TEST(LeaderSelectionScheduleTest, WeightedSelectionIsDeterministicAndEligible) {
   LeaderSelectionSchedule schedule(/*total_replicas=*/4,
-                                   std::vector<int64_t>{100, 50, 1, 1},
+                                   std::vector<int64_t>{100, 50, 10, 10},
                                    /*enabled=*/true,
                                    /*eligible_min_weight=*/10);
   std::map<int, int> counts;
@@ -135,7 +135,7 @@ TEST(LeaderSelectionScheduleTest, AllBelowThresholdFallsBackToPositiveWeights) {
 
 TEST(LeaderSelectionScheduleTest, CertifiedPendingScheduleAffectsLookupAtBoundary) {
   LeaderSelectionSchedule schedule(/*total_replicas=*/3,
-                                   std::vector<int64_t>{10, 10, 10},
+                                   std::vector<int64_t>{20, 20, 20},
                                    /*enabled=*/true,
                                    /*eligible_min_weight=*/10);
   const std::vector<int64_t> next{100, 1, 1};

@@ -438,12 +438,14 @@ std::unique_ptr<WeightUpdateCert> WeightUpdateController::LatestCertForProposal(
   auto consider = [&](const WeightUpdateCert& cert) {
     const CandidateWeightUpdate& candidate = cert.candidate();
     const int activation_view = candidate.activation_view();
-    const int epoch_views = std::max(candidate.leader_epoch_views(), 1);
     if (view < activation_view &&
         view + piggyback_lead_views < activation_view) {
       return;
     }
-    if (view > activation_view + epoch_views) {
+    // Piggyback long enough for lagging replicas to learn the cert near the
+    // epoch boundary, but do not carry an already-activated cert for the full
+    // leader epoch on every proposal.
+    if (view > activation_view + piggyback_lead_views) {
       return;
     }
     if (best == nullptr || activation_view > best->candidate().activation_view()) {
@@ -508,8 +510,6 @@ WeightUpdateController::CandidateKey WeightUpdateController::KeyForCandidate(
   CandidateKey key;
   key.old_weight_root = candidate.old_weight_root();
   key.old_weight_version = candidate.old_weight_version();
-  key.window_start = candidate.window_start();
-  key.window_end = candidate.window_end();
   key.activation_view = candidate.activation_view();
   key.candidate_digest = candidate.candidate_digest();
   return key;

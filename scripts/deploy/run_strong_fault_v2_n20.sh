@@ -53,11 +53,12 @@ cleanup_all() {
 
 collect_logs() {
   rm -rf result_*_log result_*_reputation.jsonl result_*_qc_evidence.jsonl
+  local collect_timeout="${TD_HS_EXPERIMENT_LOG_COLLECTION_TIMEOUT_SECONDS:-15}s"
   for ip in $SERVERS; do
-    for node_id in $(ssh -o StrictHostKeyChecking=no hyperchain@$ip "ls ~/resilientdb_app/ 2>/dev/null | grep -E '^[0-9]+$'" 2>/dev/null); do
-      scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/kv_server_performance.log result_${node_id}_log 2>/dev/null &
-      scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/'td_hotstuff_reputation_node_'*.jsonl result_${node_id}_reputation.jsonl 2>/dev/null || true &
-      scp -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/'td_hotstuff_qc_evidence_node_'*.jsonl result_${node_id}_qc_evidence.jsonl 2>/dev/null || true &
+    for node_id in $(timeout "$collect_timeout" ssh -o BatchMode=yes -o StrictHostKeyChecking=no hyperchain@$ip "ls ~/resilientdb_app/ 2>/dev/null | grep -E '^[0-9]+$'" 2>/dev/null || true); do
+      timeout "$collect_timeout" scp -o BatchMode=yes -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/kv_server_performance.log result_${node_id}_log 2>/dev/null || true &
+      timeout "$collect_timeout" scp -o BatchMode=yes -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/'td_hotstuff_reputation_node_'*.jsonl result_${node_id}_reputation.jsonl 2>/dev/null || true &
+      timeout "$collect_timeout" scp -o BatchMode=yes -o StrictHostKeyChecking=no hyperchain@$ip:~/resilientdb_app/$node_id/'td_hotstuff_qc_evidence_node_'*.jsonl result_${node_id}_qc_evidence.jsonl 2>/dev/null || true &
     done
   done
   for d in "$DEPLOY_DIR"/resilientdb_app/*/; do
@@ -259,11 +260,11 @@ generate_performance_server_conf($N)
   export TD_HS_REPUTATION_ENABLE=1
   export TD_HS_WEIGHT_UPDATE_ENABLE=1
   export TD_HS_STRONG_FAULT_ENABLE=1
-  export TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE=0
-  export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=0
-  export TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE=0
-  export TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE=0
-  export TD_HS_CONFLICTING_QC_DETECT_ENABLE=0
+  export TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE=1
+  export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=1
+  export TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE=1
+  export TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE=1
+  export TD_HS_CONFLICTING_QC_DETECT_ENABLE=1
   if [ "${TD_HS_ALL_DETECTORS_ENABLE:-0}" = "1" ]; then
     td_hs_enable_all_detectors
   else
@@ -281,7 +282,7 @@ generate_performance_server_conf($N)
   export TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE=1
   export TD_HS_BENCHMARK_RETRY_ENABLE="${TD_HS_BENCHMARK_RETRY_ENABLE:-1}"
   export TD_HS_BENCHMARK_REQUEST_TIMEOUT_MS="${TD_HS_BENCHMARK_REQUEST_TIMEOUT_MS:-100}"
-  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1
+  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE="${TD_HS_REPUTATION_AUDIT_JSONL_ENABLE:-0}"
   export TD_HS_EVIDENCE_ENABLE=0
   export TD_HS_TIMEOUT_ENABLE=1
   export TD_HS_TIMEOUT_MS=200

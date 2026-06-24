@@ -556,7 +556,7 @@ std::vector<int> LeaderSelectionSchedule::BuildSmoothWeightedRoundRobin(
     const std::vector<int64_t>& weights, int64_t eligible_min_weight) const {
   std::vector<int64_t> effective(weights.size(), 0);
   for (size_t i = 0; i < weights.size(); ++i) {
-    if (weights[i] >= eligible_min_weight) {
+    if (weights[i] > eligible_min_weight) {
       effective[i] = weights[i];
     }
   }
@@ -582,11 +582,11 @@ bool LeaderSelectionSchedule::IsExactRoundRobinProfile(
   if (static_cast<int>(weights.size()) != total_replicas_ || total_replicas_ <= 0) {
     return true;
   }
-  if (weights.empty() || weights.front() < eligible_min_weight) {
+  if (weights.empty() || weights.front() <= eligible_min_weight) {
     return false;
   }
   for (int64_t weight : weights) {
-    if (weight != weights.front() || weight < eligible_min_weight) {
+    if (weight != weights.front() || weight <= eligible_min_weight) {
       return false;
     }
   }

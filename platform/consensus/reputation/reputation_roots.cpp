@@ -94,7 +94,7 @@ std::string ReputationCanonical(const ReputationCandidate& candidate) {
 std::string StrongFaultCanonical(const ReputationCandidate& candidate) {
   std::ostringstream out;
   out << "protocol_neutral_strong_fault_v1|" << candidate.algorithm << '|'
-      << candidate.total_replicas << '|' << candidate.window_index;
+      << candidate.total_replicas;
   for (const StrongFaultRecord& fault : candidate.strong_faults) {
     out << '|' << static_cast<int>(fault.type) << ':' << fault.validator_id
         << ':' << fault.view_or_round << ':' << fault.slot_or_height << ':'
@@ -106,7 +106,7 @@ std::string StrongFaultCanonical(const ReputationCandidate& candidate) {
 std::string PenaltyCanonical(const ReputationCandidate& candidate) {
   std::ostringstream out;
   out << "protocol_neutral_penalty_v1|" << candidate.algorithm << '|'
-      << candidate.total_replicas << '|' << candidate.window_index;
+      << candidate.total_replicas;
   for (const ValidatorReputation& validator : candidate.validators) {
     out << '|' << validator.validator_id << ':' << validator.strong_fault_count
         << ':' << validator.penalty_points << ':' << validator.next_weight;
@@ -131,12 +131,14 @@ std::string CandidateCanonicalFromParts(
     int leader_epoch_views,
     const std::vector<int>& leader_epoch_leaders,
     const std::string& leader_schedule_root_hex) {
+  (void)start_view;
+  (void)end_view;
   (void)metric_root_hex;
   (void)reputation_root_hex;
   std::ostringstream out;
   out << "protocol_neutral_reputation_decision_v4|" << total_replicas << '|'
-      << start_view << '|' << end_view << '|' << old_weight_root_hex << '|'
-      << old_weight_version << '|' << activation_view << '|'
+      << old_weight_root_hex << '|' << old_weight_version << '|'
+      << activation_view << '|'
       << next_weight_root_hex << '|' << strong_fault_root_hex << '|'
       << penalty_root_hex << "|leader:" << leader_selection_version << '|'
       << leader_eligible_min_weight << '|' << leader_weight_root_hex

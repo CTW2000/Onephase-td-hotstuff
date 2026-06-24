@@ -26,8 +26,8 @@ enum class OutcomeClass {
 };
 
 struct ReputationConfig {
-  int decay_per_epoch = 3;
-  int max_recovery_per_epoch = 3;
+  int decay_per_epoch = 2;
+  int max_recovery_per_epoch = 2;
   int bonus_per_epoch = 1;
   int64_t min_weight = 1;
   int64_t max_weight = 100;

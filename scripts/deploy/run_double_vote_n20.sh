@@ -117,11 +117,11 @@ generate_performance_server_conf($N)
   export TD_HS_REPUTATION_ENABLE=1
   export TD_HS_WEIGHT_UPDATE_ENABLE="${weight_update_enable_override:-1}"
   export TD_HS_STRONG_FAULT_ENABLE=1
-  export TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE=0
-  export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=0
-  export TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE=0
-  export TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE=0
-  export TD_HS_CONFLICTING_QC_DETECT_ENABLE=0
+  export TD_HS_DOUBLE_PROPOSAL_DETECT_ENABLE=1
+  export TD_HS_DOUBLE_VOTE_DETECT_ENABLE=1
+  export TD_HS_INVALID_QC_PROPOSAL_DETECT_ENABLE=1
+  export TD_HS_WEIGHT_UPDATE_VOTE_EQUIVOCATION_DETECT_ENABLE=1
+  export TD_HS_CONFLICTING_QC_DETECT_ENABLE=1
   if [ "${TD_HS_ALL_DETECTORS_ENABLE:-0}" = "1" ]; then
     td_hs_enable_all_detectors
   else
@@ -132,7 +132,7 @@ generate_performance_server_conf($N)
   export TD_HS_DOUBLE_VOTE_START_VIEW="${TD_HS_DOUBLE_VOTE_START_VIEW:-${TD_HS_STRONG_FAULT_ATTACK_START_VIEW}}"
   # Strong-fault experiments should punish only authenticated equivocation
   # evidence. Keep soft decay inactive to avoid unrelated honest-node drift.
-  export TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES=1000000
+  export TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES="${TD_HS_REPUTATION_MIN_DECAY_OPPORTUNITIES:-1}"
   export TD_HS_REPUTATION_WINDOW_SIZE=64
   export TD_HS_REPUTATION_MIN_CANDIDATE_QCS=16
   export TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS=64
@@ -141,7 +141,7 @@ generate_performance_server_conf($N)
   export TD_HS_LEADER_SELECTION_ENABLE=1
   export TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT=10
   export TD_HS_BENCHMARK_DYNAMIC_ROUTING_ENABLE=1
-  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1
+  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE="${TD_HS_REPUTATION_AUDIT_JSONL_ENABLE:-0}"
   export TD_HS_EVIDENCE_ENABLE=0
   # Double vote creates signed conflicting votes for the same view. Keep the
   # experiment pacemaker on so equivocated views can still advance if needed.

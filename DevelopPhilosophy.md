@@ -23,12 +23,20 @@ These rules are part of the framework design. Read them before changing code.
 
 ## Role Separation
 
-- Voter behavior affects voting weight.
-- Leader behavior affects leader weight.
-- Do not let slow-voter decay automatically remove leader eligibility when leader behavior is healthy.
+- Vote score and leader score are computed independently from their own evidence.
+- The plugin combines those independent scores into the node's final reputation/weight through the normal certified pipeline.
+- When a role-specific score changes, preserve the evidence attribution in audit output so experiments can explain whether the loss came from voter behavior, leader behavior, PeerTrust/Sybil context, or strong-fault evidence.
 
 ## Performance Rule
 
 - Keep the consensus hot path thin.
 - Prefer adapter/plugin/runtime changes before consensus changes.
 - After any pipeline change, verify the no-Byzantine baseline before trusting attack results.
+
+## Full-Pipeline Experiment Rule
+
+- Main experiments must enable the full implemented reputation pipeline.
+- Do not disable bonus, recovery, PeerTrust, SybilGraph, strong-fault detectors, or certified weight updates in a main experiment to make a result easier to interpret.
+- If a run disables a mechanism, call it an ablation or diagnostic control and keep it separate from paper conclusions about the full design.
+- Validators should start from low certified reputation/weight and earn influence slowly through long correct behavior.
+- Reaching maximum weight should be difficult; conservative growth and diminishing bonus are part of the design, not a test artifact.

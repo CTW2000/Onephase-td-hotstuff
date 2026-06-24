@@ -295,6 +295,38 @@ TEST(WeightUpdateControllerTest, VotesOnlyForMatchingLocalCandidate) {
   EXPECT_EQ(controller.HandleCandidate(wrong_leader_root), nullptr);
 }
 
+
+TEST(WeightUpdateControllerTest,
+     OutputEquivalentCandidateIgnoresWindowMetadataForLocalMatch) {
+  auto schedule = std::make_shared<WeightSchedule>(
+      4, std::vector<int64_t>{1, 1, 1, 1});
+  MockSignatureVerifier verifier;
+  EXPECT_CALL(verifier, SignMessage(_)).WillOnce(Return(SignatureFor(1)));
+  WeightUpdateController controller(/*node_id=*/1, /*total_replicas=*/4,
+                                    schedule, &verifier);
+  auto local = Candidate();
+  auto remote = local;
+  remote.window_index = 7;
+  remote.start_view = local.start_view + 1;
+  remote.end_view = local.end_view + 1;
+  remote.event_count = local.event_count + 8;
+  remote.metric_root_hex = "different-local-metric-root";
+  remote.reputation_root_hex = "different-local-reputation-root";
+  resdb::consensus::reputation::RecomputeReputationCandidateRoots(&remote);
+
+  ASSERT_EQ(local.next_weight_root_hex, remote.next_weight_root_hex);
+  ASSERT_EQ(local.strong_fault_root_hex, remote.strong_fault_root_hex);
+  ASSERT_EQ(local.candidate_digest_hex, remote.candidate_digest_hex);
+
+  ASSERT_TRUE(controller.AddLocalCandidate(local));
+  std::unique_ptr<WeightUpdateVote> vote = controller.HandleCandidate(
+      CandidateMessage(remote));
+
+  ASSERT_NE(vote, nullptr);
+  EXPECT_EQ(vote->signer(), 1);
+  EXPECT_EQ(vote->candidate_digest(), local.candidate_digest_hex);
+}
+
 TEST(WeightUpdateControllerTest,
      VotesAtMostOnceForEachOldWeightRootAndVersion) {
   auto schedule = std::make_shared<WeightSchedule>(
@@ -809,6 +841,9 @@ TEST(WeightUpdateControllerTest, LatestCertForProposalHonorsPiggybackLead) {
   ASSERT_NE(near_activation, nullptr);
   EXPECT_EQ(near_activation->candidate().candidate_digest(),
             candidate.candidate_digest_hex);
+  ASSERT_TRUE(controller.ActivateReady(candidate.activation_view));
+  EXPECT_NE(controller.LatestCertForProposal(18), nullptr);
+  EXPECT_EQ(controller.LatestCertForProposal(19), nullptr);
   unsetenv("TD_HS_WEIGHT_UPDATE_CERT_PIGGYBACK_LEAD_VIEWS");
 }
 

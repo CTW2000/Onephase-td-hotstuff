@@ -51,16 +51,13 @@ class WeightUpdateController {
   struct CandidateKey {
     std::string old_weight_root;
     uint64_t old_weight_version = 0;
-    int window_start = 0;
-    int window_end = 0;
     int activation_view = 0;
     std::string candidate_digest;
 
     bool operator<(const CandidateKey& other) const {
-      return std::tie(old_weight_root, old_weight_version, window_start,
-                      window_end, activation_view, candidate_digest) <
+      return std::tie(old_weight_root, old_weight_version, activation_view,
+                      candidate_digest) <
              std::tie(other.old_weight_root, other.old_weight_version,
-                      other.window_start, other.window_end,
                       other.activation_view, other.candidate_digest);
     }
   };

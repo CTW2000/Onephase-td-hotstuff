@@ -75,6 +75,45 @@ class CalculateResultTest(unittest.TestCase):
             calculate_result.RESULT_WARMUP_SAMPLE_RATIO = old_ratio
             calculate_result.RESULT_COOLDOWN_SAMPLE_RATIO = old_cooldown_ratio
 
+    def test_timestamped_logs_trim_post_warmup_throughput_ramp(self):
+        old_warmup = calculate_result.RESULT_WARMUP_SECONDS
+        old_cooldown = calculate_result.RESULT_COOLDOWN_SECONDS
+        calculate_result.RESULT_WARMUP_SECONDS = 5
+        calculate_result.RESULT_COOLDOWN_SECONDS = 0
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                log_path = pathlib.Path(temp_dir) / "node.log"
+                ramp_lines = [
+                    f"I20260608 10:00:{second:02d}.000000 txn:{value} "
+                    f"req client latency:0.010"
+                    for second, value in zip(range(6, 9), [460, 640, 760])
+                ]
+                plateau_lines = [
+                    f"I20260608 10:00:{second:02d}.000000 txn:{72000 + second} "
+                    f"req client latency:0.010"
+                    for second in range(9, 19)
+                ]
+                log_path.write_text(
+                    "\n".join(
+                        [
+                            "I20260608 10:00:00.000000 txn:100 req client latency:0.010",
+                            *ramp_lines,
+                            *plateau_lines,
+                        ]
+                    )
+                    + "\n"
+                )
+
+                samples = calculate_result.read_tps(str(log_path))
+
+            self.assertEqual(samples.warmup_tps, [100])
+            self.assertEqual(samples.stable_tps, [72000 + second for second in range(9, 19)])
+            self.assertEqual(samples.stable_lat, [0.010 for _ in range(13)])
+            self.assertFalse(samples.stable_window_fallback)
+        finally:
+            calculate_result.RESULT_WARMUP_SECONDS = old_warmup
+            calculate_result.RESULT_COOLDOWN_SECONDS = old_cooldown
+
     def test_read_tps_tolerates_non_utf8_log_bytes(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             log_path = pathlib.Path(temp_dir) / "node.log"
@@ -181,6 +220,20 @@ class CalculateResultTest(unittest.TestCase):
         finally:
             calculate_result.RESULT_WARMUP_SECONDS = old_warmup
 
+    def test_stable_average_drops_small_low_positive_outlier_prefix(self):
+        samples = [460, 640, 760] + [72000 + index for index in range(20)]
+        trimmed = calculate_result.trim_low_throughput_outliers(
+            sorted(samples), "stable")
+
+        self.assertEqual(trimmed, [72000 + index for index in range(20)])
+
+    def test_stable_average_keeps_large_low_positive_region(self):
+        samples = [5000 + index for index in range(20)] + [72000 + index for index in range(20)]
+        trimmed = calculate_result.trim_low_throughput_outliers(
+            sorted(samples), "stable")
+
+        self.assertEqual(trimmed, sorted(samples))
+
     def test_final_numeric_output_uses_stable_averages(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             log_path = pathlib.Path(temp_dir) / "node.log"
@@ -255,7 +308,7 @@ class CalculateResultTest(unittest.TestCase):
                     [
                         "txn:100 time:5",
                         "activated TD-Hotstuff weight update version:3 view:1536 "
-                        "active_weights:[1,1,30,30] leader_profile_activation_view:2048",
+                        "active_weights:[10,10,30,30] leader_profile_activation_view:2048",
                         "txn:300 time:10",
                         "txn:500 time:15",
                     ]
@@ -280,7 +333,7 @@ class CalculateResultTest(unittest.TestCase):
                     [
                         "txn:100 time:5",
                         "activated TD-Hotstuff weight update version:3 view:1536 "
-                        "active_weights:[1,30,30,1] leader_profile_activation_view:2048",
+                        "active_weights:[10,30,30,10] leader_profile_activation_view:2048",
                         "txn:300 time:10",
                     ]
                 )
@@ -302,7 +355,7 @@ class CalculateResultTest(unittest.TestCase):
                     [
                         "txn:100 time:5",
                         "activated TD-Hotstuff weight update version:3 view:1536 "
-                        "active_weights:[1,1,30,30] "
+                        "active_weights:[10,10,30,30] "
                         "leader_weights:[100,100,100,100] "
                         "leader_profile_activation_view:2048",
                         "txn:300 time:10",

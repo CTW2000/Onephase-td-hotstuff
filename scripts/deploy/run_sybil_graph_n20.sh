@@ -156,7 +156,7 @@ generate_performance_server_conf($N)
   export TEMPLATE_PATH=$PWD/config/td_hotstuff.config
   export server=//benchmark/protocols/td_hotstuff:kv_server_performance
   export TD_HS_REPUTATION_ENABLE=1
-  export TD_HS_REPUTATION_PEERTRUST_ENABLE=0
+  export TD_HS_REPUTATION_PEERTRUST_ENABLE=1
   export TD_HS_REPUTATION_SYBIL_GRAPH_ENABLE="$sybil_graph_enabled"
   export TD_HS_REPUTATION_SYBIL_GRAPH_MIN_EDGES=1
   export TD_HS_REPUTATION_SYBIL_GRAPH_DEBT_INCREMENT=30
@@ -164,7 +164,7 @@ generate_performance_server_conf($N)
   export TD_HS_REPUTATION_SYBIL_GRAPH_DEBT_TRIGGER_SCORE=75
   export TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=1
   export TD_HS_WEIGHT_UPDATE_ENABLE=1
-  export TD_HS_STRONG_FAULT_ENABLE=0
+  export TD_HS_STRONG_FAULT_ENABLE=1
   export TD_HS_REPUTATION_WINDOW_SIZE=64
   export TD_HS_REPUTATION_MIN_CANDIDATE_QCS=16
   export TD_HS_REPUTATION_MIN_LEADER_OPPORTUNITIES=1

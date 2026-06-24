@@ -24,8 +24,10 @@ constexpr const char* kAlgorithmBayesV4 = "bayes_v4";
 constexpr int64_t kCarryoverDecayWeightGap = 10;
 constexpr int kHealthyCatchUpScore = 40;
 constexpr int kLeaderDiversityGateThreshold = 50;
+constexpr int kLeaderSoftFaultScoreThreshold = 70;
 constexpr int kDebtNoRecoveryBelow = 30;
 constexpr uint64_t kMinNoCertifiedLeaderOpportunities = 3;
+constexpr uint64_t kMinFirstWindowSoftDecayOpportunities = 4;
 constexpr uint64_t kVoteBetaCounterScale = 1000;
 constexpr int kFactorScale = 1000;
 constexpr int kFormulaFullReputationScore = kHealthyCatchUpScore;
@@ -189,18 +191,20 @@ int FormulaReputationFactorPerMille(int recovery_score,
   return smooth_factor;
 }
 
-int64_t MultiplicativeWeightFromFactors(
-    const ValidatorReputation& validator, const ReputationConfig& config) {
+int64_t MultiplicativeWeightFromFactorValues(
+    const ReputationConfig& config, int stake_power_factor_per_mille,
+    int identity_factor_per_mille, int reputation_factor_per_mille,
+    int direct_penalty_factor_per_mille) {
   unsigned __int128 numerator =
       static_cast<unsigned __int128>(std::max<int64_t>(0, config.max_weight));
-  numerator *= static_cast<uint64_t>(ClampPermilleFactor(
-      validator.stake_power_factor_per_mille));
-  numerator *= static_cast<uint64_t>(ClampPermilleFactor(
-      validator.identity_factor_per_mille));
-  numerator *= static_cast<uint64_t>(ClampPermilleFactor(
-      validator.reputation_factor_per_mille));
-  numerator *= static_cast<uint64_t>(ClampPermilleFactor(
-      validator.direct_penalty_factor_per_mille));
+  numerator *= static_cast<uint64_t>(
+      ClampPermilleFactor(stake_power_factor_per_mille));
+  numerator *=
+      static_cast<uint64_t>(ClampPermilleFactor(identity_factor_per_mille));
+  numerator *=
+      static_cast<uint64_t>(ClampPermilleFactor(reputation_factor_per_mille));
+  numerator *= static_cast<uint64_t>(
+      ClampPermilleFactor(direct_penalty_factor_per_mille));
   numerator += kFourFactorDenominator / 2;
   const unsigned __int128 raw = numerator / kFourFactorDenominator;
   const int64_t bounded_raw =
@@ -208,6 +212,29 @@ int64_t MultiplicativeWeightFromFactors(
           ? std::numeric_limits<int64_t>::max()
           : static_cast<int64_t>(raw);
   return ClampWeight(bounded_raw, config);
+}
+
+int64_t MultiplicativeWeightFromFactors(
+    const ValidatorReputation& validator, const ReputationConfig& config) {
+  return MultiplicativeWeightFromFactorValues(
+      config, validator.stake_power_factor_per_mille,
+      validator.identity_factor_per_mille,
+      validator.reputation_factor_per_mille,
+      validator.direct_penalty_factor_per_mille);
+}
+
+int64_t WeightWithFixedFactorsForBehaviorWeight(
+    const ValidatorReputation& validator, const ReputationConfig& config,
+    int64_t behavior_weight, int direct_penalty_factor_per_mille) {
+  const int64_t clamped_behavior_weight = ClampWeight(behavior_weight, config);
+  if (!config.multiplicative_weight_formula_enabled) {
+    return clamped_behavior_weight;
+  }
+  return MultiplicativeWeightFromFactorValues(
+      config, validator.stake_power_factor_per_mille,
+      validator.identity_factor_per_mille,
+      WeightRatioFactorPerMille(clamped_behavior_weight, config.max_weight),
+      direct_penalty_factor_per_mille);
 }
 
 int DirectPenaltyFactorForWeight(int64_t pre_penalty_weight,
@@ -255,6 +282,132 @@ void MaybeApplyMultiplicativeWeightFormula(
   if (config.multiplicative_weight_formula_enabled) {
     validator->next_weight = MultiplicativeWeightFromFactors(*validator, config);
   }
+}
+
+int BoundedReputationScore(int score) {
+  return std::max(0, std::min(100, score));
+}
+
+int VoteReputationScore(const ValidatorReputation& validator) {
+  return BoundedReputationScore(validator.vote_score);
+}
+
+int64_t ReputationTargetWeightForScore(int score,
+                                       const ReputationConfig& config) {
+  const int bounded_score = std::max(0, std::min(100, score));
+  const int64_t min_weight = ClampWeight(config.min_weight, config);
+  const int64_t max_weight = ClampWeight(config.max_weight, config);
+  if (bounded_score <= 0 || max_weight <= min_weight) {
+    return min_weight;
+  }
+  if (bounded_score >= 100) {
+    return max_weight;
+  }
+  const int64_t range = max_weight - min_weight;
+  const int64_t curved =
+      (range * bounded_score * bounded_score + 5000) / 10000;
+  return ClampWeight(min_weight + curved, config);
+}
+
+int DiminishingBonusCreditForScore(int score, int64_t current_weight,
+                                   int64_t target_weight,
+                                   const ReputationConfig& config,
+                                   uint64_t vote_opportunities,
+                                   uint64_t leader_opportunities) {
+  if (target_weight <= current_weight || config.bonus_per_epoch <= 0) {
+    return 0;
+  }
+  const int bounded_score = std::max(0, std::min(100, score));
+  if (bounded_score < kHealthyCatchUpScore) {
+    return 0;
+  }
+  const int64_t min_weight = ClampWeight(config.min_weight, config);
+  const int64_t max_weight = ClampWeight(config.max_weight, config);
+  const int64_t range = std::max<int64_t>(1, max_weight - min_weight);
+  const int64_t progress =
+      ((ClampWeight(current_weight, config) - min_weight) * 100) / range;
+  if ((progress >= 90 && bounded_score < 100) ||
+      (progress >= 80 && bounded_score < 98) ||
+      (progress >= 70 && bounded_score < 95)) {
+    return 0;
+  }
+  if (progress >= 90) {
+    const uint64_t required =
+        std::max<uint64_t>(config.min_decay_opportunities, 1) * 4;
+    if (vote_opportunities + leader_opportunities < required) {
+      return 0;
+    }
+  }
+  const int64_t headroom = target_weight - current_weight;
+  const int64_t raw =
+      (static_cast<int64_t>(config.bonus_per_epoch) * bounded_score *
+           std::max<int64_t>(1, max_weight - current_weight) +
+       100 * range - 1) /
+      (100 * range);
+  return static_cast<int>(std::max<int64_t>(1, std::min(headroom, raw)));
+}
+
+
+int LeaderRecoveryCreditForScore(int score, int max_recovery_per_epoch) {
+  if (max_recovery_per_epoch <= 0) {
+    return 0;
+  }
+  const int bounded_score = std::max(0, std::min(100, score));
+  if (bounded_score >= 95) {
+    return max_recovery_per_epoch;
+  }
+  return static_cast<int>((static_cast<int64_t>(bounded_score) *
+                           max_recovery_per_epoch) /
+                          100);
+}
+
+struct BehaviorWeightUpdate {
+  int64_t target_weight = 0;
+  int decay_applied = 0;
+  int recovery_credit = 0;
+  int bonus_credit = 0;
+  int64_t next_weight = 0;
+};
+
+BehaviorWeightUpdate ComputeBehaviorWeightUpdate(
+    int score, int64_t current_weight, const ReputationConfig& config,
+    bool has_behavior_evidence, bool carryover_decay,
+    uint64_t primary_opportunities, uint64_t secondary_opportunities,
+    bool apply_recovery_credit) {
+  BehaviorWeightUpdate update;
+  const int bounded_score = std::max(0, std::min(100, score));
+  const int64_t current = ClampWeight(current_weight, config);
+  update.target_weight = ReputationTargetWeightForScore(bounded_score, config);
+  if (current >= config.max_weight && bounded_score >= 90) {
+    update.target_weight = ClampWeight(config.max_weight, config);
+  }
+  update.next_weight = current;
+  if (!has_behavior_evidence) {
+    return update;
+  }
+  if (current > update.target_weight) {
+    const int64_t available_decay =
+        std::max<int64_t>(0, current - config.min_weight);
+    update.decay_applied = static_cast<int>(std::min<int64_t>(
+        available_decay,
+        std::min<int64_t>(config.decay_per_epoch,
+                          current - update.target_weight)));
+    if (apply_recovery_credit) {
+      update.recovery_credit = std::min(
+          update.decay_applied,
+          LeaderRecoveryCreditForScore(bounded_score,
+                                       config.max_recovery_per_epoch));
+    }
+  } else if (current < update.target_weight && !carryover_decay) {
+    update.bonus_credit = DiminishingBonusCreditForScore(
+        bounded_score, current, update.target_weight, config,
+        primary_opportunities, secondary_opportunities);
+  }
+  update.next_weight = ClampWeight(current - update.decay_applied +
+                                       update.recovery_credit +
+                                       update.bonus_credit,
+                                   config);
+  return update;
 }
 
 int VoteBetaDecayPerMille(const ReputationConfig& config) {
@@ -306,12 +459,17 @@ void UpdateVoteBetaCounters(ValidatorReputation* validator,
       validator->opportunities > validator->inclusions
           ? validator->opportunities - validator->inclusions
           : 0;
+  const uint64_t decayed_success =
+      DecayVoteBetaCounter(validator->vote_beta_success, config);
+  const uint64_t decayed_failure =
+      DecayVoteBetaCounter(validator->vote_beta_failure, config);
   validator->vote_beta_success =
-      DecayVoteBetaCounter(validator->vote_beta_success, config) +
-      ScaledObservationCount(validator->inclusions);
-  validator->vote_beta_failure =
-      DecayVoteBetaCounter(validator->vote_beta_failure, config) +
-      ScaledObservationCount(misses);
+      decayed_success + ScaledObservationCount(validator->inclusions);
+  validator->vote_beta_failure = decayed_failure + ScaledObservationCount(misses);
+  if (validator->inclusions > 0 && misses == 0 && decayed_failure == 0) {
+    validator->vote_score = 100;
+    return;
+  }
   validator->vote_score = VoteScoreFromBetaCounters(
       validator->vote_beta_success, validator->vote_beta_failure);
 }
@@ -366,24 +524,6 @@ void CountLeaderOutcomeOpportunity(
   }
 }
 
-int CoreRecoveryCreditForScore(int score, int max_recovery_per_epoch) {
-  if (max_recovery_per_epoch <= 0) {
-    return 0;
-  }
-  constexpr int kNoRecoveryBelow = 10;
-  constexpr int kFullRecoveryAt = 30;
-  const int bounded_score = std::max(0, std::min(100, score));
-  if (bounded_score >= kFullRecoveryAt) {
-    return max_recovery_per_epoch;
-  }
-  if (bounded_score < kNoRecoveryBelow) {
-    return 0;
-  }
-  return RoundedDivide(static_cast<uint64_t>(bounded_score - kNoRecoveryBelow) *
-                           static_cast<uint64_t>(max_recovery_per_epoch),
-                       kFullRecoveryAt - kNoRecoveryBelow);
-}
-
 bool HasLeaderRecoveryEvidence(const ValidatorReputation& validator,
                                const ReputationConfig& config) {
   if (!config.leader_recovery_enabled) {
@@ -392,7 +532,7 @@ bool HasLeaderRecoveryEvidence(const ValidatorReputation& validator,
   const bool has_repeated_uncertified_leader_opportunities =
       validator.leader_opportunity_count >= kMinNoCertifiedLeaderOpportunities &&
       validator.leader_certified_count == 0 && validator.leader_score < 50;
-  return validator.leader_score < 95 &&
+  return validator.leader_score < kLeaderSoftFaultScoreThreshold &&
          (validator.leader_opportunity_count >= config.min_leader_opportunities ||
           has_repeated_uncertified_leader_opportunities);
 }
@@ -447,6 +587,10 @@ int LeaderSelectionScore(const ValidatorReputation& validator,
   }
 
   int score = validator.leader_score;
+  if (!HasDirectLeaderProfileCap(validator, config) &&
+      score >= kLeaderSoftFaultScoreThreshold) {
+    return 100;
+  }
   if (HasDirectLeaderProfileCap(validator, config)) {
     score = std::max<int>(score, static_cast<int>(std::max<int64_t>(
                                      config.min_weight,
@@ -457,76 +601,34 @@ int LeaderSelectionScore(const ValidatorReputation& validator,
   return std::max(0, std::min(100, score));
 }
 
-bool HasBroadLeaderRecoveryEvidence(const ValidatorReputation& validator,
-                                    const ReputationConfig& config) {
+bool HasLeaderBehaviorWeightEvidence(const ValidatorReputation& validator,
+                                     const ReputationConfig& config) {
   if (!config.leader_recovery_enabled) {
-    return true;
-  }
-  return validator.leader_certified_count >= config.min_leader_opportunities &&
-         validator.leader_diversity_score >= 95 && validator.leader_score >= 95;
-}
-
-bool ShouldPreserveSoftLeaderCap(const ValidatorReputation& validator,
-                                 const ReputationConfig& config,
-                                 int64_t current_leader_weight) {
-  if (!config.leader_recovery_enabled || validator.strong_fault_count > 0) {
-    return false;
-  }
-  const int64_t max_leader_weight = ClampWeight(config.max_weight, config);
-  const int64_t min_leader_weight = ClampWeight(config.min_weight, config);
-  if (current_leader_weight >= max_leader_weight ||
-      current_leader_weight <= config.leader_eligible_min_weight) {
-    return false;
-  }
-  if (LeaderSelectionScore(validator, config) < 100) {
-    return false;
-  }
-  if (HasBroadLeaderRecoveryEvidence(validator, config)) {
-    return false;
-  }
-  return current_leader_weight >= min_leader_weight;
-}
-
-int LeaderRecoveryCreditForScore(int score, int max_recovery_per_epoch) {
-  if (max_recovery_per_epoch <= 0) {
-    return 0;
-  }
-  const int bounded_score = std::max(0, std::min(100, score));
-  if (bounded_score >= 95) {
-    return max_recovery_per_epoch;
-  }
-  return static_cast<int>((static_cast<int64_t>(bounded_score) *
-                           max_recovery_per_epoch) /
-                          100);
-}
-
-bool HasSoftLeaderRecoveryFault(const ValidatorReputation& validator,
-                                const ReputationConfig& config) {
-  if (!config.leader_recovery_enabled || validator.strong_fault_count > 0) {
     return false;
   }
   if (HasDirectLeaderProfileCap(validator, config)) {
+    return true;
+  }
+  if (validator.leader_opportunity_count >= kMinNoCertifiedLeaderOpportunities &&
+      validator.leader_certified_count == 0) {
+    return true;
+  }
+  if (validator.leader_opportunity_count == 0 &&
+      validator.leader_certified_count == 0) {
     return false;
   }
-  const bool has_leader_opportunities =
-      validator.leader_opportunity_count >= config.min_leader_opportunities ||
-      validator.leader_opportunity_count >= kMinNoCertifiedLeaderOpportunities;
-  return validator.leader_certified_count == 0 && has_leader_opportunities &&
-         LeaderSelectionScore(validator, config) < 95;
+  return LeaderSelectionScore(validator, config) >= 100;
 }
 
-int64_t SmoothedLeaderWeightForScore(const ValidatorReputation& validator,
-                                     const ReputationConfig& config,
-                                     int64_t current_leader_weight) {
-  const int64_t current = ClampWeight(current_leader_weight, config);
-  const int64_t available_decay =
-      std::max<int64_t>(0, current - config.min_weight);
-  const int decay = static_cast<int>(
-      std::min<int64_t>(available_decay, config.decay_per_epoch));
-  const int recovery = std::min(
-      decay, LeaderRecoveryCreditForScore(LeaderSelectionScore(validator, config),
-                                          config.max_recovery_per_epoch));
-  return ClampWeight(current - decay + recovery, config);
+BehaviorWeightUpdate LeaderBehaviorWeightUpdateForScore(
+    const ValidatorReputation& validator, const ReputationConfig& config,
+    int64_t current_leader_weight) {
+  return ComputeBehaviorWeightUpdate(
+      LeaderSelectionScore(validator, config), current_leader_weight, config,
+      HasLeaderBehaviorWeightEvidence(validator, config),
+      /*carryover_decay=*/false,
+      /*primary_opportunities=*/0, validator.leader_opportunity_count,
+      /*apply_recovery_credit=*/true);
 }
 
 std::vector<int64_t> LeaderWeightsForCandidate(
@@ -535,52 +637,39 @@ std::vector<int64_t> LeaderWeightsForCandidate(
     const std::vector<int64_t>& current_leader_weights) {
   std::vector<int64_t> leader_weights;
   leader_weights.reserve(validators.size());
-  bool all_validators_eligible = !validators.empty();
-  for (size_t i = 0; i < validators.size(); ++i) {
-    const ValidatorReputation& validator = validators[i];
-    const int64_t current_leader_weight =
-        i < current_leader_weights.size() ? current_leader_weights[i]
-                                          : config.max_weight;
-    if (IsLeaderWeightIneligible(validator, config, current_leader_weight)) {
-      all_validators_eligible = false;
-      break;
-    }
-    if (HasSoftLeaderRecoveryFault(validator, config) ||
-        HasDirectLeaderProfileCap(validator, config)) {
-      all_validators_eligible = false;
-      break;
-    }
-    if (ShouldPreserveSoftLeaderCap(validator, config, current_leader_weight)) {
-      all_validators_eligible = false;
-      break;
-    }
-  }
-  const int64_t equal_leader_weight = ClampWeight(config.max_weight, config);
   const int64_t ineligible_leader_weight = ClampWeight(config.min_weight, config);
   for (size_t i = 0; i < validators.size(); ++i) {
     const ValidatorReputation& validator = validators[i];
     const int64_t current_leader_weight =
         i < current_leader_weights.size() ? current_leader_weights[i]
-                                          : config.max_weight;
-    if (all_validators_eligible) {
-      leader_weights.push_back(equal_leader_weight);
-    } else if (IsLeaderWeightIneligible(validator, config,
-                                        current_leader_weight)) {
+                                          : validator.current_weight;
+    int64_t leader_weight = config.leader_recovery_enabled
+                                ? ClampWeight(current_leader_weight, config)
+                                : ClampWeight(validator.next_weight, config);
+    if (IsLeaderWeightIneligible(validator, config, current_leader_weight)) {
       leader_weights.push_back(ineligible_leader_weight);
-    } else if (HasSoftLeaderRecoveryFault(validator, config)) {
-      leader_weights.push_back(
-          SmoothedLeaderWeightForScore(validator, config, current_leader_weight));
-    } else if (HasDirectLeaderProfileCap(validator, config)) {
-      leader_weights.push_back(ClampWeight(LeaderSelectionScore(validator, config),
-                                           config));
-    } else if (ShouldPreserveSoftLeaderCap(validator, config,
-                                           current_leader_weight)) {
-      leader_weights.push_back(ClampWeight(current_leader_weight, config));
-    } else if (config.leader_recovery_enabled) {
-      leader_weights.push_back(equal_leader_weight);
-    } else {
-      leader_weights.push_back(validator.next_weight);
+      continue;
     }
+    if (config.leader_recovery_enabled) {
+      const BehaviorWeightUpdate leader_update =
+          LeaderBehaviorWeightUpdateForScore(validator, config,
+                                             current_leader_weight);
+      leader_weight = leader_update.next_weight;
+    }
+    if (HasDirectLeaderProfileCap(validator, config)) {
+      const int64_t leader_profile_cap = ClampWeight(
+          LeaderSelectionScore(validator, config), config);
+      leader_weight = std::min<int64_t>(leader_weight, leader_profile_cap);
+      if (validator.vote_score >= kHealthyCatchUpScore &&
+          current_leader_weight >= leader_profile_cap) {
+        leader_weight = std::max<int64_t>(leader_weight, leader_profile_cap);
+      }
+    }
+    if (config.leader_recovery_enabled) {
+      leader_weight = WeightWithFixedFactorsForBehaviorWeight(
+          validator, config, leader_weight, kFactorScale);
+    }
+    leader_weights.push_back(ClampWeight(leader_weight, config));
   }
   return leader_weights;
 }
@@ -834,6 +923,10 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
   for (ValidatorReputation& validator : candidate->validators) {
     const bool had_vote_history =
         validator.vote_beta_success > 0 || validator.vote_beta_failure > 0;
+    const bool had_leader_history =
+        validator.leader_dirichlet_commit > 0 ||
+        validator.leader_dirichlet_certify_only > 0 ||
+        validator.leader_dirichlet_timeout > 0;
     UpdateVoteBetaCounters(&validator, config);
     const int dirichlet_leader_score =
         UpdateLeaderDirichletCounters(&validator, config, 0, 0);
@@ -842,7 +935,12 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
             ? dirichlet_leader_score
             : LeaderCertifiedScore(validator.leader_certified_count,
                                    validator.leader_opportunity_count);
-    int recovery_score = validator.vote_score;
+    if (!had_leader_history && validator.current_weight >= config.max_weight &&
+        validator.leader_opportunity_count <
+            kMinFirstWindowSoftDecayOpportunities) {
+      validator.leader_score = 100;
+    }
+    int recovery_score = VoteReputationScore(validator);
     const bool carryover_decay =
         validator.opportunities == 0 &&
         validator.current_weight + kCarryoverDecayWeightGap <
@@ -853,43 +951,36 @@ void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_eve
         !had_vote_history && validator.current_weight >= config.max_weight &&
         validator.opportunities >= config.min_decay_opportunities &&
         validator.inclusions > 0 && !near_fair_vote;
+    const bool first_window_sparse_max_weight_sample =
+        !had_vote_history && validator.current_weight >= config.max_weight &&
+        validator.opportunities < kMinFirstWindowSoftDecayOpportunities;
     const bool validator_has_enough_decay_evidence =
         (validator.opportunities >= config.min_decay_opportunities ||
          carryover_decay) &&
-        !first_window_partial_vote_sample;
+        !first_window_partial_vote_sample &&
+        !first_window_sparse_max_weight_sample;
     const int64_t available_decay =
         std::max<int64_t>(0, validator.current_weight - config.min_weight);
-    validator.decay_applied =
-        validator_has_enough_decay_evidence
-            ? static_cast<int>(
-                  std::min<int64_t>(available_decay, config.decay_per_epoch))
-            : 0;
-    validator.recovery_credit =
-        carryover_decay
-            ? 0
-            : std::min(validator.decay_applied,
-                       CoreRecoveryCreditForScore(
-                           recovery_score, config.max_recovery_per_epoch));
-    const bool below_mean_weight = validator.current_weight < mean_current_weight;
-    const bool fully_recovered_decay =
-        validator.decay_applied > 0 &&
-        validator.recovery_credit >= validator.decay_applied;
-    const bool has_recovery_debt =
-        validator.peertrust_leader_debt > 0 || validator.sybil_graph_debt > 0;
-    const bool healthy_catchup_score =
-        !has_recovery_debt && fully_recovered_decay &&
-        validator.vote_score >= kHealthyCatchUpScore &&
-        recovery_score >= kHealthyCatchUpScore;
-    const bool earns_bonus =
-        validator_has_enough_decay_evidence && below_mean_weight &&
-        ((recovery_score >= 95 && validator.vote_score >= 95) ||
-         (near_fair_vote && recovery_score >= 67) || healthy_catchup_score);
-    validator.bonus_credit = earns_bonus ? config.bonus_per_epoch : 0;
-    validator.reputation_score =
-        validator.recovery_credit >= validator.decay_applied &&
-                validator.bonus_credit > 0
-            ? 100
-            : std::max(0, std::min(100, recovery_score));
+    int64_t target_weight = ReputationTargetWeightForScore(recovery_score, config);
+    if (validator.current_weight >= config.max_weight && recovery_score >= 90) {
+      target_weight = ClampWeight(config.max_weight, config);
+    }
+    validator.decay_applied = 0;
+    validator.recovery_credit = 0;
+    validator.bonus_credit = 0;
+    if (validator_has_enough_decay_evidence &&
+        validator.current_weight > target_weight) {
+      validator.decay_applied = static_cast<int>(std::min<int64_t>(
+          available_decay,
+          std::min<int64_t>(config.decay_per_epoch,
+                            validator.current_weight - target_weight)));
+    } else if (validator_has_enough_decay_evidence &&
+               validator.current_weight < target_weight && !carryover_decay) {
+      validator.bonus_credit = DiminishingBonusCreditForScore(
+          recovery_score, validator.current_weight, target_weight, config,
+          validator.opportunities, validator.leader_opportunity_count);
+    }
+    validator.reputation_score = std::max(0, std::min(100, recovery_score));
     validator.next_weight = ClampWeight(
         validator.current_weight - validator.decay_applied +
             validator.recovery_credit + validator.bonus_credit,
@@ -1537,6 +1628,10 @@ ReputationCandidate ComputeReputationCandidate(
   for (ValidatorReputation& validator : candidate.validators) {
     const bool had_vote_history =
         validator.vote_beta_success > 0 || validator.vote_beta_failure > 0;
+    const bool had_leader_history =
+        validator.leader_dirichlet_commit > 0 ||
+        validator.leader_dirichlet_certify_only > 0 ||
+        validator.leader_dirichlet_timeout > 0;
     UpdateVoteBetaCounters(&validator, config);
     const int idx = validator.validator_id - 1;
     const int raw_leader_diversity_score =
@@ -1584,8 +1679,13 @@ ReputationCandidate ComputeReputationCandidate(
     const bool has_repeated_uncertified_leader_opportunities =
         leader_opportunities >= kMinNoCertifiedLeaderOpportunities &&
         validator.leader_certified_count == 0 && raw_leader_score < 50;
+    const bool first_window_sparse_max_weight_leader_sample =
+        !has_scheduled_leader_counts && !had_leader_history &&
+        validator.current_weight >= config.max_weight &&
+        leader_opportunities < kMinFirstWindowSoftDecayOpportunities;
     const bool has_leader_recovery_evidence =
         config.leader_recovery_enabled &&
+        !first_window_sparse_max_weight_leader_sample &&
         (has_enough_leader_opportunities ||
          has_repeated_uncertified_leader_opportunities);
     validator.leader_score =
@@ -1748,7 +1848,7 @@ ReputationCandidate ComputeReputationCandidate(
       validator.seed_trust_score = 100;
     }
 
-    int recovery_score = validator.vote_score;
+    int recovery_score = VoteReputationScore(validator);
     if (config.peertrust_enabled &&
         (validator.feedback_count > 0 ||
          validator.peertrust_leader_debt > 0)) {
@@ -1790,85 +1890,39 @@ ReputationCandidate ComputeReputationCandidate(
         !had_vote_history && validator.current_weight >= config.max_weight &&
         validator.opportunities >= config.min_decay_opportunities &&
         validator.inclusions > 0 && !near_fair_vote;
+    const bool first_window_sparse_max_weight_sample =
+        !had_vote_history && validator.current_weight >= config.max_weight &&
+        validator.opportunities < kMinFirstWindowSoftDecayOpportunities;
     const bool validator_has_enough_decay_evidence =
         (validator.opportunities >= config.min_decay_opportunities ||
          carryover_decay) &&
-        !first_window_partial_vote_sample;
+        !first_window_partial_vote_sample &&
+        !first_window_sparse_max_weight_sample;
     const int64_t available_decay =
         std::max<int64_t>(0, validator.current_weight - config.min_weight);
-    validator.decay_applied =
-        validator_has_enough_decay_evidence
-            ? static_cast<int>(
-                  std::min<int64_t>(available_decay, config.decay_per_epoch))
-            : 0;
-    validator.recovery_credit =
-        carryover_decay
-            ? 0
-            : std::min(validator.decay_applied,
-                       RecoveryCreditForScore(
-                           recovery_score, config.max_recovery_per_epoch));
-    if (config.peertrust_enabled && validator.decay_applied > 0 &&
-        (validator.feedback_count > 0 || validator.peertrust_leader_debt > 0)) {
-      int peertrust_recovery_score = 100;
-      if (validator.feedback_count > 0) {
-        peertrust_recovery_score =
-            std::min(peertrust_recovery_score, validator.peertrust_score);
-      }
-      if (validator.peertrust_leader_debt > 0) {
-        peertrust_recovery_score = std::min(
-            peertrust_recovery_score,
-            std::max(0, 100 - validator.peertrust_leader_debt));
-      }
-      if (peertrust_recovery_score < 95) {
-        const int peertrust_recovery_cap = static_cast<int>(
-            (static_cast<int64_t>(validator.decay_applied) *
-             peertrust_recovery_score) /
-            100);
-        validator.recovery_credit =
-            std::min(validator.recovery_credit, peertrust_recovery_cap);
-      }
+    int64_t target_weight = ReputationTargetWeightForScore(recovery_score, config);
+    if (validator.current_weight >= config.max_weight && recovery_score >= 90) {
+      target_weight = ClampWeight(config.max_weight, config);
     }
-    const bool below_mean_weight =
-        validator.current_weight < mean_current_weight;
-    const bool fully_recovered_decay =
-        validator.decay_applied > 0 &&
-        validator.recovery_credit >= validator.decay_applied;
-    const bool has_recovery_debt =
-        validator.peertrust_leader_debt > 0 || validator.sybil_graph_debt > 0;
-    const bool healthy_catchup_score =
-        !has_recovery_debt && fully_recovered_decay &&
-        validator.vote_score >= kHealthyCatchUpScore &&
-        recovery_score >= kHealthyCatchUpScore;
-    const bool at_leader_reentry_boundary =
-        config.leader_recovery_enabled && below_mean_weight &&
-        validator.current_weight <= config.leader_eligible_min_weight;
-    const bool has_good_leader_reentry_evidence =
-        leader_opportunities >= config.min_leader_opportunities &&
-        validator.leader_score >= 95;
-    const bool leader_reentry_bonus_allowed =
-        !at_leader_reentry_boundary || has_good_leader_reentry_evidence;
     const int64_t peertrust_soft_floor = std::max<int64_t>(
         config.min_weight,
         std::min<int64_t>(config.peertrust_soft_min_weight, config.max_weight));
-    const bool peertrust_floor_recovery_guard =
-        config.peertrust_enabled &&
-        validator.current_weight <= peertrust_soft_floor &&
-        validator.current_weight + validator.decay_applied >=
-            peertrust_soft_floor &&
-        (validator.feedback_count > 0 || validator.peertrust_leader_debt > 0) &&
-        !(broad_good_peertrust && validator.leader_diversity_score >= 95);
-    const bool earns_bonus =
-        leader_reentry_bonus_allowed && validator_has_enough_decay_evidence &&
-        !peertrust_floor_recovery_guard &&
-        below_mean_weight &&
-        ((recovery_score >= 95 && validator.vote_score >= 95) ||
-         (near_fair_vote && recovery_score >= 67) || healthy_catchup_score);
-    validator.bonus_credit = earns_bonus ? config.bonus_per_epoch : 0;
-    validator.reputation_score =
-        validator.recovery_credit >= validator.decay_applied &&
-                validator.bonus_credit > 0
-            ? 100
-            : std::max(0, std::min(100, recovery_score));
+    const bool has_reputation_evidence = validator_has_enough_decay_evidence;
+    validator.decay_applied = 0;
+    validator.recovery_credit = 0;
+    validator.bonus_credit = 0;
+    if (has_reputation_evidence && validator.current_weight > target_weight) {
+      validator.decay_applied = static_cast<int>(std::min<int64_t>(
+          available_decay,
+          std::min<int64_t>(config.decay_per_epoch,
+                            validator.current_weight - target_weight)));
+    } else if (has_reputation_evidence &&
+               validator.current_weight < target_weight && !carryover_decay) {
+      validator.bonus_credit = DiminishingBonusCreditForScore(
+          recovery_score, validator.current_weight, target_weight, config,
+          validator.opportunities, leader_opportunities);
+    }
+    validator.reputation_score = std::max(0, std::min(100, recovery_score));
     const int64_t smoothed_next_weight = ClampWeight(
         validator.current_weight - validator.decay_applied +
             validator.recovery_credit + validator.bonus_credit,

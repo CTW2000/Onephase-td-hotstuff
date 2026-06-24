@@ -332,13 +332,15 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
                     body = fp.read()
                 self.assertIn("TD_HS_ALL_DETECTORS_ENABLE", body)
                 self.assertIn("td_hs_enable_all_detectors", body)
+                self.assertNotIn("_DETECT_ENABLE=0", body)
 
     def test_peertrust_clique_runner_isolates_attack_ids(self):
         runner = os.path.join(REPO_ROOT, "scripts", "deploy", "run_peertrust_clique_n20.sh")
         with open(runner) as fp:
             body = fp.read()
         self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE", body)
-        self.assertIn("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=0", body)
+        self.assertIn("TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=1", body)
+        self.assertIn("TD_HS_STRONG_FAULT_ENABLE=1", body)
         self.assertIn("TD_HS_PEERTRUST_CLIQUE_IDS", body)
         self.assertIn("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", body)
         self.assertIn("TD_HS_PEERTRUST_CLIQUE_START_VIEW", body)
@@ -351,7 +353,7 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("derive_clique_collector_ids", body)
         self.assertIn('export TD_HS_PEERTRUST_CLIQUE_TARGET_IDS="$bad_node_ids"', body)
         self.assertIn('export TD_HS_PEERTRUST_CLIQUE_IDS="$clique_collector_ids"', body)
-        self.assertIn("TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1", body)
+        self.assertIn('TD_HS_REPUTATION_AUDIT_JSONL_ENABLE="${TD_HS_REPUTATION_AUDIT_JSONL_ENABLE:-0}"', body)
         self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_SIGNERS=1", body)
         self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_MIN_SIGNERS=", body)
         self.assertIn("unset TD_HS_REPUTATION_AUDIT_JSONL_ENABLE", body)
@@ -399,7 +401,8 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         with open(runner) as fp:
             body = fp.read()
         self.assertIn("TD_HS_REPUTATION_SYBIL_GRAPH_ENABLE", body)
-        self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE=0", body)
+        self.assertIn("TD_HS_REPUTATION_PEERTRUST_ENABLE=1", body)
+        self.assertIn("TD_HS_STRONG_FAULT_ENABLE=1", body)
         self.assertIn("TD_HS_SYBIL_GRAPH_ATTACK_IDS", body)
         self.assertIn("TD_HS_SYBIL_GRAPH_REVIEWER_IDS", body)
         self.assertIn("-u TD_HS_SYBIL_GRAPH_ATTACK_IDS", body)
@@ -417,9 +420,29 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
     def test_proposal_qc_evidence_is_deferred_until_after_vote_send(self):
         with open(os.path.join(REPO_ROOT, "platform", "consensus", "ordering", "td_hotstuff", "algorithm", "td_hotstuff.cpp")) as fp:
             body = fp.read()
-        send_idx = body.index("const int send_result = SendMessage(MessageType::Vote")
-        record_idx = body.index("TryRecordCertifiedQc(std::move(proposal_qc_snapshot))", send_idx)
-        self.assertLess(send_idx, record_idx)
+        vote_path_idx = body.index("int send_result = 0;")
+        normal_send_idx = body.index("send_result = SendMessage(MessageType::Vote", vote_path_idx)
+        slow_send_idx = body.index("SendMessage(MessageType::Vote, delayed_vote", vote_path_idx)
+        record_idx = body.index("TryRecordCertifiedQc(std::move(proposal_qc_snapshot))", vote_path_idx)
+        self.assertLess(normal_send_idx, record_idx)
+        self.assertLess(slow_send_idx, record_idx)
+
+    def test_slow_vote_td_hotstuff_uses_vote_only_attack_hook(self):
+        runner = os.path.join(
+            REPO_ROOT, "scripts", "deploy", "run_slow_vote_n20.sh")
+        with open(runner) as fp:
+            body = fp.read()
+
+        self.assertIn("config_network_delay_num=0", body)
+        self.assertIn("TD_HS_SLOW_VOTE_IDS", body)
+        self.assertIn(
+            'TD_HS_REPUTATION_BONUS_PER_EPOCH="${TD_HS_SOFT_REPUTATION_BONUS_PER_EPOCH:-4}"',
+            body,
+        )
+        self.assertIn(
+            'TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS="${TD_HS_SOFT_WEIGHT_UPDATE_EPOCH_VIEWS:-2048}"',
+            body,
+        )
 
     def test_slow_experiment_scripts_restore_shared_configs(self):
         scripts = [

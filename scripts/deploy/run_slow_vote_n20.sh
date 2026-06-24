@@ -1,8 +1,8 @@
 #!/bin/bash
-# Slow-Vote (network_delay) experiment for n=20 — all 5 protocols, sequential.
-# network_delay_num = k means nodes with id in {1..k} add random delay to EVERY
-# message they send/receive, mean=mean_network_delay ms (primarily slows votes,
-# since votes dominate inter-replica traffic).
+# Slow-Vote experiment for n=20 — all 5 protocols, sequential.
+# Classic protocols use the legacy network_delay_num model. TD-HotStuff uses a
+# vote-only local hook: selected replicas delay vote sends after the configured
+# start view, while their proposal/leader behavior remains normal.
 
 set -o pipefail
 DEPLOY_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -73,20 +73,20 @@ configure_td_hotstuff_reputation_pipeline() {
   export TD_HS_STRONG_FAULT_TARGET_WEIGHT=1
   # Soft-fault experiments should show a conservative reputation curve.
   # Bad nodes start healthy, then lose recovery slowly after the attack begins.
-  export TD_HS_REPUTATION_DECAY_PER_EPOCH="${TD_HS_SOFT_REPUTATION_DECAY_PER_EPOCH:-5}"
-  export TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH="${TD_HS_SOFT_REPUTATION_MAX_RECOVERY_PER_EPOCH:-5}"
-  export TD_HS_REPUTATION_BONUS_PER_EPOCH=0
-  export TD_HS_REPUTATION_WINDOW_SIZE="${TD_HS_SOFT_REPUTATION_WINDOW_SIZE:-1024}"
-  export TD_HS_REPUTATION_MIN_CANDIDATE_QCS="${TD_HS_SOFT_REPUTATION_MIN_CANDIDATE_QCS:-256}"
-  export TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS="${TD_HS_SOFT_WEIGHT_UPDATE_EPOCH_VIEWS:-1024}"
+  export TD_HS_REPUTATION_DECAY_PER_EPOCH="${TD_HS_SOFT_REPUTATION_DECAY_PER_EPOCH:-2}"
+  export TD_HS_REPUTATION_MAX_RECOVERY_PER_EPOCH="${TD_HS_SOFT_REPUTATION_MAX_RECOVERY_PER_EPOCH:-2}"
+  export TD_HS_REPUTATION_BONUS_PER_EPOCH="${TD_HS_SOFT_REPUTATION_BONUS_PER_EPOCH:-4}"
+  export TD_HS_REPUTATION_WINDOW_SIZE="${TD_HS_SOFT_REPUTATION_WINDOW_SIZE:-2048}"
+  export TD_HS_REPUTATION_MIN_CANDIDATE_QCS="${TD_HS_SOFT_REPUTATION_MIN_CANDIDATE_QCS:-512}"
+  export TD_HS_WEIGHT_UPDATE_EPOCH_VIEWS="${TD_HS_SOFT_WEIGHT_UPDATE_EPOCH_VIEWS:-2048}"
   export TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY="${TD_HS_WEIGHT_UPDATE_ACTIVATION_EPOCH_DELAY:-4}"
-  export TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS="${TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS:-128}"
+  export TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS="${TD_HS_WEIGHT_PLUGIN_DRAIN_INTERVAL_VIEWS:-256}"
   export TD_HS_SLOW_VOTE_DELAY_US="${TD_HS_SLOW_VOTE_DELAY_US:-$((MEAN_DELAY_MS * 1000))}"
   export TD_HS_SLOW_VOTE_START_VIEW="${TD_HS_SLOW_VOTE_START_VIEW:-${TD_HS_SOFT_ATTACK_START_VIEW:-8192}}"
   export TD_HS_LEADER_SELECTION_ENABLE=1
   export TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT=10
   export TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=1
-  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE=1
+  export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE="${TD_HS_REPUTATION_AUDIT_JSONL_ENABLE:-0}"
 }
 
 clear_td_hotstuff_reputation_pipeline() {

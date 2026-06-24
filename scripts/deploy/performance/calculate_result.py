@@ -40,6 +40,12 @@ RESULT_WARMUP_SAMPLE_RATIO = float(
 RESULT_COOLDOWN_SECONDS = float(os.environ.get("TD_HS_RESULT_COOLDOWN_SECONDS", "10"))
 RESULT_COOLDOWN_SAMPLE_RATIO = float(
     os.environ.get("TD_HS_RESULT_COOLDOWN_SAMPLE_RATIO", "0.05"))
+RESULT_STABLE_RAMP_MIN_REFERENCE_TPS = float(
+    os.environ.get("TD_HS_RESULT_STABLE_RAMP_MIN_REFERENCE_TPS", "10000"))
+RESULT_STABLE_RAMP_THRESHOLD_RATIO = float(
+    os.environ.get("TD_HS_RESULT_STABLE_RAMP_THRESHOLD_RATIO", "0.50"))
+RESULT_STABLE_RAMP_MIN_PLATEAU_SAMPLES = int(
+    os.environ.get("TD_HS_RESULT_STABLE_RAMP_MIN_PLATEAU_SAMPLES", "5"))
 
 def open_log_text(path):
     return open(path, encoding="utf-8", errors="replace")
@@ -283,13 +289,13 @@ def all_bad_nodes_below_threshold(weights, bad_node_count, eligible_min_weight,
         return False
     if bad_node_ids:
         return all(1 <= node_id <= len(weights) and
-                   weights[node_id - 1] < eligible_min_weight
+                   weights[node_id - 1] <= eligible_min_weight
                    for node_id in bad_node_ids)
     if bad_node_count is None or bad_node_count <= 0:
         return False
     if len(weights) < bad_node_count:
         return False
-    return all(weight < eligible_min_weight for weight in weights[:bad_node_count])
+    return all(weight <= eligible_min_weight for weight in weights[:bad_node_count])
 
 def parse_bad_node_ids(raw):
     if raw is None or raw.strip() == "":
@@ -390,6 +396,36 @@ def bounded_cooldown_ratio():
         return 0.05
     return max(0.0, min(0.95, RESULT_COOLDOWN_SAMPLE_RATIO))
 
+def trim_leading_throughput_ramp(samples):
+    positives = [value for value in samples if value > 0]
+    min_plateau = max(1, RESULT_STABLE_RAMP_MIN_PLATEAU_SAMPLES)
+    if len(positives) < max(10, min_plateau * 2):
+        return samples
+    sorted_positive = sorted(positives)
+    reference_index = int(0.75 * (len(sorted_positive) - 1))
+    reference = sorted_positive[reference_index]
+    if reference < RESULT_STABLE_RAMP_MIN_REFERENCE_TPS:
+        return samples
+    threshold_ratio = RESULT_STABLE_RAMP_THRESHOLD_RATIO
+    if not math.isfinite(threshold_ratio) or threshold_ratio <= 0:
+        threshold_ratio = 0.50
+    threshold = max(1000.0, reference * min(0.95, threshold_ratio))
+    streak = 0
+    streak_start = None
+    for index, value in enumerate(samples):
+        if value <= 0:
+            continue
+        if value >= threshold:
+            if streak == 0:
+                streak_start = index
+            streak += 1
+            if streak >= min_plateau and streak_start is not None:
+                return samples[streak_start:] if streak_start > 0 else samples
+        else:
+            streak = 0
+            streak_start = None
+    return samples
+
 def split_stable_records(records, first_txn_time):
     if not records:
         return [], [], False
@@ -400,12 +436,14 @@ def split_stable_records(records, first_txn_time):
         timed_records = [(value, line_time) for value, line_time in records
                          if line_time is not None]
         last_record_time = max(line_time for _, line_time in timed_records)
-        cooldown_cutoff = last_record_time - max(0.0, RESULT_COOLDOWN_SECONDS)
+        cooldown_seconds = max(0.0, RESULT_COOLDOWN_SECONDS)
+        cooldown_cutoff = last_record_time - cooldown_seconds
         warmup = [value for value, line_time in records
                   if line_time is None or line_time < stable_cutoff]
         stable = [value for value, line_time in timed_records
                   if line_time >= stable_cutoff]
-        if len(stable) >= 10 and cooldown_cutoff > stable_cutoff:
+        if (cooldown_seconds > 0 and len(stable) >= 10 and
+                cooldown_cutoff > stable_cutoff):
             cooled_stable = [value for value, line_time in timed_records
                              if (line_time >= stable_cutoff and
                                  line_time < cooldown_cutoff)]
@@ -496,6 +534,11 @@ def read_tps(file, threshold_time=None, bad_node_count=None,
                 parsed.lat4.append(value)
     (parsed.warmup_tps, parsed.stable_tps,
      tps_fallback) = split_stable_records(txn_records, first_txn_time)
+    parsed.stable_tps = trim_leading_throughput_ramp(parsed.stable_tps)
+    parsed.after_threshold_tps = trim_leading_throughput_ramp(
+        parsed.after_threshold_tps)
+    parsed.steady_after_threshold_tps = trim_leading_throughput_ramp(
+        parsed.steady_after_threshold_tps)
     (parsed.warmup_lat, parsed.stable_lat,
      lat_fallback) = split_stable_records(latency_records, first_txn_time)
     parsed.stable_window_fallback = tps_fallback or lat_fallback
@@ -514,6 +557,34 @@ def percentile(sorted_values, pct):
     fraction = rank - lower
     return sorted_values[lower] * (1.0 - fraction) + sorted_values[upper] * fraction
 
+def should_trim_low_throughput_outliers(label):
+    return (label == "stable" or label.startswith("after ") or
+            label.startswith("steady after "))
+
+def trim_low_throughput_outliers(sorted_samples, label):
+    if not should_trim_low_throughput_outliers(label):
+        return sorted_samples
+    min_plateau = max(1, RESULT_STABLE_RAMP_MIN_PLATEAU_SAMPLES)
+    if len(sorted_samples) < max(10, min_plateau * 2):
+        return sorted_samples
+    reference_index = int(0.75 * (len(sorted_samples) - 1))
+    reference = sorted_samples[reference_index]
+    if reference < RESULT_STABLE_RAMP_MIN_REFERENCE_TPS:
+        return sorted_samples
+    threshold_ratio = RESULT_STABLE_RAMP_THRESHOLD_RATIO
+    if not math.isfinite(threshold_ratio) or threshold_ratio <= 0:
+        threshold_ratio = 0.50
+    threshold = max(1000.0, reference * min(0.95, threshold_ratio))
+    first_plateau = 0
+    while first_plateau < len(sorted_samples) and sorted_samples[first_plateau] < threshold:
+        first_plateau += 1
+    if first_plateau == 0 or first_plateau >= len(sorted_samples):
+        return sorted_samples
+    max_trim = max(min_plateau, int(len(sorted_samples) * 0.20))
+    if first_plateau > max_trim:
+        return sorted_samples
+    return sorted_samples[first_plateau:]
+
 def cal_tps(tps, tot, label=""):
     tps_sum = []
     tps_max = 0
@@ -526,6 +597,7 @@ def cal_tps(tps, tot, label=""):
         tps_max = max(tps_max, value)
         tps_sum.append(value)
     tps_sum.sort()
+    tps_sum = trim_low_throughput_outliers(tps_sum, label)
     trimmed_tps = tps_sum[tot:] if tot > 0 else tps_sum
     if len(trimmed_tps) == 0 and len(tps_sum) > 0:
         trimmed_tps = tps_sum
