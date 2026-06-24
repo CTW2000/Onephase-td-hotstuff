@@ -145,8 +145,6 @@ def read_reputation_summary(log_files):
     best_key = (-1, -1)
     max_fault_counts = []
     max_penalty_points = []
-    min_sybil_graph_scores = []
-    max_sybil_graph_debt = []
     for log_file in log_files:
         reputation_file = reputation_file_for_log(log_file)
         if not reputation_file or not os.path.exists(reputation_file):
@@ -166,8 +164,6 @@ def read_reputation_summary(log_files):
                     if len(max_fault_counts) < len(validators):
                         max_fault_counts.extend([0] * (len(validators) - len(max_fault_counts)))
                         max_penalty_points.extend([0] * (len(validators) - len(max_penalty_points)))
-                        min_sybil_graph_scores.extend([100] * (len(validators) - len(min_sybil_graph_scores)))
-                        max_sybil_graph_debt.extend([0] * (len(validators) - len(max_sybil_graph_debt)))
                     for validator in validators:
                         try:
                             idx = int(validator.get("validator_id", 0)) - 1
@@ -180,14 +176,6 @@ def read_reputation_summary(log_files):
                             max_penalty_points[idx] = max(
                                 max_penalty_points[idx],
                                 int(validator.get("penalty_points", 0)))
-                            if "sybil_graph_score" in validator:
-                                min_sybil_graph_scores[idx] = min(
-                                    min_sybil_graph_scores[idx],
-                                    int(validator.get("sybil_graph_score", 100)))
-                            if "sybil_graph_debt" in validator:
-                                max_sybil_graph_debt[idx] = max(
-                                    max_sybil_graph_debt[idx],
-                                    int(validator.get("sybil_graph_debt", 0)))
                 try:
                     key = (int(record.get("old_weight_version", 0)),
                            int(record.get("window_index", 0)))
@@ -196,12 +184,10 @@ def read_reputation_summary(log_files):
                 if key >= best_key:
                     best_key = key
                     best_record = record
-    return (best_record, max_fault_counts, max_penalty_points,
-            min_sybil_graph_scores, max_sybil_graph_debt)
+    return (best_record, max_fault_counts, max_penalty_points)
 
 def print_reputation_summary(log_files, bad_node_ids):
-    (record, fault_counts, penalty_points, min_sybil_scores,
-     max_sybil_debt) = read_reputation_summary(log_files)
+    (record, fault_counts, penalty_points) = read_reputation_summary(log_files)
     if record is None:
         return
     print("reputation candidate digest:", record.get("candidate_digest", ""))
@@ -211,63 +197,6 @@ def print_reputation_summary(log_files, bad_node_ids):
         print("reputation next weights:",
               ",".join(str(v) for v in record.get("next_weights", [])))
     validators = record.get("validators", [])
-    if validators and any("sybil_graph_score" in v for v in validators):
-        scores = []
-        debts = []
-        for validator in validators:
-            scores.append(int(validator.get("sybil_graph_score", 100)))
-            debts.append(int(validator.get("sybil_graph_debt", 0)))
-        print("validator sybil graph scores:",
-              ",".join(str(v) for v in scores))
-        print("validator sybil graph debt:",
-              ",".join(str(v) for v in debts))
-        if bad_node_ids:
-            bad_scores = [scores[i - 1] for i in bad_node_ids
-                          if 1 <= i <= len(scores)]
-            bad_debt = [debts[i - 1] for i in bad_node_ids
-                        if 1 <= i <= len(debts)]
-            honest_scores = [scores[i - 1]
-                             for i in range(1, len(scores) + 1)
-                             if i not in bad_node_ids]
-            honest_debt = [debts[i - 1]
-                           for i in range(1, len(debts) + 1)
-                           if i not in bad_node_ids]
-            print("bad node sybil graph scores:",
-                  ",".join(str(v) for v in bad_scores))
-            print("bad node sybil graph debt:",
-                  ",".join(str(v) for v in bad_debt))
-            if honest_scores:
-                print("honest sybil graph score min/avg/max:",
-                      f"{min(honest_scores)}/{sum(honest_scores)/len(honest_scores):.2f}/{max(honest_scores)}")
-            if honest_debt:
-                print("honest sybil graph debt min/avg/max:",
-                      f"{min(honest_debt)}/{sum(honest_debt)/len(honest_debt):.2f}/{max(honest_debt)}")
-    if min_sybil_scores:
-        print("observed min sybil graph scores:",
-              ",".join(str(v) for v in min_sybil_scores))
-        print("observed max sybil graph debt:",
-              ",".join(str(v) for v in max_sybil_debt))
-        if bad_node_ids:
-            bad_min_scores = [min_sybil_scores[i - 1] for i in bad_node_ids
-                              if 1 <= i <= len(min_sybil_scores)]
-            bad_max_debt = [max_sybil_debt[i - 1] for i in bad_node_ids
-                            if 1 <= i <= len(max_sybil_debt)]
-            honest_min_scores = [min_sybil_scores[i - 1]
-                                 for i in range(1, len(min_sybil_scores) + 1)
-                                 if i not in bad_node_ids]
-            honest_max_debt = [max_sybil_debt[i - 1]
-                               for i in range(1, len(max_sybil_debt) + 1)
-                               if i not in bad_node_ids]
-            print("bad node observed min sybil graph scores:",
-                  ",".join(str(v) for v in bad_min_scores))
-            print("bad node observed max sybil graph debt:",
-                  ",".join(str(v) for v in bad_max_debt))
-            if honest_min_scores:
-                print("honest observed min sybil graph score min/avg/max:",
-                      f"{min(honest_min_scores)}/{sum(honest_min_scores)/len(honest_min_scores):.2f}/{max(honest_min_scores)}")
-            if honest_max_debt:
-                print("honest observed max sybil graph debt min/avg/max:",
-                      f"{min(honest_max_debt)}/{sum(honest_max_debt)/len(honest_max_debt):.2f}/{max(honest_max_debt)}")
     if fault_counts:
         print("validator strong fault counts:",
               ",".join(str(v) for v in fault_counts))

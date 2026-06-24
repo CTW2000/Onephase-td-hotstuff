@@ -47,11 +47,6 @@ std::string MetricCanonical(const ReputationCandidate& candidate) {
         << validator.reviewer_overuse_score << ':'
         << validator.peertrust_leader_debt << ':'
         << validator.peertrust_debt_delta << ':' << validator.feedback_count;
-    out << ':' << validator.sybil_rank_score << ':' << validator.sybil_cut_score
-        << ':' << validator.sybil_graph_score << ':'
-        << validator.sybil_graph_debt << ':'
-        << validator.sybil_graph_debt_delta << ':' << validator.graph_degree
-        << ':' << validator.seed_trust_score;
   }
   return out.str();
 }
@@ -82,11 +77,6 @@ std::string ReputationCanonical(const ReputationCandidate& candidate) {
         << ':' << validator.leader_dirichlet_commit << ':'
         << validator.leader_dirichlet_certify_only << ':'
         << validator.leader_dirichlet_timeout;
-    out << ':' << validator.sybil_rank_score << ':' << validator.sybil_cut_score
-        << ':' << validator.sybil_graph_score << ':'
-        << validator.sybil_graph_debt << ':'
-        << validator.sybil_graph_debt_delta << ':' << validator.graph_degree
-        << ':' << validator.seed_trust_score;
   }
   return out.str();
 }

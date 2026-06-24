@@ -8,7 +8,6 @@ cc_library(
         "reputation_utils.cpp",
         "soft_reputation.cpp",
         "strong_fault_detector.cpp",
-        "sybil_graph.cpp",
     ],
     hdrs = [
         "reputation_algorithm.h",
@@ -17,7 +16,6 @@ cc_library(
         "reputation_utils.h",
         "soft_reputation.h",
         "strong_fault_detector.h",
-        "sybil_graph.h",
     ],
     deps = [
         "//common/crypto:hash",

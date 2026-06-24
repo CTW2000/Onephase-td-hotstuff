@@ -189,8 +189,6 @@ class ReputationPluginRuntime {
       prior_leader_dirichlet_counters_;
   std::map<std::pair<std::string, uint64_t>, std::vector<int>>
       prior_peertrust_leader_debt_;
-  std::map<std::pair<std::string, uint64_t>, std::vector<int>>
-      prior_sybil_graph_debt_;
   std::map<WindowKey, WindowBuffer> windows_;
   std::map<uint64_t, ReputationCandidate> completed_by_version_;
   std::map<ReputationCandidateKey, ReputationCandidate> completed_index_;

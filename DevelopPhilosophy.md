@@ -36,7 +36,7 @@ These rules are part of the framework design. Read them before changing code.
 ## Full-Pipeline Experiment Rule
 
 - Main experiments must enable the full implemented reputation pipeline.
-- Do not disable bonus, recovery, PeerTrust, SybilGraph, strong-fault detectors, or certified weight updates in a main experiment to make a result easier to interpret.
+- Do not disable bonus, recovery, PeerTrust, strong-fault detectors, or certified weight updates in a main experiment to make a result easier to interpret.
 - If a run disables a mechanism, call it an ablation or diagnostic control and keep it separate from paper conclusions about the full design.
 - Validators should start from low certified reputation/weight and earn influence slowly through long correct behavior.
 - Reaching maximum weight should be difficult; conservative growth and diminishing bonus are part of the design, not a test artifact.

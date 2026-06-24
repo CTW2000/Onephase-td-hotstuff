@@ -150,7 +150,6 @@ ReputationCandidate ComputeCandidate(
     const std::vector<VerifiedQcArtifactEvidence>& verified_qc_artifact_evidence =
         {},
     const std::vector<int>& prior_peertrust_leader_debt = {},
-    const std::vector<int>& prior_sybil_graph_debt = {},
     const std::vector<uint64_t>& scheduled_leader_counts = {},
     const std::vector<int64_t>& current_leader_weights = {}) {
   ReputationWindowInput input = BuildWindowInput(
@@ -165,7 +164,6 @@ ReputationCandidate ComputeCandidate(
   (void)removed_strong_fault_evidence_b;
   input.verified_qc_artifact_evidence = verified_qc_artifact_evidence;
   input.prior_peertrust_leader_debt = prior_peertrust_leader_debt;
-  input.prior_sybil_graph_debt = prior_sybil_graph_debt;
   input.scheduled_leader_counts = scheduled_leader_counts;
   return ComputeReputationCandidate(input, config);
 }
@@ -730,7 +728,7 @@ TEST(ReputationAlgorithmTest, HealthyLeaderEvidenceEarnsLeaderWeightBonus) {
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {20, 20, 20, 20}, config, "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {20, 20, 20, 20});
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {20, 20, 20, 20});
 
   EXPECT_EQ(candidate.next_weights, std::vector<int64_t>({24, 24, 24, 24}));
   EXPECT_EQ(candidate.leader_weights,
@@ -751,7 +749,7 @@ TEST(ReputationAlgorithmTest,
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {50, 50, 50, 50}, config, "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {3, 3, 0, 0},
+      {}, {}, {}, {}, {}, {}, {}, {}, {3, 3, 0, 0},
       {20, 20, 20, 20});
 
   EXPECT_GE(candidate.validators[1].next_weight, 50);
@@ -774,7 +772,7 @@ TEST(ReputationAlgorithmTest, HealthyEnoughLeaderScoreEarnsSmallLeaderBonus) {
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {50, 50, 50, 50}, config, "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {13, 13, 13, 13},
+      {}, {}, {}, {}, {}, {}, {}, {}, {13, 13, 13, 13},
       {20, 20, 20, 20});
 
   EXPECT_GE(candidate.validators[0].leader_score, 70);
@@ -794,7 +792,7 @@ TEST(ReputationAlgorithmTest, LeaderOpportunitiesAloneDoNotBonusLeaderWeight) {
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {50, 50, 50, 50}, config, "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {3, 0, 0, 0},
+      {}, {}, {}, {}, {}, {}, {}, {}, {3, 0, 0, 0},
       {20, 20, 20, 20});
 
   EXPECT_EQ(candidate.validators[0].leader_certified_count, 2);
@@ -855,7 +853,7 @@ TEST(ReputationAlgorithmTest,
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {1, 100, 100, 100}, config, "old-root", 1, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {1, 100, 100, 100});
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {1, 100, 100, 100});
 
   EXPECT_EQ(candidate.validators[0].leader_opportunity_count, 0);
   EXPECT_EQ(candidate.validators[0].next_weight, 1);
@@ -926,7 +924,7 @@ TEST(ReputationAlgorithmTest,
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {100, 100, 100, 100}, config, "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
+      {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
 
   EXPECT_GT(candidate.validators[1].leader_dirichlet_timeout, 0);
   EXPECT_EQ(candidate.validators[1].leader_dirichlet_commit, 0);
@@ -946,7 +944,7 @@ TEST(ReputationAlgorithmTest, SilentLeaderLosesLeaderRecovery) {
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, TestConfig(), "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
+      {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
 
   EXPECT_EQ(candidate.validators[0].leader_certified_count, 4);
   EXPECT_EQ(candidate.validators[0].leader_opportunity_count, 4);
@@ -971,7 +969,7 @@ TEST(ReputationAlgorithmTest,
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {100, 100, 100, 100}, config, "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
+      {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
 
   EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
   EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 4);
@@ -992,14 +990,13 @@ TEST(ReputationAlgorithmTest,
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {67, 67, 67, 67}, config, "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
+      {}, {}, {}, {}, {}, {}, {}, {}, {4, 4, 0, 0});
 
   EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
   EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 4);
   EXPECT_EQ(candidate.validators[1].peertrust_score, 100);
   EXPECT_EQ(candidate.validators[1].peertrust_leader_debt, 0);
-  EXPECT_EQ(candidate.validators[1].next_weight,
-            config.peertrust_soft_min_weight);
+  EXPECT_EQ(candidate.validators[1].next_weight, 67);
   EXPECT_LT(candidate.leader_weights[1],
             candidate.validators[1].next_weight);
 }
@@ -1014,7 +1011,7 @@ TEST(ReputationAlgorithmTest, OneScheduledLeaderMissDoesNotReduceRecovery) {
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {1, 1, 0, 0});
+      {}, {}, {}, {}, {}, {}, {}, {}, {1, 1, 0, 0});
 
   EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
   EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 1);
@@ -1033,7 +1030,7 @@ TEST(ReputationAlgorithmTest, FewMostlySuccessfulLeaderOpportunitiesStayNeutral)
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {100, 100, 100, 100}, config, "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 0, 0, 0});
+      {}, {}, {}, {}, {}, {}, {}, {}, {4, 0, 0, 0});
 
   EXPECT_EQ(candidate.validators[0].leader_certified_count, 3);
   EXPECT_EQ(candidate.validators[0].leader_opportunity_count, 4);
@@ -1054,7 +1051,7 @@ TEST(ReputationAlgorithmTest,
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, {30, 30, 30, 30}, config, "old-root", 0, 64,
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, {3, 3, 0, 0});
+      {}, {}, {}, {}, {}, {}, {}, {}, {3, 3, 0, 0});
 
   EXPECT_EQ(candidate.validators[1].leader_certified_count, 0);
   EXPECT_EQ(candidate.validators[1].leader_opportunity_count, 3);
@@ -1172,7 +1169,7 @@ TEST(ReputationAlgorithmTest,
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1, evidence, std::vector<int64_t>(4, 100), config,
-      "old-root", 0, 64, {}, {}, {}, {}, {}, {}, {}, {}, {}, {4, 0, 0, 0},
+      "old-root", 0, 64, {}, {}, {}, {}, {}, {}, {}, {}, {4, 0, 0, 0},
       std::vector<int64_t>(4, 100));
 
   EXPECT_EQ(candidate.validators[0].leader_certified_count, 0);
@@ -1291,7 +1288,7 @@ TEST(ReputationAlgorithmTest,
   }
   const ReputationCandidate candidate = ComputeCandidate(
       1, 20, 1, evidence, std::vector<int64_t>(20, 100), config,
-      "old-root", 0, 64, {}, {}, {}, {}, {}, {}, {}, {}, {},
+      "old-root", 0, 64, {}, {}, {}, {}, {}, {}, {}, {},
       /*scheduled_leader_counts=*/{}, current_leader_weights);
 
   EXPECT_EQ(candidate.leader_weights[2], 80);
@@ -1479,9 +1476,10 @@ TEST(ReputationAlgorithmTest, PeerTrustCliqueFeedbackLowersOnlyLeaderRecovery) {
             candidate.validators[1].community_context_score);
   EXPECT_LT(candidate.validators[0].peertrust_score,
             candidate.validators[1].peertrust_score);
-  EXPECT_LT(candidate.validators[0].next_weight,
-            candidate.validators[1].next_weight);
-  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt, 20);
+  EXPECT_EQ(candidate.validators[0].next_weight, 30);
+  EXPECT_EQ(candidate.validators[1].next_weight, 30);
+  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt,
+            config.peertrust_debt_increment);
   EXPECT_EQ(candidate.validators[1].peertrust_leader_debt, 0);
   EXPECT_EQ(candidate.leader_weights[0], candidate.leader_weights[1]);
   EXPECT_EQ(candidate.leader_weights[0], 30);
@@ -1523,12 +1521,12 @@ TEST(ReputationAlgorithmTest,
             peertrust_candidate.validators[14].community_context_score);
   EXPECT_LT(peertrust_candidate.validators[1].community_context_score,
             peertrust_candidate.validators[15].community_context_score);
-  EXPECT_LT(peertrust_candidate.validators[0].next_weight,
-            signer_diversity_candidate.validators[0].next_weight);
-  EXPECT_LT(peertrust_candidate.validators[1].next_weight,
-            signer_diversity_candidate.validators[1].next_weight);
-  EXPECT_EQ(peertrust_candidate.validators[0].peertrust_leader_debt, 20);
-  EXPECT_EQ(peertrust_candidate.validators[1].peertrust_leader_debt, 20);
+  EXPECT_EQ(peertrust_candidate.validators[0].next_weight, 30);
+  EXPECT_EQ(peertrust_candidate.validators[1].next_weight, 30);
+  EXPECT_EQ(peertrust_candidate.validators[0].peertrust_leader_debt,
+            peertrust_config.peertrust_debt_increment);
+  EXPECT_EQ(peertrust_candidate.validators[1].peertrust_leader_debt,
+            peertrust_config.peertrust_debt_increment);
   EXPECT_EQ(peertrust_candidate.leader_weights[0],
             signer_diversity_candidate.leader_weights[0]);
   EXPECT_EQ(peertrust_candidate.leader_weights[1],
@@ -1555,16 +1553,17 @@ TEST(ReputationAlgorithmTest,
       CertifiedQc(3, 15, all_available, all_available),
       CertifiedQc(4, 16, all_available, all_available),
   };
-  std::vector<int64_t> weights(20, 68);
+  std::vector<int64_t> weights(20, 85);
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 20, 1, evidence, weights, config, "old-root", 0, 64);
 
   EXPECT_LT(candidate.validators[0].peertrust_score,
             candidate.validators[14].peertrust_score);
-  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt, 20);
-  EXPECT_GE(candidate.validators[0].next_weight, 67);
-  EXPECT_GE(candidate.validators[1].next_weight, 67);
+  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt,
+            config.peertrust_debt_increment);
+  EXPECT_GE(candidate.validators[0].next_weight, config.peertrust_soft_min_weight);
+  EXPECT_GE(candidate.validators[1].next_weight, config.peertrust_soft_min_weight);
   EXPECT_EQ(candidate.validators[0].strong_fault_count, 0);
   EXPECT_EQ(candidate.validators[0].penalty_points, 0);
 }
@@ -1662,7 +1661,7 @@ TEST(ReputationAlgorithmTest,
   ReputationConfig config = TestConfig();
   config.peertrust_enabled = true;
   std::vector<int64_t> weights(20, 100);
-  weights[0] = 67;
+  weights[0] = config.peertrust_soft_min_weight;
   std::vector<int> prior_peertrust_debt(20, 0);
   prior_peertrust_debt[0] = 20;
 
@@ -1671,8 +1670,9 @@ TEST(ReputationAlgorithmTest,
       {}, {}, {}, {}, {}, {}, {}, prior_peertrust_debt);
 
   EXPECT_EQ(candidate.validators[0].vote_score, 50);
-  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt, 20);
-  EXPECT_EQ(candidate.validators[0].decay_applied, config.decay_per_epoch);
+  EXPECT_EQ(candidate.validators[0].peertrust_leader_debt,
+            prior_peertrust_debt[0]);
+  EXPECT_EQ(candidate.validators[0].decay_applied, 0);
   EXPECT_GE(candidate.validators[0].next_weight, config.peertrust_soft_min_weight);
   EXPECT_EQ(candidate.validators[0].strong_fault_count, 0);
   EXPECT_EQ(candidate.validators[0].penalty_points, 0);
@@ -1833,8 +1833,9 @@ TEST(ReputationAlgorithmTest,
               candidate.validators[19].community_context_score);
     EXPECT_LT(candidate.validators[leader - 1].peertrust_score,
               candidate.validators[19].peertrust_score);
-    EXPECT_LT(candidate.validators[leader - 1].next_weight, 30);
-    EXPECT_GT(candidate.validators[leader - 1].next_weight, config.min_weight);
+    EXPECT_EQ(candidate.validators[leader - 1].next_weight, 30);
+    EXPECT_EQ(candidate.validators[leader - 1].peertrust_leader_debt,
+              config.peertrust_debt_increment);
   }
   EXPECT_EQ(candidate.validators[19].next_weight, 30);
 }
@@ -1964,185 +1965,6 @@ TEST(ReputationAlgorithmTest, CandidateDigestIgnoresAuditRoots) {
       /*next_weight_root_hex=*/"weights", /*next_weights=*/{10, 20, 30, 40});
 
   EXPECT_EQ(digest, changed);
-}
-
-TEST(ReputationAlgorithmTest, SybilGraphDisabledKeepsAuditNeutral) {
-  ReputationConfig config = TestConfig();
-  config.sybil_graph_enabled = false;
-  std::vector<TestEvidence> evidence;
-  for (int view = 1; view <= 4; ++view) {
-    evidence.push_back(CertifiedQc(view, view, Bitmap({1, 2, 3, 4}, 4),
-                                   Bitmap({1, 2, 3, 4}, 4)));
-  }
-
-  const ReputationCandidate candidate = ComputeCandidate(
-      1, 4, 1, evidence, {30, 30, 30, 30}, config);
-
-  for (const ValidatorReputation& validator : candidate.validators) {
-    EXPECT_EQ(validator.sybil_rank_score, 100);
-    EXPECT_EQ(validator.sybil_cut_score, 100);
-    EXPECT_EQ(validator.sybil_graph_score, 100);
-    EXPECT_EQ(validator.sybil_graph_debt, 0);
-    EXPECT_EQ(validator.sybil_graph_debt_delta, 0);
-  }
-}
-
-TEST(ReputationAlgorithmTest, SybilGraphAllGoodRotatingEvidenceStaysHigh) {
-  ReputationConfig config = TestConfig();
-  config.sybil_graph_enabled = true;
-  config.sybil_graph_min_edges = 1;
-  const int total_replicas = 20;
-  const std::vector<int64_t> weights(total_replicas, 30);
-  std::vector<int> all_signers;
-  for (int id = 1; id <= total_replicas; ++id) {
-    all_signers.push_back(id);
-  }
-  std::vector<TestEvidence> evidence;
-  for (int view = 1; view <= 20; ++view) {
-    evidence.push_back(CertifiedQc(
-        view, ((view - 1) % total_replicas) + 1,
-        BitmapFromVector(all_signers, total_replicas),
-        BitmapFromVector(all_signers, total_replicas)));
-  }
-
-  const ReputationCandidate candidate = ComputeCandidate(
-      1, total_replicas, 1, evidence, weights, config);
-
-  for (const ValidatorReputation& validator : candidate.validators) {
-    EXPECT_GE(validator.sybil_rank_score, 90);
-    EXPECT_GE(validator.sybil_cut_score, 90);
-    EXPECT_GE(validator.sybil_graph_score, 90);
-    EXPECT_EQ(validator.sybil_graph_debt, 0);
-    EXPECT_EQ(validator.strong_fault_count, 0);
-  }
-}
-
-TEST(ReputationAlgorithmTest,
-     SybilGraphDenseClusterWithFewAttackEdgesDropsCluster) {
-  ReputationConfig config = TestConfig();
-  config.sybil_graph_enabled = true;
-  config.sybil_graph_min_edges = 1;
-  config.sybil_graph_debt_increment = 40;
-  config.sybil_graph_debt_trigger_score = 75;
-  const int total_replicas = 20;
-  const std::vector<int64_t> weights(total_replicas, 30);
-  const std::vector<int> sybil_reviewers = {1, 2, 3, 4, 5, 6, 7, 8,
-                                            9, 10, 11, 12, 13, 14};
-  std::vector<int> all_signers;
-  for (int id = 1; id <= total_replicas; ++id) {
-    all_signers.push_back(id);
-  }
-  std::vector<TestEvidence> evidence;
-  for (int view = 1; view <= 16; ++view) {
-    const int leader = ((view - 1) % 8) + 1;
-    evidence.push_back(CertifiedQc(
-        view, leader, BitmapFromVector(sybil_reviewers, total_replicas),
-        BitmapFromVector(sybil_reviewers, total_replicas)));
-  }
-  for (int view = 17; view <= 32; ++view) {
-    const int leader = 15 + ((view - 17) % 6);
-    evidence.push_back(CertifiedQc(
-        view, leader, BitmapFromVector(all_signers, total_replicas),
-        BitmapFromVector(all_signers, total_replicas)));
-  }
-
-  const ReputationCandidate candidate = ComputeCandidate(
-      1, total_replicas, 1, evidence, weights, config);
-
-  int sybil_score_sum = 0;
-  int honest_score_sum = 0;
-  int sybil_weight_sum = 0;
-  int honest_weight_sum = 0;
-  for (int id = 1; id <= total_replicas; ++id) {
-    const ValidatorReputation& validator = candidate.validators[id - 1];
-    if (id <= 8) {
-      sybil_score_sum += validator.sybil_graph_score;
-      sybil_weight_sum += validator.next_weight;
-      EXPECT_GT(validator.sybil_graph_debt, 0);
-      EXPECT_LT(validator.next_weight, validator.current_weight)
-          << "id=" << id << " debt=" << validator.sybil_graph_debt
-          << " score=" << validator.sybil_graph_score
-          << " current=" << validator.current_weight
-          << " next=" << validator.next_weight;
-    } else if (id >= 15) {
-      honest_score_sum += validator.sybil_graph_score;
-      honest_weight_sum += validator.next_weight;
-      EXPECT_EQ(validator.strong_fault_count, 0);
-      EXPECT_EQ(validator.penalty_points, 0);
-    }
-  }
-  EXPECT_LT(sybil_score_sum / 8, honest_score_sum / 6);
-  EXPECT_LT(sybil_weight_sum / 8, honest_weight_sum / 6);
-}
-
-TEST(ReputationAlgorithmTest,
-     SybilGraphBroadHonestEndorsementsWeakenDiscount) {
-  ReputationConfig config = TestConfig();
-  config.sybil_graph_enabled = true;
-  config.sybil_graph_min_edges = 1;
-  const int total_replicas = 20;
-  const std::vector<int64_t> weights(total_replicas, 30);
-  std::vector<int> all_signers;
-  for (int id = 1; id <= total_replicas; ++id) {
-    all_signers.push_back(id);
-  }
-  std::vector<TestEvidence> evidence;
-  for (int view = 1; view <= 16; ++view) {
-    const int leader = ((view - 1) % 8) + 1;
-    evidence.push_back(CertifiedQc(
-        view, leader, BitmapFromVector(all_signers, total_replicas),
-        BitmapFromVector(all_signers, total_replicas)));
-  }
-
-  const ReputationCandidate candidate = ComputeCandidate(
-      1, total_replicas, 1, evidence, weights, config);
-
-  for (int id = 1; id <= 8; ++id) {
-    const ValidatorReputation& validator = candidate.validators[id - 1];
-    EXPECT_GE(validator.sybil_graph_score, 90);
-    EXPECT_EQ(validator.sybil_graph_debt, 0);
-  }
-}
-
-TEST(ReputationAlgorithmTest, SybilGraphDebtPersistsAcrossQuietWindow) {
-  ReputationConfig config = TestConfig();
-  config.sybil_graph_enabled = true;
-  const ReputationCandidate candidate = ComputeCandidate(
-      1, 4, 1, /*evidence=*/{}, {30, 30, 30, 30}, config, "", 0, 0,
-      {}, {}, {}, {}, {}, {}, {}, /*prior_peertrust_leader_debt=*/{},
-      /*prior_sybil_graph_debt=*/{30, 0, 0, 0});
-
-  EXPECT_EQ(candidate.validators[0].sybil_graph_debt, 30);
-  EXPECT_EQ(candidate.validators[0].next_weight, 30);
-  EXPECT_EQ(candidate.validators[1].next_weight, 30);
-}
-
-TEST(ReputationAlgorithmTest, SybilGraphDebtGatesLaterRecovery) {
-  ReputationConfig config = TestConfig();
-  config.sybil_graph_enabled = true;
-  const ReputationCandidate candidate = ComputeCandidate(
-      1, 4, 1, {CertifiedQc(1, 1, Bitmap({1, 2, 3, 4}, 4),
-                            Bitmap({1, 2, 3, 4}, 4))},
-      {30, 30, 30, 30}, config, "", 0, 0, {}, {}, {}, {}, {}, {}, {},
-      /*prior_peertrust_leader_debt=*/{}, /*prior_sybil_graph_debt=*/{80, 0, 0, 0});
-
-  EXPECT_EQ(candidate.validators[0].sybil_graph_debt, 75);
-  EXPECT_EQ(candidate.validators[0].next_weight, 25);
-  EXPECT_EQ(candidate.validators[1].next_weight, 30);
-}
-
-TEST(ReputationAlgorithmTest, SybilGraphDebtDoesNotRecoverFromVoterOnlyEvidence) {
-  ReputationConfig config = TestConfig();
-  config.sybil_graph_enabled = true;
-  const ReputationCandidate candidate = ComputeCandidate(
-      1, 4, 1, {CertifiedQc(1, 2, Bitmap({1, 2, 3, 4}, 4),
-                            Bitmap({1, 2, 3, 4}, 4))},
-      {30, 30, 30, 30}, config, "", 0, 0, {}, {}, {}, {}, {}, {}, {},
-      /*prior_peertrust_leader_debt=*/{}, /*prior_sybil_graph_debt=*/{80, 0, 0, 0});
-
-  EXPECT_EQ(candidate.validators[0].sybil_graph_debt, 80);
-  EXPECT_EQ(candidate.validators[0].next_weight, 25);
-  EXPECT_EQ(candidate.validators[1].sybil_graph_debt, 0);
 }
 
 TEST(ReputationAlgorithmTest, DetectsVerifiedDoubleProposal) {

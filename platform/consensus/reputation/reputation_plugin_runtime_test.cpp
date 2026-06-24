@@ -713,7 +713,8 @@ TEST(ReputationPluginRuntimeTest,
   auto first = WaitForCandidates(&runtime, 1);
   ASSERT_EQ(first.size(), 1);
   ASSERT_EQ(first[0].validators.size(), 4);
-  EXPECT_EQ(first[0].validators[0].peertrust_leader_debt, 20);
+  EXPECT_EQ(first[0].validators[0].peertrust_leader_debt,
+            options.config.peertrust_debt_increment);
   EXPECT_LT(first[0].leader_weights[0], first[0].leader_weights[1]);
 
   ReputationWeightSnapshot snapshot;
@@ -744,8 +745,10 @@ TEST(ReputationPluginRuntimeTest,
   ASSERT_EQ(second.size(), 1);
   ASSERT_EQ(second[0].validators.size(), 4);
   EXPECT_EQ(second[0].old_weight_version, snapshot.weight_version);
-  EXPECT_EQ(second[0].validators[0].peertrust_leader_debt, 40);
-  EXPECT_EQ(second[0].validators[0].peertrust_debt_delta, 20);
+  EXPECT_EQ(second[0].validators[0].peertrust_leader_debt,
+            2 * options.config.peertrust_debt_increment);
+  EXPECT_EQ(second[0].validators[0].peertrust_debt_delta,
+            options.config.peertrust_debt_increment);
   EXPECT_LT(first[0].validators[0].next_weight, 100);
   EXPECT_GT(first[0].validators[0].next_weight,
             options.config.peertrust_soft_min_weight);
@@ -786,7 +789,8 @@ TEST(ReputationPluginRuntimeTest,
   auto first = WaitForCandidates(&runtime, 1);
   ASSERT_EQ(first.size(), 1);
   EXPECT_EQ(first[0].old_weight_version, 0);
-  EXPECT_EQ(first[0].validators[0].peertrust_leader_debt, 20);
+  EXPECT_EQ(first[0].validators[0].peertrust_leader_debt,
+            options.config.peertrust_debt_increment);
 
   for (int view = 16; view < 24; ++view) {
     EXPECT_TRUE(runtime.RecordEvidence(PeerTrustEvidence(
@@ -804,8 +808,10 @@ TEST(ReputationPluginRuntimeTest,
 
   ASSERT_EQ(second.size(), 1);
   EXPECT_EQ(second[0].old_weight_version, 0);
-  EXPECT_EQ(second[0].validators[0].peertrust_leader_debt, 40);
-  EXPECT_EQ(second[0].validators[0].peertrust_debt_delta, 20);
+  EXPECT_EQ(second[0].validators[0].peertrust_leader_debt,
+            2 * options.config.peertrust_debt_increment);
+  EXPECT_EQ(second[0].validators[0].peertrust_debt_delta,
+            options.config.peertrust_debt_increment);
 }
 
 TEST(ReputationPluginRuntimeTest,

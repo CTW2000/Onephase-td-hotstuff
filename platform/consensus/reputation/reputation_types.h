@@ -61,20 +61,11 @@ struct ReputationConfig {
   bool conflicting_qc_detection_enabled = false;
   int64_t strong_fault_target_weight = 1;
   bool peertrust_enabled = false;
-  int peertrust_debt_increment = 20;
-  int peertrust_debt_recovery = 5;
-  int peertrust_debt_max = 95;
-  int peertrust_debt_trigger_score = 67;
-  int64_t peertrust_soft_min_weight = 67;
-  bool sybil_graph_enabled = false;
-  int sybil_graph_iterations = 0;
-  int sybil_graph_max_discount = 40;
-  int sybil_graph_debt_increment = 20;
-  int sybil_graph_debt_recovery = 5;
-  int sybil_graph_debt_max = 95;
-  int sybil_graph_debt_trigger_score = 67;
-  int sybil_graph_seed_min_reputation = 67;
-  uint64_t sybil_graph_min_edges = 1;
+  int peertrust_debt_increment = 5;
+  int peertrust_debt_recovery = 3;
+  int peertrust_debt_max = 40;
+  int peertrust_debt_trigger_score = 70;
+  int64_t peertrust_soft_min_weight = 80;
 };
 
 
@@ -119,13 +110,6 @@ struct ValidatorReputation {
   int peertrust_leader_debt = 0;
   int peertrust_debt_delta = 0;
   uint64_t feedback_count = 0;
-  int sybil_rank_score = 100;
-  int sybil_cut_score = 100;
-  int sybil_graph_score = 100;
-  int sybil_graph_debt = 0;
-  int sybil_graph_debt_delta = 0;
-  uint64_t graph_degree = 0;
-  int seed_trust_score = 100;
   int reputation_score = 100;
   int decay_applied = 0;
   int recovery_credit = 0;
@@ -233,7 +217,6 @@ struct ReputationWindowInput {
   std::vector<SignedWeightUpdateVoteEvidence> signed_weight_update_vote_evidence;
   std::vector<VerifiedQcArtifactEvidence> verified_qc_artifact_evidence;
   std::vector<int> prior_peertrust_leader_debt;
-  std::vector<int> prior_sybil_graph_debt;
 };
 
 enum class StrongFaultType {

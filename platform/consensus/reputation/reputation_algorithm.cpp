@@ -13,7 +13,6 @@
 #include "platform/consensus/reputation/reputation_utils.h"
 #include "platform/consensus/reputation/soft_reputation.h"
 #include "platform/consensus/reputation/strong_fault_detector.h"
-#include "platform/consensus/reputation/sybil_graph.h"
 
 namespace resdb {
 namespace consensus {
@@ -717,7 +716,7 @@ bool UseCoreOnlyFastPath(const ReputationWindowInput& input,
                          const ReputationConfig& config) {
   return !config.multiplicative_weight_formula_enabled &&
          !config.leader_recovery_enabled && !config.peertrust_enabled &&
-         !config.sybil_graph_enabled && !config.strong_fault_enabled &&
+         !config.strong_fault_enabled &&
          !HasStrongFaultEvidence(input);
 }
 
@@ -1073,11 +1072,6 @@ ReputationCandidate ComputeReputationCandidate(
       validator.peertrust_leader_debt = std::max(
           0, std::min(config.peertrust_debt_max,
                       input.prior_peertrust_leader_debt[i]));
-    }
-    if (config.sybil_graph_enabled &&
-        i < static_cast<int>(input.prior_sybil_graph_debt.size())) {
-      validator.sybil_graph_debt = std::max(
-          0, std::min(config.sybil_graph_debt_max, input.prior_sybil_graph_debt[i]));
     }
   }
 
@@ -1611,11 +1605,6 @@ ReputationCandidate ComputeReputationCandidate(
   }
   constexpr int kPeerTrustCommunityOutlierDeadband = 10;
 
-  const SybilGraphAudit sybil_graph_audit = ComputeSybilGraphAudit(
-      total_replicas, input.certified_signer_evidence, weights, unique_signers_by_leader,
-      diversity_count, unique_available_signers_by_leader,
-      available_signer_evidence_count, config);
-
   int leader_diversity_baseline_score = 100;
   if (!diversity_baseline_samples.empty()) {
     std::sort(diversity_baseline_samples.begin(),
@@ -1815,39 +1804,6 @@ ReputationCandidate ComputeReputationCandidate(
       validator.peertrust_leader_debt = 0;
       validator.peertrust_debt_delta = 0;
     }
-    if (config.sybil_graph_enabled && idx >= 0 &&
-        idx < static_cast<int>(sybil_graph_audit.graph_score.size())) {
-      validator.sybil_rank_score = sybil_graph_audit.rank_score[idx];
-      validator.sybil_cut_score = sybil_graph_audit.cut_score[idx];
-      validator.sybil_graph_score = sybil_graph_audit.graph_score[idx];
-      validator.graph_degree = sybil_graph_audit.graph_degree[idx];
-      validator.seed_trust_score = sybil_graph_audit.seed_trust_score[idx];
-      const int previous_sybil_graph_debt = validator.sybil_graph_debt;
-      int next_sybil_graph_debt = previous_sybil_graph_debt;
-      if (validator.graph_degree > 0 &&
-          validator.sybil_cut_score <
-              config.sybil_graph_debt_trigger_score) {
-        next_sybil_graph_debt += config.sybil_graph_debt_increment;
-      } else if (leader_opportunities >= config.min_leader_opportunities &&
-                 validator.graph_degree > 0 &&
-                 validator.sybil_graph_score >= 95) {
-        next_sybil_graph_debt -= config.sybil_graph_debt_recovery;
-      }
-      next_sybil_graph_debt = std::max(
-          0, std::min(config.sybil_graph_debt_max, next_sybil_graph_debt));
-      validator.sybil_graph_debt = next_sybil_graph_debt;
-      validator.sybil_graph_debt_delta =
-          next_sybil_graph_debt - previous_sybil_graph_debt;
-    } else {
-      validator.sybil_rank_score = 100;
-      validator.sybil_cut_score = 100;
-      validator.sybil_graph_score = 100;
-      validator.sybil_graph_debt = 0;
-      validator.sybil_graph_debt_delta = 0;
-      validator.graph_degree = 0;
-      validator.seed_trust_score = 100;
-    }
-
     int recovery_score = VoteReputationScore(validator);
     if (config.peertrust_enabled &&
         (validator.feedback_count > 0 ||
@@ -1859,22 +1815,6 @@ ReputationCandidate ComputeReputationCandidate(
           std::max(0, 100 - validator.peertrust_leader_debt);
       recovery_score = std::min(recovery_score, debt_gate_score);
       if (validator.peertrust_leader_debt > 0 &&
-          debt_gate_score < kDebtNoRecoveryBelow) {
-        recovery_score = 0;
-      }
-    }
-    if (config.sybil_graph_enabled &&
-        (validator.graph_degree > 0 || validator.sybil_graph_debt > 0)) {
-      if (validator.graph_degree > 0 &&
-          validator.sybil_cut_score <
-              config.sybil_graph_debt_trigger_score) {
-        recovery_score = std::min(recovery_score,
-                                  validator.sybil_graph_score);
-      }
-      const int debt_gate_score =
-          std::max(0, 100 - validator.sybil_graph_debt);
-      recovery_score = std::min(recovery_score, debt_gate_score);
-      if (validator.sybil_graph_debt > 0 &&
           debt_gate_score < kDebtNoRecoveryBelow) {
         recovery_score = 0;
       }
@@ -1900,13 +1840,21 @@ ReputationCandidate ComputeReputationCandidate(
         !first_window_sparse_max_weight_sample;
     const int64_t available_decay =
         std::max<int64_t>(0, validator.current_weight - config.min_weight);
-    int64_t target_weight = ReputationTargetWeightForScore(recovery_score, config);
-    if (validator.current_weight >= config.max_weight && recovery_score >= 90) {
-      target_weight = ClampWeight(config.max_weight, config);
-    }
     const int64_t peertrust_soft_floor = std::max<int64_t>(
         config.min_weight,
         std::min<int64_t>(config.peertrust_soft_min_weight, config.max_weight));
+    const bool peertrust_floor_applies =
+        low_peertrust || validator.peertrust_leader_debt > 0 ||
+        previous_peertrust_debt > 0;
+    const bool peertrust_soft_floor_eligible =
+        config.peertrust_enabled && validator.vote_score >= kHealthyCatchUpScore;
+    int64_t target_weight = ReputationTargetWeightForScore(recovery_score, config);
+    if (peertrust_floor_applies && peertrust_soft_floor_eligible) {
+      target_weight = std::max<int64_t>(target_weight, peertrust_soft_floor);
+    }
+    if (validator.current_weight >= config.max_weight && recovery_score >= 90) {
+      target_weight = ClampWeight(config.max_weight, config);
+    }
     const bool has_reputation_evidence = validator_has_enough_decay_evidence;
     validator.decay_applied = 0;
     validator.recovery_credit = 0;
@@ -1932,19 +1880,6 @@ ReputationCandidate ComputeReputationCandidate(
     MaybeApplyMultiplicativeWeightFormula(
         &validator, config, recovery_score, smoothed_next_weight,
         force_score_factor);
-    if (config.sybil_graph_enabled && validator.sybil_graph_debt > 0 &&
-        validator.graph_degree > 0 &&
-        validator.current_weight > config.min_weight) {
-      validator.next_weight = std::min<int64_t>(
-          validator.next_weight, validator.current_weight - 1);
-    }
-    const bool peertrust_floor_applies =
-        low_peertrust || validator.peertrust_leader_debt > 0 ||
-        previous_peertrust_debt > 0;
-    const bool peertrust_soft_floor_eligible =
-        config.peertrust_enabled &&
-        validator.vote_score >= kHealthyCatchUpScore &&
-        validator.sybil_graph_debt == 0;
     if (peertrust_floor_applies && peertrust_soft_floor_eligible &&
         validator.current_weight + validator.decay_applied >=
             peertrust_soft_floor &&

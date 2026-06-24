@@ -1210,12 +1210,6 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
         input.prior_peertrust_leader_debt = prior_it->second;
       }
     }
-    if (options_.config.sybil_graph_enabled) {
-      auto prior_it = prior_sybil_graph_debt_.find(snapshot_key);
-      if (prior_it != prior_sybil_graph_debt_.end()) {
-        input.prior_sybil_graph_debt = prior_it->second;
-      }
-    }
   }
 
   ReputationCandidate candidate = ComputeReputationCandidate(input, options_.config);
@@ -1317,25 +1311,6 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
           std::move(peertrust_leader_debt);
     }
   }
-  if (options_.config.sybil_graph_enabled) {
-    std::vector<int> sybil_graph_debt;
-    sybil_graph_debt.reserve(candidate.validators.size());
-    for (const ValidatorReputation& validator : candidate.validators) {
-      sybil_graph_debt.push_back(validator.sybil_graph_debt);
-    }
-    if (!sybil_graph_debt.empty()) {
-      const auto current_snapshot_key =
-          std::make_pair(buffer->snapshot.weight_root_hex,
-                         buffer->snapshot.weight_version);
-      const auto next_snapshot_key =
-          std::make_pair(candidate.next_weight_root_hex,
-                         candidate.old_weight_version + 1);
-      std::lock_guard<std::mutex> lk(mutex_);
-      prior_sybil_graph_debt_[current_snapshot_key] = sybil_graph_debt;
-      prior_sybil_graph_debt_[next_snapshot_key] =
-          std::move(sybil_graph_debt);
-    }
-  }
   WriteAudit(candidate);
   PushCompleted(std::move(candidate));
   computed_window_count_.fetch_add(1);
@@ -1402,7 +1377,6 @@ void ReputationPluginRuntime::PruneRetainedStateLocked() {
   TrimMapToSize(&prior_vote_beta_counters_, kMaxRetainedSnapshotState);
   TrimMapToSize(&prior_leader_dirichlet_counters_, kMaxRetainedSnapshotState);
   TrimMapToSize(&prior_peertrust_leader_debt_, kMaxRetainedSnapshotState);
-  TrimMapToSize(&prior_sybil_graph_debt_, kMaxRetainedSnapshotState);
   TrimMapToSize(&completed_by_version_, kMaxRetainedCompletedCandidates);
   TrimMapToSize(&completed_index_, kMaxRetainedCompletedCandidates);
 }
