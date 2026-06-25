@@ -666,6 +666,88 @@ TEST(ReputationAlgorithmTest,
   }
 }
 
+TEST(ReputationAlgorithmTest, StakeNormalizationRescalesRawStakeFactors) {
+  ReputationConfig config = TestConfig();
+  config.multiplicative_weight_formula_enabled = true;
+  config.stake_normalization_enabled = true;
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+  ReputationWindowInput input = BuildWindowInput(
+      1, 4, 1, evidence, {100, 100, 100, 100}, "old-root", 0, 64);
+  input.stake_factors_per_mille = {2000, 1000, 1000, 1000};
+  input.identity_factors_per_mille = {500, 500, 500, 500};
+
+  const ReputationCandidate candidate =
+      ComputeReputationCandidate(input, config);
+
+  EXPECT_EQ(candidate.validators[0].stake_factor_per_mille, 1600);
+  EXPECT_EQ(candidate.validators[1].stake_factor_per_mille, 800);
+  EXPECT_EQ(candidate.validators[2].stake_factor_per_mille, 800);
+  EXPECT_EQ(candidate.validators[3].stake_factor_per_mille, 800);
+  EXPECT_EQ(candidate.validators[0].next_weight, 80);
+  EXPECT_EQ(candidate.validators[1].next_weight, 40);
+  EXPECT_EQ(candidate.validators[2].next_weight, 40);
+  EXPECT_EQ(candidate.validators[3].next_weight, 40);
+}
+
+TEST(ReputationAlgorithmTest, NodeStakeCapLimitsSingleValidatorInfluence) {
+  ReputationConfig config = TestConfig();
+  config.multiplicative_weight_formula_enabled = true;
+  config.stake_node_cap_per_mille = 1200;
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+  ReputationWindowInput input = BuildWindowInput(
+      1, 4, 1, evidence, {100, 100, 100, 100}, "old-root", 0, 64);
+  input.stake_factors_per_mille = {2000, 1000, 1000, 1000};
+  input.identity_factors_per_mille = {500, 500, 500, 500};
+
+  const ReputationCandidate candidate =
+      ComputeReputationCandidate(input, config);
+
+  EXPECT_EQ(candidate.validators[0].stake_factor_per_mille, 1200);
+  EXPECT_EQ(candidate.validators[1].stake_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[0].next_weight, 60);
+  EXPECT_EQ(candidate.validators[1].next_weight, 50);
+}
+
+TEST(ReputationAlgorithmTest, OperatorStakeCapScalesGroupedValidators) {
+  ReputationConfig config = TestConfig();
+  config.multiplicative_weight_formula_enabled = true;
+  config.stake_operator_group_size = 2;
+  config.stake_operator_cap_per_mille_of_total = 500;
+
+  std::vector<TestEvidence> evidence;
+  for (int view = 1; view <= 4; ++view) {
+    evidence.push_back(CertifiedQc(view, ((view - 1) % 4) + 1,
+                                   Bitmap({1, 2, 3, 4}, 4),
+                                   Bitmap({1, 2, 3, 4}, 4)));
+  }
+  ReputationWindowInput input = BuildWindowInput(
+      1, 4, 1, evidence, {100, 100, 100, 100}, "old-root", 0, 64);
+  input.stake_factors_per_mille = {2000, 2000, 1000, 1000};
+  input.identity_factors_per_mille = {500, 500, 500, 500};
+
+  const ReputationCandidate candidate =
+      ComputeReputationCandidate(input, config);
+
+  EXPECT_EQ(candidate.validators[0].stake_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[1].stake_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[2].stake_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[3].stake_factor_per_mille, 1000);
+  EXPECT_EQ(candidate.validators[0].next_weight, 50);
+  EXPECT_EQ(candidate.validators[1].next_weight, 50);
+}
+
 TEST(ReputationAlgorithmTest, LeaderWeightsStayRoundRobinWhenEveryoneEligible) {
   ReputationConfig config = TestConfig();
   config.leader_eligible_min_weight = 10;

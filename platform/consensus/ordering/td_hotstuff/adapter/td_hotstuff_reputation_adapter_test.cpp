@@ -155,6 +155,10 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   setenv("TD_HS_REPUTATION_STAKE_TAU_PER_MILLE", "750", 1);
   setenv("TD_HS_REPUTATION_STAKE_MIN_PER_MILLE", "900", 1);
   setenv("TD_HS_REPUTATION_STAKE_MAX_PER_MILLE", "1100", 1);
+  setenv("TD_HS_REPUTATION_STAKE_NORMALIZATION_ENABLE", "1", 1);
+  setenv("TD_HS_REPUTATION_STAKE_NODE_CAP_PER_MILLE", "1200", 1);
+  setenv("TD_HS_REPUTATION_STAKE_OPERATOR_CAP_PER_MILLE_OF_TOTAL", "450", 1);
+  setenv("TD_HS_REPUTATION_STAKE_OPERATOR_GROUP_SIZE", "2", 1);
   setenv("TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE", "950", 1);
   setenv("TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE", "1050", 1);
   setenv("TD_HS_REPUTATION_PEERTRUST_DEBT_INCREMENT", "12", 1);
@@ -182,6 +186,11 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   EXPECT_EQ(options.reputation_config.stake_exponent_tau_per_mille, 750);
   EXPECT_EQ(options.reputation_config.stake_factor_min_per_mille, 900);
   EXPECT_EQ(options.reputation_config.stake_factor_max_per_mille, 1100);
+  EXPECT_TRUE(options.reputation_config.stake_normalization_enabled);
+  EXPECT_EQ(options.reputation_config.stake_node_cap_per_mille, 1200);
+  EXPECT_EQ(options.reputation_config.stake_operator_cap_per_mille_of_total,
+            450);
+  EXPECT_EQ(options.reputation_config.stake_operator_group_size, 2);
   EXPECT_EQ(options.reputation_config.identity_factor_min_per_mille, 950);
   EXPECT_EQ(options.reputation_config.identity_factor_max_per_mille, 1050);
   EXPECT_EQ(options.reputation_config.peertrust_debt_increment, 12);
@@ -206,6 +215,10 @@ TEST(TdHotstuffReputationAdapterTest, OptionsFromEnvReadsReputationTuning) {
   unsetenv("TD_HS_REPUTATION_STAKE_TAU_PER_MILLE");
   unsetenv("TD_HS_REPUTATION_STAKE_MIN_PER_MILLE");
   unsetenv("TD_HS_REPUTATION_STAKE_MAX_PER_MILLE");
+  unsetenv("TD_HS_REPUTATION_STAKE_NORMALIZATION_ENABLE");
+  unsetenv("TD_HS_REPUTATION_STAKE_NODE_CAP_PER_MILLE");
+  unsetenv("TD_HS_REPUTATION_STAKE_OPERATOR_CAP_PER_MILLE_OF_TOTAL");
+  unsetenv("TD_HS_REPUTATION_STAKE_OPERATOR_GROUP_SIZE");
   unsetenv("TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE");
   unsetenv("TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE");
   unsetenv("TD_HS_REPUTATION_PEERTRUST_DEBT_INCREMENT");

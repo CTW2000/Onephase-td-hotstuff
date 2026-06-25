@@ -133,6 +133,65 @@ int FactorFromInputOrDefault(const std::vector<int>& input_factors,
                                     max_per_mille);
 }
 
+std::vector<int> EffectiveStakeFactorsPerMille(
+    const ReputationWindowInput& input, const ReputationConfig& config,
+    int total_replicas) {
+  std::vector<int> factors(std::max(total_replicas, 0), kFactorScale);
+  uint64_t sum = 0;
+  for (int i = 0; i < total_replicas; ++i) {
+    factors[i] = FactorFromInputOrDefault(
+        input.stake_factors_per_mille, i, config.stake_factor_seed,
+        config.stake_factor_min_per_mille, config.stake_factor_max_per_mille,
+        kFactorScale);
+    sum += static_cast<uint64_t>(std::max(0, factors[i]));
+  }
+
+  if (config.stake_normalization_enabled && total_replicas > 0 && sum > 0) {
+    const uint64_t target_sum =
+        static_cast<uint64_t>(total_replicas) * kFactorScale;
+    for (int& factor : factors) {
+      factor = ClampPermilleFactor(static_cast<int>(RoundedDivide(
+          static_cast<uint64_t>(std::max(0, factor)) * target_sum, sum)));
+    }
+  }
+
+  const int node_cap = ClampPermilleFactor(config.stake_node_cap_per_mille);
+  if (node_cap > 0 && node_cap < 10000) {
+    for (int& factor : factors) {
+      factor = std::min(factor, node_cap);
+    }
+  }
+
+  const int operator_cap =
+      ClampPermilleFactor(config.stake_operator_cap_per_mille_of_total);
+  const int group_size = std::max(1, config.stake_operator_group_size);
+  if (operator_cap > 0 && operator_cap < 10000 && total_replicas > 0) {
+    const uint64_t total_budget =
+        static_cast<uint64_t>(total_replicas) * kFactorScale;
+    const uint64_t group_cap =
+        std::max<uint64_t>(1, RoundedDivide(total_budget * operator_cap,
+                                            kFactorScale));
+    for (int group_begin = 0; group_begin < total_replicas;
+         group_begin += group_size) {
+      const int group_end = std::min(total_replicas, group_begin + group_size);
+      uint64_t group_sum = 0;
+      for (int i = group_begin; i < group_end; ++i) {
+        group_sum += static_cast<uint64_t>(std::max(0, factors[i]));
+      }
+      if (group_sum <= group_cap || group_sum == 0) {
+        continue;
+      }
+      for (int i = group_begin; i < group_end; ++i) {
+        factors[i] = ClampPermilleFactor(static_cast<int>(RoundedDivide(
+            static_cast<uint64_t>(std::max(0, factors[i])) * group_cap,
+            group_sum)));
+      }
+    }
+  }
+
+  return factors;
+}
+
 
 int StakePowerFactorPerMille(int stake_factor_per_mille,
                              int tau_per_mille) {
@@ -249,14 +308,15 @@ int DirectPenaltyFactorForWeight(int64_t pre_penalty_weight,
 
 void InitializeFormulaFactors(ValidatorReputation* validator, int index,
                               const ReputationWindowInput& input,
-                              const ReputationConfig& config) {
+                              const ReputationConfig& config,
+                              const std::vector<int>& stake_factors) {
   if (validator == nullptr) {
     return;
   }
-  validator->stake_factor_per_mille = FactorFromInputOrDefault(
-      input.stake_factors_per_mille, index, config.stake_factor_seed,
-      config.stake_factor_min_per_mille, config.stake_factor_max_per_mille,
-      kFactorScale);
+  validator->stake_factor_per_mille =
+      index >= 0 && index < static_cast<int>(stake_factors.size())
+          ? ClampPermilleFactor(stake_factors[index])
+          : kFactorScale;
   validator->stake_power_factor_per_mille = StakePowerFactorPerMille(
       validator->stake_factor_per_mille, config.stake_exponent_tau_per_mille);
   validator->identity_factor_per_mille = FactorFromInputOrDefault(
@@ -1046,12 +1106,14 @@ ReputationCandidate ComputeReputationCandidate(
   const bool has_scheduled_leader_counts =
       input.scheduled_leader_counts.size() >=
       static_cast<size_t>(std::max(total_replicas, 0));
+  const std::vector<int> stake_factors =
+      EffectiveStakeFactorsPerMille(input, config, total_replicas);
   for (int i = 0; i < total_replicas; ++i) {
     ValidatorReputation& validator = candidate.validators[i];
     validator.validator_id = i + 1;
     validator.current_weight = weights[i];
     validator.next_weight = weights[i];
-    InitializeFormulaFactors(&validator, i, input, config);
+    InitializeFormulaFactors(&validator, i, input, config, stake_factors);
     if (has_scheduled_leader_counts) {
       validator.leader_opportunity_count = input.scheduled_leader_counts[i];
     }

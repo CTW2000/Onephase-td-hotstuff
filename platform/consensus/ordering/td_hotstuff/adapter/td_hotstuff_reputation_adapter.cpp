@@ -230,6 +230,19 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.reputation_config.stake_factor_max_per_mille = PositiveIntFromEnv(
       "TD_HS_REPUTATION_STAKE_MAX_PER_MILLE",
       options.reputation_config.stake_factor_max_per_mille);
+  options.reputation_config.stake_normalization_enabled = BoolFromEnv(
+      "TD_HS_REPUTATION_STAKE_NORMALIZATION_ENABLE",
+      options.reputation_config.stake_normalization_enabled);
+  options.reputation_config.stake_node_cap_per_mille = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_STAKE_NODE_CAP_PER_MILLE",
+      options.reputation_config.stake_node_cap_per_mille);
+  options.reputation_config.stake_operator_cap_per_mille_of_total =
+      PositiveIntFromEnv(
+          "TD_HS_REPUTATION_STAKE_OPERATOR_CAP_PER_MILLE_OF_TOTAL",
+          options.reputation_config.stake_operator_cap_per_mille_of_total);
+  options.reputation_config.stake_operator_group_size = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_STAKE_OPERATOR_GROUP_SIZE",
+      options.reputation_config.stake_operator_group_size);
   options.reputation_config.identity_factor_min_per_mille = PositiveIntFromEnv(
       "TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE",
       options.reputation_config.identity_factor_min_per_mille);

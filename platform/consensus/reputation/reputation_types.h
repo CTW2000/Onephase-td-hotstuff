@@ -46,6 +46,10 @@ struct ReputationConfig {
   int stake_factor_min_per_mille = 1000;
   int stake_factor_max_per_mille = 1000;
   uint64_t stake_factor_seed = 0x9e3779b97f4a7c15ULL;
+  bool stake_normalization_enabled = false;
+  int stake_node_cap_per_mille = 10000;
+  int stake_operator_cap_per_mille_of_total = 10000;
+  int stake_operator_group_size = 1;
   int identity_factor_min_per_mille = 1000;
   int identity_factor_max_per_mille = 1000;
   uint64_t identity_factor_seed = 0xbf58476d1ce4e5b9ULL;

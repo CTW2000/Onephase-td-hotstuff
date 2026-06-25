@@ -59,6 +59,10 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
                 "TD_HS_REPUTATION_STAKE_TAU_PER_MILLE": "750",
                 "TD_HS_REPUTATION_STAKE_MIN_PER_MILLE": "900",
                 "TD_HS_REPUTATION_STAKE_MAX_PER_MILLE": "1100",
+                "TD_HS_REPUTATION_STAKE_NORMALIZATION_ENABLE": "1",
+                "TD_HS_REPUTATION_STAKE_NODE_CAP_PER_MILLE": "1200",
+                "TD_HS_REPUTATION_STAKE_OPERATOR_CAP_PER_MILLE_OF_TOTAL": "450",
+                "TD_HS_REPUTATION_STAKE_OPERATOR_GROUP_SIZE": "2",
                 "TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE": "950",
                 "TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE": "1050",
             }
@@ -75,6 +79,13 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertEqual(values["TD_HS_REPUTATION_STAKE_TAU_PER_MILLE"], "750")
         self.assertEqual(values["TD_HS_REPUTATION_STAKE_MIN_PER_MILLE"], "900")
         self.assertEqual(values["TD_HS_REPUTATION_STAKE_MAX_PER_MILLE"], "1100")
+        self.assertEqual(values["TD_HS_REPUTATION_STAKE_NORMALIZATION_ENABLE"], "1")
+        self.assertEqual(values["TD_HS_REPUTATION_STAKE_NODE_CAP_PER_MILLE"], "1200")
+        self.assertEqual(
+            values["TD_HS_REPUTATION_STAKE_OPERATOR_CAP_PER_MILLE_OF_TOTAL"],
+            "450",
+        )
+        self.assertEqual(values["TD_HS_REPUTATION_STAKE_OPERATOR_GROUP_SIZE"], "2")
         self.assertEqual(values["TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE"], "950")
         self.assertEqual(values["TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE"], "1050")
 
@@ -152,6 +163,13 @@ class TdHotstuffExperimentEnvTest(unittest.TestCase):
         self.assertIn("TD_HS_REPUTATION_STAKE_TAU_PER_MILLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_STAKE_MIN_PER_MILLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_STAKE_MAX_PER_MILLE", shared_env_block)
+        self.assertIn("TD_HS_REPUTATION_STAKE_NORMALIZATION_ENABLE", shared_env_block)
+        self.assertIn("TD_HS_REPUTATION_STAKE_NODE_CAP_PER_MILLE", shared_env_block)
+        self.assertIn(
+            "TD_HS_REPUTATION_STAKE_OPERATOR_CAP_PER_MILLE_OF_TOTAL",
+            shared_env_block,
+        )
+        self.assertIn("TD_HS_REPUTATION_STAKE_OPERATOR_GROUP_SIZE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_IDENTITY_MIN_PER_MILLE", shared_env_block)
         self.assertIn("TD_HS_REPUTATION_IDENTITY_MAX_PER_MILLE", shared_env_block)
         self.assertNotIn("TD_HS_PEERTRUST_BROAD_QC_SIGNERS", shared_env_block)
