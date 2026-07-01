@@ -46,6 +46,7 @@ std::string MetricCanonical(const ReputationCandidate& candidate) {
         << validator.cross_leader_independence_score << ':'
         << validator.reviewer_overuse_score << ':'
         << validator.peertrust_leader_debt << ':'
+        << validator.leader_silent_debt << ':'
         << validator.peertrust_debt_delta << ':' << validator.feedback_count;
   }
   return out.str();

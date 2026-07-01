@@ -304,10 +304,109 @@ int HotStuff::NextLeader(int view) { return LeaderForView(view + 1); }
 
 bool HotStuff::IsLeader(int view) { return LeaderForView(view) == id_; }
 
+namespace {
+std::string SilentLeaderModeFromEnv() {
+  const char* raw = std::getenv("TD_HS_SILENT_LEADER_MODE");
+  return (raw != nullptr && *raw != '\0') ? std::string(raw)
+                                          : std::string("static");
+}
+// Deterministic, reproducible per-(view,id) value in [0,1000) for the
+// probability-driven modes — every replica and every rerun agrees.
+int SilentDeterministicPermille(int view, int id) {
+  uint64_t x = static_cast<uint64_t>(static_cast<uint32_t>(view)) *
+                   0x9E3779B97F4A7C15ULL +
+               static_cast<uint64_t>(static_cast<uint32_t>(id)) +
+               0x165667B19E3779F9ULL;
+  x ^= x >> 33;
+  x *= 0xff51afd7ed558ccdULL;
+  x ^= x >> 33;
+  return static_cast<int>(x % 1000);
+}
+}  // namespace
+
+// Switchable silent-leader attack model. The faulty leader decides whether to
+// stay silent (skip its proposal) this slot from: TD_HS_SILENT_LEADER_MODE, its
+// own activated leader weight, a per-node leader-slot counter, and a
+// deterministic per-(view,id) hash. Soft fault only: it never alters the
+// committed log, only whether this leader proposes.
 bool HotStuff::IsSilentLeaderForExperiment(int view) const {
-  return ExperimentStartedAtView("TD_HS_SILENT_LEADER_START_VIEW", view) &&
-         (EnvFlagEnabled("TD_HS_SILENT_LEADER") ||
-          EnvListContainsId("TD_HS_SILENT_LEADER_IDS", id_));
+  if (!ExperimentStartedAtView("TD_HS_SILENT_LEADER_START_VIEW", view)) {
+    return false;
+  }
+  if (!(EnvFlagEnabled("TD_HS_SILENT_LEADER") ||
+        EnvListContainsId("TD_HS_SILENT_LEADER_IDS", id_))) {
+    return false;
+  }
+  const std::string mode = SilentLeaderModeFromEnv();
+  if (mode == "static") {
+    return true;
+  }
+  // Weight-aware modes read this node's own activated leader weight.
+  int64_t w = -1;
+  if (leader_schedule_ != nullptr) {
+    const std::vector<int64_t>& lw = leader_schedule_->ActiveLeaderWeights();
+    if (id_ >= 1 && id_ <= static_cast<int>(lw.size())) {
+      w = lw[id_ - 1];
+    }
+  }
+  ++silent_leader_slots_;
+  if (mode == "probabilistic") {
+    return SilentDeterministicPermille(view, id_) <
+           PositiveIntFromEnv("TD_HS_SILENT_PROB_PERMILLE", 500);
+  }
+  if (mode == "burst") {
+    const uint64_t on =
+        static_cast<uint64_t>(PositiveIntFromEnv("TD_HS_SILENT_BURST_ON", 5));
+    const uint64_t off =
+        static_cast<uint64_t>(PositiveIntFromEnv("TD_HS_SILENT_BURST_OFF", 5));
+    const uint64_t cycle = std::max<uint64_t>(1, on + off);
+    return ((silent_leader_slots_ - 1) % cycle) < on;
+  }
+  if (mode == "degrade") {
+    const int step =
+        std::max(1, PositiveIntFromEnv("TD_HS_SILENT_DEGRADE_STEP", 8));
+    const int p = std::min<int>(
+        1000, static_cast<int>(silent_leader_slots_ /
+                               static_cast<uint64_t>(step)) *
+                  100);
+    return SilentDeterministicPermille(view, id_) < p;
+  }
+  if (mode == "persist") {
+    const int64_t stop = PositiveIntFromEnv("TD_HS_SILENT_PERSIST_STOP", 10);
+    if (!silent_persist_stopped_ && w >= 0 && w < stop) {
+      silent_persist_stopped_ = true;
+    }
+    return !silent_persist_stopped_;
+  }
+  if (mode == "relapse") {
+    const int64_t high = PositiveIntFromEnv("TD_HS_SILENT_ATTACK_HIGH", 90);
+    const int64_t low = PositiveIntFromEnv("TD_HS_SILENT_RETREAT_LOW", 25);
+    if (silent_relapse_phase_ == 0 && w >= 0 && w <= low) {
+      silent_relapse_phase_ = 1;
+    } else if (silent_relapse_phase_ == 1 && w >= 0 && w >= high) {
+      silent_relapse_phase_ = 2;
+    }
+    return silent_relapse_phase_ != 1;  // attack in phases 0,2; honest while recovering
+  }
+  // adaptive (default) and band: hysteresis between high/low thresholds.
+  int64_t high;
+  int64_t low;
+  if (mode == "band") {
+    high = PositiveIntFromEnv("TD_HS_SILENT_BAND_HI", 15);
+    low = PositiveIntFromEnv("TD_HS_SILENT_BAND_LO", 11);
+  } else {
+    high = PositiveIntFromEnv("TD_HS_SILENT_ATTACK_HIGH", 90);
+    low = PositiveIntFromEnv("TD_HS_SILENT_RETREAT_LOW", 25);
+  }
+  if (w < 0) {
+    return true;
+  }
+  if (silent_attacking_ && w <= low) {
+    silent_attacking_ = false;
+  } else if (!silent_attacking_ && w >= high) {
+    silent_attacking_ = true;
+  }
+  return silent_attacking_;
 }
 
 bool HotStuff::IsDoubleProposalForExperiment(int view) const {

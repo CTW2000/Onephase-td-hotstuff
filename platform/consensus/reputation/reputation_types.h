@@ -39,8 +39,7 @@ struct ReputationConfig {
   int leader_dirichlet_alpha_timeout = 1;
   int leader_certify_only_score = 70;
   int leader_timeout_score = 0;
-  bool leader_timeout_outcome_enabled = false;
-  bool leader_dirichlet_scoring_enabled = false;
+  bool leader_timeout_outcome_enabled = true;
   bool multiplicative_weight_formula_enabled = true;
   int stake_exponent_tau_per_mille = 1000;
   int stake_factor_min_per_mille = 1000;
@@ -56,20 +55,25 @@ struct ReputationConfig {
   uint64_t min_leader_opportunities = 8;
   int64_t leader_eligible_min_weight = 10;
   int64_t leader_diversity_soft_min_weight = 80;
-  bool leader_recovery_enabled = false;
-  bool strong_fault_enabled = false;
-  bool double_proposal_detection_enabled = false;
-  bool double_vote_detection_enabled = false;
-  bool invalid_qc_proposal_detection_enabled = false;
-  bool weight_update_vote_equivocation_detection_enabled = false;
-  bool conflicting_qc_detection_enabled = false;
+  bool leader_recovery_enabled = true;
+  bool strong_fault_enabled = true;
+  bool double_proposal_detection_enabled = true;
+  bool double_vote_detection_enabled = true;
+  bool invalid_qc_proposal_detection_enabled = true;
+  bool weight_update_vote_equivocation_detection_enabled = true;
+  bool conflicting_qc_detection_enabled = true;
   int64_t strong_fault_target_weight = 1;
-  bool peertrust_enabled = false;
+  bool peertrust_enabled = true;
   int peertrust_debt_increment = 5;
   int peertrust_debt_recovery = 3;
   int peertrust_debt_max = 40;
   int peertrust_debt_trigger_score = 70;
   int64_t peertrust_soft_min_weight = 80;
+  bool leader_silent_debt_enabled = true;
+  int leader_silent_debt_increment = 3;
+  int leader_silent_debt_recovery = 1;
+  int leader_silent_debt_max = 60;
+  int leader_silent_debt_trigger = 30;
 };
 
 
@@ -112,6 +116,7 @@ struct ValidatorReputation {
   int cross_leader_independence_score = 100;
   int reviewer_overuse_score = 100;
   int peertrust_leader_debt = 0;
+  int leader_silent_debt = 0;
   int peertrust_debt_delta = 0;
   uint64_t feedback_count = 0;
   int reputation_score = 100;
@@ -221,6 +226,7 @@ struct ReputationWindowInput {
   std::vector<SignedWeightUpdateVoteEvidence> signed_weight_update_vote_evidence;
   std::vector<VerifiedQcArtifactEvidence> verified_qc_artifact_evidence;
   std::vector<int> prior_peertrust_leader_debt;
+  std::vector<int> prior_leader_silent_debt;
 };
 
 enum class StrongFaultType {

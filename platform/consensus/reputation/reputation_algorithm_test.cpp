@@ -977,7 +977,6 @@ TEST(ReputationAlgorithmTest,
      DirichletLeaderPosteriorRanksCommitCertifyOnlyAndTimeout) {
   ReputationConfig config = TestConfig();
   config.leader_timeout_outcome_enabled = true;
-  config.leader_dirichlet_scoring_enabled = true;
 
   const ReputationCandidate candidate = ComputeCandidate(
       1, 4, 1,
@@ -996,7 +995,6 @@ TEST(ReputationAlgorithmTest,
 TEST(ReputationAlgorithmTest,
      ScheduledLeaderMissesBecomeDirichletTimeoutMass) {
   ReputationConfig config = TestConfig();
-  config.leader_dirichlet_scoring_enabled = true;
   config.min_leader_opportunities = 3;
   std::vector<TestEvidence> evidence;
   for (int view = 1; view <= 4; ++view) {

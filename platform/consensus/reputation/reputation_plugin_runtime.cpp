@@ -290,6 +290,7 @@ std::string AuditValidatorsJson(const std::vector<ValidatorReputation>& validato
         << validator.peertrust_leader_debt
         << ",\"peertrust_debt_delta\":"
         << validator.peertrust_debt_delta
+        << ",\"leader_silent_debt\":" << validator.leader_silent_debt
         << ",\"feedback_count\":" << validator.feedback_count
         << ",\"strong_fault_count\":" << validator.strong_fault_count
         << ",\"penalty_points\":" << validator.penalty_points
@@ -547,6 +548,17 @@ void ReputationPluginRuntime::UpdateActiveWeights(
     ReputationWeightSnapshot snapshot) {
   FillSnapshotDefaults(&snapshot, options_);
   std::lock_guard<std::mutex> lk(mutex_);
+  // Carry cumulative leader accumulators forward across activation from the
+  // certified candidate that produced this version (its old_weight_version is
+  // version-1), so they telescope instead of resetting each epoch. The values
+  // are deterministic across replicas (same candidates, same lookup).
+  if (snapshot.weight_version > 0) {
+    auto acc_it = leader_accumulators_by_version_.find(snapshot.weight_version);
+    if (acc_it != leader_accumulators_by_version_.end()) {
+      snapshot.leader_dirichlet_counters = acc_it->second.dirichlet;
+      snapshot.leader_silent_debt = acc_it->second.silent_debt;
+    }
+  }
   active_snapshot_ = std::move(snapshot);
   known_weights_[{active_snapshot_.weight_root_hex,
                   active_snapshot_.weight_version}] = active_snapshot_.weights;
@@ -1201,13 +1213,26 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
       input.prior_vote_beta_counters = prior_vote_it->second;
     }
     auto prior_leader_it = prior_leader_dirichlet_counters_.find(snapshot_key);
-    if (prior_leader_it != prior_leader_dirichlet_counters_.end()) {
+    if (prior_leader_it != prior_leader_dirichlet_counters_.end() &&
+        !prior_leader_it->second.empty()) {
       input.prior_leader_dirichlet_counters = prior_leader_it->second;
+    } else if (!buffer->snapshot.leader_dirichlet_counters.empty()) {
+      input.prior_leader_dirichlet_counters =
+          buffer->snapshot.leader_dirichlet_counters;
     }
     if (options_.config.peertrust_enabled) {
       auto prior_it = prior_peertrust_leader_debt_.find(snapshot_key);
       if (prior_it != prior_peertrust_leader_debt_.end()) {
         input.prior_peertrust_leader_debt = prior_it->second;
+      }
+    }
+    if (options_.config.leader_silent_debt_enabled) {
+      auto ls_prior_it = prior_leader_silent_debt_.find(snapshot_key);
+      if (ls_prior_it != prior_leader_silent_debt_.end() &&
+          !ls_prior_it->second.empty()) {
+        input.prior_leader_silent_debt = ls_prior_it->second;
+      } else if (!buffer->snapshot.leader_silent_debt.empty()) {
+        input.prior_leader_silent_debt = buffer->snapshot.leader_silent_debt;
       }
     }
   }
@@ -1311,6 +1336,25 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
           std::move(peertrust_leader_debt);
     }
   }
+  if (options_.config.leader_silent_debt_enabled) {
+    std::vector<int> leader_silent_debt;
+    leader_silent_debt.reserve(candidate.validators.size());
+    for (const ValidatorReputation& validator : candidate.validators) {
+      leader_silent_debt.push_back(validator.leader_silent_debt);
+    }
+    if (!leader_silent_debt.empty()) {
+      const auto current_snapshot_key =
+          std::make_pair(buffer->snapshot.weight_root_hex,
+                         buffer->snapshot.weight_version);
+      const auto next_snapshot_key =
+          std::make_pair(candidate.next_weight_root_hex,
+                         candidate.old_weight_version + 1);
+      std::lock_guard<std::mutex> lk(mutex_);
+      prior_leader_silent_debt_[current_snapshot_key] = leader_silent_debt;
+      prior_leader_silent_debt_[next_snapshot_key] =
+          std::move(leader_silent_debt);
+    }
+  }
   WriteAudit(candidate);
   PushCompleted(std::move(candidate));
   computed_window_count_.fetch_add(1);
@@ -1361,6 +1405,26 @@ void ReputationPluginRuntime::PushCompleted(ReputationCandidate candidate) {
   const ReputationCandidateKey key = ReputationCandidateKey::FromCandidate(candidate);
   std::lock_guard<std::mutex> lk(mutex_);
   completed_index_[key] = candidate;
+  {
+    const uint64_t produced_version = candidate.old_weight_version + 1;
+    auto acc_it = leader_accumulators_by_version_.find(produced_version);
+    if (acc_it == leader_accumulators_by_version_.end() ||
+        candidate.end_view >= acc_it->second.end_view) {
+      LeaderAccumulatorSnapshot acc;
+      acc.end_view = candidate.end_view;
+      acc.dirichlet.reserve(candidate.validators.size());
+      acc.silent_debt.reserve(candidate.validators.size());
+      for (const ValidatorReputation& v : candidate.validators) {
+        LeaderDirichletCounter counter;
+        counter.commit = v.leader_dirichlet_commit;
+        counter.certify_only = v.leader_dirichlet_certify_only;
+        counter.timeout = v.leader_dirichlet_timeout;
+        acc.dirichlet.push_back(counter);
+        acc.silent_debt.push_back(v.leader_silent_debt);
+      }
+      leader_accumulators_by_version_[produced_version] = std::move(acc);
+    }
+  }
   auto it = completed_by_version_.find(candidate.old_weight_version);
   if (it == completed_by_version_.end() ||
       CandidateIsPreferredOver(candidate, it->second)) {
@@ -1377,8 +1441,10 @@ void ReputationPluginRuntime::PruneRetainedStateLocked() {
   TrimMapToSize(&prior_vote_beta_counters_, kMaxRetainedSnapshotState);
   TrimMapToSize(&prior_leader_dirichlet_counters_, kMaxRetainedSnapshotState);
   TrimMapToSize(&prior_peertrust_leader_debt_, kMaxRetainedSnapshotState);
+  TrimMapToSize(&prior_leader_silent_debt_, kMaxRetainedSnapshotState);
   TrimMapToSize(&completed_by_version_, kMaxRetainedCompletedCandidates);
   TrimMapToSize(&completed_index_, kMaxRetainedCompletedCandidates);
+  TrimMapToSize(&leader_accumulators_by_version_, kMaxRetainedSnapshotState);
 }
 
 void ReputationPluginRuntime::WriteAudit(const ReputationCandidate& candidate) {

@@ -28,15 +28,8 @@ int VoteScore(uint64_t inclusions, uint64_t opportunities) {
   return std::max(0, std::min(100, RoundedDivide(numerator, denominator)));
 }
 
-int LeaderCertifiedScore(uint64_t certified_count,
-                         uint64_t leader_opportunities) {
-  if (leader_opportunities == 0) {
-    return 100;
-  }
-  return std::max(
-      0, std::min(100, RoundedDivide(certified_count * 100,
-                                     leader_opportunities)));
-}
+// LeaderCertifiedScore removed (audit fix): Dirichlet leader scoring is now the
+// sole leader-score path; the old certified-ratio fallback no longer exists.
 
 int LeaderDirichletScore(const LeaderDirichletCounter& counter,
                          const ReputationConfig& config) {

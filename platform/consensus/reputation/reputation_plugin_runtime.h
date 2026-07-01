@@ -54,6 +54,20 @@ struct ReputationWeightSnapshot {
   uint64_t leader_weight_version = 0;
   int leader_selection_version = 1;
   int64_t leader_eligible_min_weight = 10;
+  // Cumulative leader-behavior accumulators carried across the certified-
+  // weight activation cycle. Without these they live only in root-keyed side
+  // maps that miss across the activation boundary and reset every epoch;
+  // carrying them here lets sustained silence accrue durable evidence.
+  std::vector<LeaderDirichletCounter> leader_dirichlet_counters;
+  std::vector<int> leader_silent_debt;
+};
+
+// Durable per-produced-version snapshot of the cumulative leader accumulators,
+// used to seed the activated snapshot so they survive the activation cycle.
+struct LeaderAccumulatorSnapshot {
+  std::vector<LeaderDirichletCounter> dirichlet;
+  std::vector<int> silent_debt;
+  int end_view = -1;
 };
 
 struct ReputationRuntimeOptions {
@@ -189,8 +203,12 @@ class ReputationPluginRuntime {
       prior_leader_dirichlet_counters_;
   std::map<std::pair<std::string, uint64_t>, std::vector<int>>
       prior_peertrust_leader_debt_;
+  std::map<std::pair<std::string, uint64_t>, std::vector<int>>
+      prior_leader_silent_debt_;
   std::map<WindowKey, WindowBuffer> windows_;
   std::map<uint64_t, ReputationCandidate> completed_by_version_;
+  std::map<uint64_t, LeaderAccumulatorSnapshot>
+      leader_accumulators_by_version_;
   std::map<ReputationCandidateKey, ReputationCandidate> completed_index_;
   std::set<int> persistent_strong_fault_validators_;
   std::ofstream audit_file_;

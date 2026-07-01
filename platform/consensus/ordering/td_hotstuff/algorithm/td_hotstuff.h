@@ -146,6 +146,12 @@ class HotStuff : public common::ProtocolBase {
   int64_t quorum_weight_ = 0;
   std::shared_ptr<WeightSchedule> weight_schedule_;
   std::shared_ptr<LeaderSelectionSchedule> leader_schedule_;
+  // Silent-leader attack-model state machine (experiment fault injection only;
+  // mutated inside IsSilentLeaderForExperiment, which runs under mutex_).
+  mutable bool silent_attacking_ = false;        // adaptive/band hysteresis phase
+  mutable bool silent_persist_stopped_ = false;  // persist: latched-honest once below floor
+  mutable int silent_relapse_phase_ = 0;         // relapse: 0/2 = attack, 1 = recover
+  mutable uint64_t silent_leader_slots_ = 0;     // leader-slot counter (burst/degrade)
   std::unique_ptr<AsyncConsensusVerifier> async_verifier_;
   std::unique_ptr<TdHotstuffReputationAdapter> reputation_adapter_;
   std::unique_ptr<CertifiedWeightUpdatePipeline> weight_update_pipeline_;

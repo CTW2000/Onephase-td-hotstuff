@@ -9,8 +9,6 @@ namespace consensus {
 namespace reputation {
 
 int VoteScore(uint64_t inclusions, uint64_t opportunities);
-int LeaderCertifiedScore(uint64_t certified_count,
-                         uint64_t leader_opportunities);
 int LeaderDirichletScore(const LeaderDirichletCounter& counter,
                          const ReputationConfig& config);
 uint64_t FairExpectedSignerOpportunities(uint64_t selected_signer_slots,

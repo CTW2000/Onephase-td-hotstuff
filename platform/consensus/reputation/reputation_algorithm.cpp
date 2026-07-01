@@ -611,6 +611,13 @@ bool IsLeaderWeightIneligible(const ValidatorReputation& validator,
   if (validator.strong_fault_count > 0) {
     return true;
   }
+  // Sustained silent leadership (cumulative latch past its trigger) cancels
+  // eligibility outright, so a repeat/adaptive silent leader is pinned to the
+  // floor and dropped from the schedule regardless of its lifetime score.
+  if (config.leader_silent_debt_enabled &&
+      validator.leader_silent_debt >= config.leader_silent_debt_trigger) {
+    return true;
+  }
   if (!config.leader_recovery_enabled) {
     return validator.next_weight <= config.leader_eligible_min_weight;
   }
@@ -682,12 +689,29 @@ bool HasLeaderBehaviorWeightEvidence(const ValidatorReputation& validator,
 BehaviorWeightUpdate LeaderBehaviorWeightUpdateForScore(
     const ValidatorReputation& validator, const ReputationConfig& config,
     int64_t current_leader_weight) {
-  return ComputeBehaviorWeightUpdate(
+  BehaviorWeightUpdate update = ComputeBehaviorWeightUpdate(
       LeaderSelectionScore(validator, config), current_leader_weight, config,
       HasLeaderBehaviorWeightEvidence(validator, config),
       /*carryover_decay=*/false,
       /*primary_opportunities=*/0, validator.leader_opportunity_count,
       /*apply_recovery_credit=*/true);
+  // Recovery gate (audit fix): the leader weight recovers only through real
+  // certified leadership. With no certified-leader proposal this window,
+  // suppress any upward movement so a de-selected/silent leader cannot climb
+  // back via the empty-evidence Dirichlet score reverting to 100. Decay still
+  // applies, so a persistent silent leader decays monotonically to exclusion.
+  const bool sustained_silent_debt =
+      config.leader_silent_debt_enabled &&
+      validator.leader_silent_debt >= config.leader_silent_debt_trigger;
+  if (validator.leader_certified_count == 0 || sustained_silent_debt) {
+    const int64_t clamped_current = ClampWeight(current_leader_weight, config);
+    if (update.next_weight > clamped_current) {
+      update.next_weight = clamped_current;
+      update.recovery_credit = 0;
+      update.bonus_credit = 0;
+    }
+  }
+  return update;
 }
 
 std::vector<int64_t> LeaderWeightsForCandidate(
@@ -764,22 +788,6 @@ std::vector<StrongFaultRecord> SummarizeFaultedValidators(
 }
 
 
-bool HasStrongFaultEvidence(const ReputationWindowInput& input) {
-  return !input.signed_proposal_evidence.empty() ||
-         !input.signed_vote_evidence.empty() ||
-         !input.invalid_qc_proposal_evidence.empty() ||
-         !input.signed_weight_update_vote_evidence.empty() ||
-         !input.verified_qc_artifact_evidence.empty();
-}
-
-bool UseCoreOnlyFastPath(const ReputationWindowInput& input,
-                         const ReputationConfig& config) {
-  return !config.multiplicative_weight_formula_enabled &&
-         !config.leader_recovery_enabled && !config.peertrust_enabled &&
-         !config.strong_fault_enabled &&
-         !HasStrongFaultEvidence(input);
-}
-
 uint64_t QuorumAvailableSignerThreshold(int total_replicas) {
   if (total_replicas <= 0) {
     return 0;
@@ -812,239 +820,6 @@ bool HasWindowFairAvailableSignerCoverage(
     const std::set<int>& available_signers, int total_replicas) {
   const uint64_t threshold = WindowFairAvailableSignerThreshold(total_replicas);
   return threshold > 0 && available_signers.size() >= threshold;
-}
-
-void ComputeCoreOnlyReputation(const std::vector<CoreEvidenceEvent>& ordered_events,
-                               const std::vector<int64_t>& weights,
-                               const ReputationConfig& config,
-                               bool count_certified_leaders_as_opportunities,
-                               ReputationCandidate* candidate) {
-  if (candidate == nullptr) {
-    return;
-  }
-  const int total_replicas = candidate->total_replicas;
-  uint64_t legacy_selected_signer_slots = 0;
-  uint64_t legacy_certificate_event_count = 0;
-  uint64_t broad_available_signer_slots = 0;
-  uint64_t broad_available_event_count = 0;
-  std::vector<uint64_t> signer_opportunity_count(
-      std::max(total_replicas, 0), 0);
-  std::vector<uint64_t> available_not_selected_count(
-      std::max(total_replicas, 0), 0);
-  std::vector<uint64_t> quorum_unavailable_count(
-      std::max(total_replicas, 0), 0);
-  std::set<int> window_quorum_available_signers;
-  std::set<std::pair<int, std::string>> seen_certificates;
-  std::set<std::pair<int, int>> seen_leader_opportunities;
-
-  for (const CoreEvidenceEvent& event : ordered_events) {
-    const int leader = event.leader_id;
-    if (event.outcome_class != OutcomeClass::kCertified ||
-        event.signer_bitmap.empty()) {
-      continue;
-    }
-    const std::string certificate_key =
-        event.artifact_digest.empty()
-            ? "view-" + std::to_string(event.view_or_round)
-            : event.artifact_digest;
-    if (!seen_certificates.insert({event.view_or_round, certificate_key})
-             .second) {
-      continue;
-    }
-
-    const std::vector<int> signers =
-        DecodeSignerBitmap(event.signer_bitmap, total_replicas);
-    const bool has_available_signer_evidence =
-        !event.available_signer_bitmap.empty();
-    std::vector<int> available_signers =
-        has_available_signer_evidence
-            ? DecodeSignerBitmap(event.available_signer_bitmap, total_replicas)
-            : signers;
-    if (available_signers.empty()) {
-      available_signers = signers;
-    }
-    std::set<int> signer_set(signers.begin(), signers.end());
-    if (has_available_signer_evidence) {
-      const bool quorum_available_signer_evidence =
-          HasQuorumAvailableSignerCoverage(available_signers, total_replicas);
-      const bool broad_available_signer_evidence =
-          HasBroadAvailableSignerCoverage(available_signers, total_replicas);
-      if (quorum_available_signer_evidence) {
-        const std::set<int> available_set(available_signers.begin(),
-                                          available_signers.end());
-        for (int validator_id = 1; validator_id <= total_replicas;
-             ++validator_id) {
-          if (available_set.find(validator_id) == available_set.end()) {
-            ++quorum_unavailable_count[validator_id - 1];
-          }
-        }
-      }
-      if (broad_available_signer_evidence) {
-        broad_available_signer_slots += available_signers.size();
-        ++broad_available_event_count;
-        for (int signer : available_signers) {
-          if (signer >= 1 && signer <= total_replicas) {
-            window_quorum_available_signers.insert(signer);
-          }
-        }
-      }
-      for (int signer : signers) {
-        if (signer >= 1 && signer <= total_replicas) {
-          ++candidate->validators[signer - 1].inclusions;
-          ++signer_opportunity_count[signer - 1];
-        }
-      }
-      if (broad_available_signer_evidence) {
-        for (int signer : available_signers) {
-          if (signer >= 1 && signer <= total_replicas &&
-              signer_set.find(signer) == signer_set.end()) {
-            ++available_not_selected_count[signer - 1];
-          }
-        }
-      }
-    } else {
-      legacy_selected_signer_slots += signers.size();
-      ++legacy_certificate_event_count;
-      for (int signer : signers) {
-        if (signer >= 1 && signer <= total_replicas) {
-          ++candidate->validators[signer - 1].inclusions;
-        }
-      }
-    }
-    if (leader >= 1 && leader <= total_replicas) {
-      ValidatorReputation& leader_score = candidate->validators[leader - 1];
-      if (count_certified_leaders_as_opportunities &&
-          seen_leader_opportunities.insert({event.view_or_round, leader})
-              .second) {
-        ++leader_score.leader_opportunity_count;
-      }
-      ++leader_score.leader_certified_count;
-    }
-  }
-
-  const uint64_t fair_opportunities = FairExpectedSignerOpportunities(
-      legacy_selected_signer_slots, total_replicas,
-      legacy_certificate_event_count);
-  const uint64_t broad_available_fair_opportunities =
-      HasWindowFairAvailableSignerCoverage(window_quorum_available_signers,
-                                           total_replicas)
-          ? FairExpectedSignerOpportunities(broad_available_signer_slots,
-                                            total_replicas,
-                                            broad_available_event_count)
-          : 0;
-  for (ValidatorReputation& validator : candidate->validators) {
-    const int idx = validator.validator_id - 1;
-    const uint64_t direct_opportunities =
-        idx >= 0 && idx < static_cast<int>(signer_opportunity_count.size())
-            ? signer_opportunity_count[idx]
-            : 0;
-    const uint64_t excused_available_not_selected =
-        idx >= 0 &&
-                idx < static_cast<int>(available_not_selected_count.size())
-            ? available_not_selected_count[idx]
-            : 0;
-    const uint64_t adjusted_broad_available_fair_opportunities =
-        broad_available_fair_opportunities > excused_available_not_selected
-            ? broad_available_fair_opportunities -
-                  excused_available_not_selected
-            : 0;
-    const uint64_t quorum_unavailable_samples =
-        idx >= 0 && idx < static_cast<int>(quorum_unavailable_count.size())
-            ? quorum_unavailable_count[idx]
-            : 0;
-    const uint64_t quorum_participation_samples =
-        validator.inclusions + quorum_unavailable_samples;
-    const bool near_zero_quorum_participation =
-        quorum_unavailable_samples > 0 && quorum_participation_samples > 0 &&
-        validator.inclusions * 100 <= quorum_participation_samples * 10;
-    const uint64_t quorum_unavailable_opportunities =
-        broad_available_fair_opportunities == 0 &&
-                near_zero_quorum_participation
-            ? quorum_unavailable_samples
-            : 0;
-    validator.opportunities =
-        std::max(std::max(direct_opportunities,
-                          adjusted_broad_available_fair_opportunities),
-                 quorum_unavailable_opportunities) +
-        fair_opportunities;
-  }
-
-  int64_t total_current_weight = 0;
-  for (const ValidatorReputation& validator : candidate->validators) {
-    total_current_weight += validator.current_weight;
-  }
-  const int64_t mean_current_weight =
-      candidate->validators.empty()
-          ? 0
-          : RoundedDivide(static_cast<uint64_t>(total_current_weight),
-                          candidate->validators.size());
-
-  for (ValidatorReputation& validator : candidate->validators) {
-    const bool had_vote_history =
-        validator.vote_beta_success > 0 || validator.vote_beta_failure > 0;
-    const bool had_leader_history =
-        validator.leader_dirichlet_commit > 0 ||
-        validator.leader_dirichlet_certify_only > 0 ||
-        validator.leader_dirichlet_timeout > 0;
-    UpdateVoteBetaCounters(&validator, config);
-    const int dirichlet_leader_score =
-        UpdateLeaderDirichletCounters(&validator, config, 0, 0);
-    validator.leader_score =
-        config.leader_dirichlet_scoring_enabled
-            ? dirichlet_leader_score
-            : LeaderCertifiedScore(validator.leader_certified_count,
-                                   validator.leader_opportunity_count);
-    if (!had_leader_history && validator.current_weight >= config.max_weight &&
-        validator.leader_opportunity_count <
-            kMinFirstWindowSoftDecayOpportunities) {
-      validator.leader_score = 100;
-    }
-    int recovery_score = VoteReputationScore(validator);
-    const bool carryover_decay =
-        validator.opportunities == 0 &&
-        validator.current_weight + kCarryoverDecayWeightGap <
-            mean_current_weight;
-    const bool near_fair_vote =
-        HasNearFairInclusion(validator.inclusions, validator.opportunities);
-    const bool first_window_partial_vote_sample =
-        !had_vote_history && validator.current_weight >= config.max_weight &&
-        validator.opportunities >= config.min_decay_opportunities &&
-        validator.inclusions > 0 && !near_fair_vote;
-    const bool first_window_sparse_max_weight_sample =
-        !had_vote_history && validator.current_weight >= config.max_weight &&
-        validator.opportunities < kMinFirstWindowSoftDecayOpportunities;
-    const bool validator_has_enough_decay_evidence =
-        (validator.opportunities >= config.min_decay_opportunities ||
-         carryover_decay) &&
-        !first_window_partial_vote_sample &&
-        !first_window_sparse_max_weight_sample;
-    const int64_t available_decay =
-        std::max<int64_t>(0, validator.current_weight - config.min_weight);
-    int64_t target_weight = ReputationTargetWeightForScore(recovery_score, config);
-    if (validator.current_weight >= config.max_weight && recovery_score >= 90) {
-      target_weight = ClampWeight(config.max_weight, config);
-    }
-    validator.decay_applied = 0;
-    validator.recovery_credit = 0;
-    validator.bonus_credit = 0;
-    if (validator_has_enough_decay_evidence &&
-        validator.current_weight > target_weight) {
-      validator.decay_applied = static_cast<int>(std::min<int64_t>(
-          available_decay,
-          std::min<int64_t>(config.decay_per_epoch,
-                            validator.current_weight - target_weight)));
-    } else if (validator_has_enough_decay_evidence &&
-               validator.current_weight < target_weight && !carryover_decay) {
-      validator.bonus_credit = DiminishingBonusCreditForScore(
-          recovery_score, validator.current_weight, target_weight, config,
-          validator.opportunities, validator.leader_opportunity_count);
-    }
-    validator.reputation_score = std::max(0, std::min(100, recovery_score));
-    validator.next_weight = ClampWeight(
-        validator.current_weight - validator.decay_applied +
-            validator.recovery_credit + validator.bonus_credit,
-        config);
-  }
 }
 
 }  // namespace
@@ -1135,18 +910,12 @@ ReputationCandidate ComputeReputationCandidate(
           0, std::min(config.peertrust_debt_max,
                       input.prior_peertrust_leader_debt[i]));
     }
-  }
-
-  if (UseCoreOnlyFastPath(input, config)) {
-    ComputeCoreOnlyReputation(ordered_events, weights, config,
-                              !has_scheduled_leader_counts, &candidate);
-    candidate.leader_weights =
-        LeaderWeightsForCandidate(candidate.validators, config,
-                                  input.current_leader_weights);
-    candidate.leader_selection_version = 1;
-    candidate.leader_eligible_min_weight = config.leader_eligible_min_weight;
-    RecomputeReputationCandidateRoots(&candidate);
-    return candidate;
+    if (config.leader_silent_debt_enabled &&
+        i < static_cast<int>(input.prior_leader_silent_debt.size())) {
+      validator.leader_silent_debt = std::max(
+          0, std::min(config.leader_silent_debt_max,
+                      input.prior_leader_silent_debt[i]));
+    }
   }
 
   std::vector<uint64_t> diversity_sum(std::max(total_replicas, 0), 0);
@@ -1720,11 +1489,7 @@ ReputationCandidate ComputeReputationCandidate(
             : 0;
     const int dirichlet_leader_score = UpdateLeaderDirichletCounters(
         &validator, config, certify_only_observations, timeout_observations);
-    const int certified_leader_score = LeaderCertifiedScore(
-        validator.leader_certified_count, leader_opportunities);
-    const int raw_leader_score = config.leader_dirichlet_scoring_enabled
-                                     ? dirichlet_leader_score
-                                     : certified_leader_score;
+    const int raw_leader_score = dirichlet_leader_score;
     const bool has_enough_leader_opportunities =
         leader_opportunities >= config.min_leader_opportunities;
     const bool has_repeated_uncertified_leader_opportunities =
@@ -1865,6 +1630,29 @@ ReputationCandidate ComputeReputationCandidate(
     } else {
       validator.peertrust_leader_debt = 0;
       validator.peertrust_debt_delta = 0;
+    }
+    if (config.leader_silent_debt_enabled) {
+      int next_silent_debt = validator.leader_silent_debt;
+      // Accrue on the within-window silence RATE, not all-or-nothing: a
+      // probabilistic silent leader certifies some slots each window, so
+      // requiring cert==0 lets it evade. Count the window as silent when at
+      // least 25% of its leader slots went uncertified.
+      const int64_t silent_slots =
+          static_cast<int64_t>(validator.leader_opportunity_count) -
+          static_cast<int64_t>(validator.leader_certified_count);
+      if (validator.leader_opportunity_count > 0 &&
+          silent_slots * 4 >=
+              static_cast<int64_t>(validator.leader_opportunity_count)) {
+        next_silent_debt += config.leader_silent_debt_increment;
+      } else {
+        // Certified this window, or excluded (no opportunity): recover, so a
+        // transient/soft fault self-heals instead of being excluded forever.
+        next_silent_debt -= config.leader_silent_debt_recovery;
+      }
+      validator.leader_silent_debt = std::max(
+          0, std::min(config.leader_silent_debt_max, next_silent_debt));
+    } else {
+      validator.leader_silent_debt = 0;
     }
     int recovery_score = VoteReputationScore(validator);
     if (config.peertrust_enabled &&

@@ -94,6 +94,9 @@ configure_td_hotstuff_reputation_pipeline() {
   export TD_HS_LEADER_SELECTION_ENABLE=1
   export TD_HS_LEADER_ELIGIBLE_MIN_WEIGHT="${TD_HS_SOFT_LEADER_ELIGIBLE_MIN_WEIGHT:-10}"
   export TD_HS_REPUTATION_LEADER_RECOVERY_ENABLE=1
+  # Audit fix C1: enable the core Dirichlet leader scoring + explicit timeout outcomes
+  # (were silently disabled, so leader_score fell back to the crude certified-ratio).
+  export TD_HS_REPUTATION_LEADER_TIMEOUT_OUTCOME_ENABLE="${TD_HS_REPUTATION_LEADER_TIMEOUT_OUTCOME_ENABLE:-1}"
   export TD_HS_REPUTATION_AUDIT_JSONL_ENABLE="${TD_HS_REPUTATION_AUDIT_JSONL_ENABLE:-0}"
 }
 

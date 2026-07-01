@@ -215,9 +215,6 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.reputation_config.leader_timeout_outcome_enabled = BoolFromEnv(
       "TD_HS_REPUTATION_LEADER_TIMEOUT_OUTCOME_ENABLE",
       options.reputation_config.leader_timeout_outcome_enabled);
-  options.reputation_config.leader_dirichlet_scoring_enabled = BoolFromEnv(
-      "TD_HS_REPUTATION_LEADER_DIRICHLET_SCORING_ENABLE",
-      options.reputation_config.leader_dirichlet_scoring_enabled);
   options.reputation_config.multiplicative_weight_formula_enabled = BoolFromEnv(
       "TD_HS_REPUTATION_MULTIPLICATIVE_WEIGHT_ENABLE",
       options.reputation_config.multiplicative_weight_formula_enabled);
@@ -284,6 +281,21 @@ TdHotstuffReputationAdapter::OptionsFromEnv() {
   options.reputation_config.peertrust_debt_trigger_score = PositiveIntFromEnv(
       "TD_HS_REPUTATION_PEERTRUST_DEBT_TRIGGER_SCORE",
       options.reputation_config.peertrust_debt_trigger_score);
+  options.reputation_config.leader_silent_debt_enabled = BoolFromEnv(
+      "TD_HS_REPUTATION_LEADER_SILENT_DEBT_ENABLE",
+      options.reputation_config.leader_silent_debt_enabled);
+  options.reputation_config.leader_silent_debt_increment = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_LEADER_SILENT_DEBT_INCREMENT",
+      options.reputation_config.leader_silent_debt_increment);
+  options.reputation_config.leader_silent_debt_recovery = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_LEADER_SILENT_DEBT_RECOVERY",
+      options.reputation_config.leader_silent_debt_recovery);
+  options.reputation_config.leader_silent_debt_max = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_LEADER_SILENT_DEBT_MAX",
+      options.reputation_config.leader_silent_debt_max);
+  options.reputation_config.leader_silent_debt_trigger = PositiveIntFromEnv(
+      "TD_HS_REPUTATION_LEADER_SILENT_DEBT_TRIGGER",
+      options.reputation_config.leader_silent_debt_trigger);
   options.reputation_config.peertrust_soft_min_weight = PositiveIntFromEnv(
       "TD_HS_REPUTATION_PEERTRUST_SOFT_MIN_WEIGHT",
       options.reputation_config.peertrust_soft_min_weight);
