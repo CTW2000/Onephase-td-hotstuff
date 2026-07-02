@@ -916,6 +916,12 @@ ReputationCandidate ComputeReputationCandidate(
           0, std::min(config.leader_silent_debt_max,
                       input.prior_leader_silent_debt[i]));
     }
+    if (config.slow_vote_debt_enabled &&
+        i < static_cast<int>(input.prior_slow_vote_debt.size())) {
+      validator.slow_vote_debt = std::max(
+          0, std::min(config.slow_vote_debt_max,
+                      input.prior_slow_vote_debt[i]));
+    }
   }
 
   std::vector<uint64_t> diversity_sum(std::max(total_replicas, 0), 0);
@@ -1445,6 +1451,14 @@ ReputationCandidate ComputeReputationCandidate(
   }
   constexpr int kLeaderDiversityOutlierDeadband = 10;
 
+  // Peer participation baseline for the slow-vote latch: the highest per-
+  // window vote inclusion any validator reached (what an honest, fast voter
+  // achieves). A voter far below this is failing to land its votes in QCs.
+  uint64_t window_max_inclusions = 0;
+  for (const ValidatorReputation& v : candidate.validators) {
+    window_max_inclusions = std::max(window_max_inclusions, v.inclusions);
+  }
+
   for (ValidatorReputation& validator : candidate.validators) {
     const bool had_vote_history =
         validator.vote_beta_success > 0 || validator.vote_beta_failure > 0;
@@ -1654,7 +1668,32 @@ ReputationCandidate ComputeReputationCandidate(
     } else {
       validator.leader_silent_debt = 0;
     }
+    if (config.slow_vote_debt_enabled) {
+      int next_slow_vote_debt = validator.slow_vote_debt;
+      // Peer-relative inclusion collapse: a slow/withholding voter's votes
+      // miss QCs, so its per-window inclusions fall far below fast peers.
+      // Accrue when below 25% of the window peer max; else self-heal.
+      const bool participation_collapse =
+          window_max_inclusions > 0 &&
+          validator.inclusions * 4 < window_max_inclusions;
+      if (participation_collapse) {
+        next_slow_vote_debt += config.slow_vote_debt_increment;
+      } else {
+        next_slow_vote_debt -= config.slow_vote_debt_recovery;
+      }
+      validator.slow_vote_debt = std::max(
+          0, std::min(config.slow_vote_debt_max, next_slow_vote_debt));
+    } else {
+      validator.slow_vote_debt = 0;
+    }
     int recovery_score = VoteReputationScore(validator);
+    // Sustained slow voting (latch past trigger) drives the reputation score
+    // to the floor, so a persistent/adaptive slow voter's overall weight
+    // decays to the minimum instead of plateauing at the neutral score.
+    if (config.slow_vote_debt_enabled &&
+        validator.slow_vote_debt >= config.slow_vote_debt_trigger) {
+      recovery_score = 0;
+    }
     if (config.peertrust_enabled &&
         (validator.feedback_count > 0 ||
          validator.peertrust_leader_debt > 0)) {

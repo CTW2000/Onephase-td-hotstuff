@@ -310,6 +310,11 @@ std::string SilentLeaderModeFromEnv() {
   return (raw != nullptr && *raw != '\0') ? std::string(raw)
                                           : std::string("static");
 }
+std::string SlowVoteModeFromEnv() {
+  const char* raw = std::getenv("TD_HS_SLOW_VOTE_MODE");
+  return (raw != nullptr && *raw != '\0') ? std::string(raw)
+                                          : std::string("static");
+}
 // Deterministic, reproducible per-(view,id) value in [0,1000) for the
 // probability-driven modes — every replica and every rerun agrees.
 int SilentDeterministicPermille(int view, int id) {
@@ -434,6 +439,87 @@ void HotStuff::MaybeDelayVoteForExperiment(int view) const {
   const int delay_us =
       PositiveIntFromEnv("TD_HS_SLOW_VOTE_DELAY_US", 10000);
   std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
+}
+
+// Switchable slow-vote attack model (soft fault: only late/absent votes,
+// never an invalid vote). Mirrors IsSilentLeaderForExperiment but the faulty
+// voter is weight-aware on its own activated VOTE (overall) weight.
+bool HotStuff::SlowVoteAttackForExperiment(int view) const {
+  if (!ExperimentStartedAtView("TD_HS_SLOW_VOTE_START_VIEW", view)) {
+    return false;
+  }
+  if (!(EnvFlagEnabled("TD_HS_SLOW_VOTE") ||
+        EnvListContainsId("TD_HS_SLOW_VOTE_IDS", id_))) {
+    return false;
+  }
+  const std::string mode = SlowVoteModeFromEnv();
+  if (mode == "static") {
+    return true;
+  }
+  int64_t w = -1;
+  if (weight_schedule_ != nullptr) {
+    const std::vector<int64_t>& vw = weight_schedule_->ActiveWeights();
+    if (id_ >= 1 && id_ <= static_cast<int>(vw.size())) {
+      w = vw[id_ - 1];
+    }
+  }
+  ++slow_vote_slots_;
+  if (mode == "probabilistic") {
+    return SilentDeterministicPermille(view, id_) <
+           PositiveIntFromEnv("TD_HS_SLOW_VOTE_PROB_PERMILLE", 500);
+  }
+  if (mode == "burst") {
+    const uint64_t on = static_cast<uint64_t>(
+        PositiveIntFromEnv("TD_HS_SLOW_VOTE_BURST_ON", 5));
+    const uint64_t off = static_cast<uint64_t>(
+        PositiveIntFromEnv("TD_HS_SLOW_VOTE_BURST_OFF", 5));
+    const uint64_t cycle = std::max<uint64_t>(1, on + off);
+    return ((slow_vote_slots_ - 1) % cycle) < on;
+  }
+  if (mode == "degrade") {
+    const int step =
+        std::max(1, PositiveIntFromEnv("TD_HS_SLOW_VOTE_DEGRADE_STEP", 8));
+    const int p = std::min<int>(
+        1000, static_cast<int>(slow_vote_slots_ /
+                               static_cast<uint64_t>(step)) *
+                  100);
+    return SilentDeterministicPermille(view, id_) < p;
+  }
+  if (mode == "persist") {
+    const int64_t stop = PositiveIntFromEnv("TD_HS_SLOW_VOTE_PERSIST_STOP", 40);
+    if (!slow_vote_persist_stopped_ && w >= 0 && w < stop) {
+      slow_vote_persist_stopped_ = true;
+    }
+    return !slow_vote_persist_stopped_;
+  }
+  if (mode == "relapse") {
+    const int64_t high = PositiveIntFromEnv("TD_HS_SLOW_VOTE_ATTACK_HIGH", 60);
+    const int64_t low = PositiveIntFromEnv("TD_HS_SLOW_VOTE_RETREAT_LOW", 30);
+    if (slow_vote_relapse_phase_ == 0 && w >= 0 && w <= low) {
+      slow_vote_relapse_phase_ = 1;
+    } else if (slow_vote_relapse_phase_ == 1 && w >= 0 && w >= high) {
+      slow_vote_relapse_phase_ = 2;
+    }
+    return slow_vote_relapse_phase_ != 1;
+  }
+  int64_t high;
+  int64_t low;
+  if (mode == "band") {
+    high = PositiveIntFromEnv("TD_HS_SLOW_VOTE_BAND_HI", 55);
+    low = PositiveIntFromEnv("TD_HS_SLOW_VOTE_BAND_LO", 45);
+  } else {
+    high = PositiveIntFromEnv("TD_HS_SLOW_VOTE_ATTACK_HIGH", 60);
+    low = PositiveIntFromEnv("TD_HS_SLOW_VOTE_RETREAT_LOW", 30);
+  }
+  if (w < 0) {
+    return true;
+  }
+  if (slow_vote_attacking_ && w <= low) {
+    slow_vote_attacking_ = false;
+  } else if (!slow_vote_attacking_ && w >= high) {
+    slow_vote_attacking_ = true;
+  }
+  return slow_vote_attacking_;
 }
 
 bool HotStuff::ShouldUsePeerTrustCliqueForView(int view) const {
@@ -1494,17 +1580,20 @@ bool HotStuff::ReceiveProposal(std::unique_ptr<Proposal> proposal) {
     return false;
   }
   int send_result = 0;
-  if (IsSlowVoteForExperiment(view)) {
-    const int delay_us =
-        PositiveIntFromEnv("TD_HS_SLOW_VOTE_DELAY_US", 10000);
-    Certificate delayed_vote = *cert;
-    std::thread([this, delayed_vote = std::move(delayed_vote), next_leader,
-                 delay_us]() mutable {
-      std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
-      if (!IsStop()) {
-        SendMessage(MessageType::Vote, delayed_vote, next_leader);
-      }
-    }).detach();
+  if (SlowVoteAttackForExperiment(view)) {
+    if (!EnvFlagEnabled("TD_HS_SLOW_VOTE_WITHHOLD")) {
+      const int delay_us =
+          PositiveIntFromEnv("TD_HS_SLOW_VOTE_DELAY_US", 10000);
+      Certificate delayed_vote = *cert;
+      std::thread([this, delayed_vote = std::move(delayed_vote), next_leader,
+                   delay_us]() mutable {
+        std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
+        if (!IsStop()) {
+          SendMessage(MessageType::Vote, delayed_vote, next_leader);
+        }
+      }).detach();
+    }
+    // else: withhold -- drop this vote entirely (never sent).
   } else {
     send_result = SendMessage(MessageType::Vote, *cert, next_leader);
   }

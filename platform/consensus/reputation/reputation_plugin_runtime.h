@@ -60,6 +60,7 @@ struct ReputationWeightSnapshot {
   // carrying them here lets sustained silence accrue durable evidence.
   std::vector<LeaderDirichletCounter> leader_dirichlet_counters;
   std::vector<int> leader_silent_debt;
+  std::vector<int> slow_vote_debt;
 };
 
 // Durable per-produced-version snapshot of the cumulative leader accumulators,
@@ -67,6 +68,7 @@ struct ReputationWeightSnapshot {
 struct LeaderAccumulatorSnapshot {
   std::vector<LeaderDirichletCounter> dirichlet;
   std::vector<int> silent_debt;
+  std::vector<int> slow_vote_debt;
   int end_view = -1;
 };
 
@@ -205,6 +207,8 @@ class ReputationPluginRuntime {
       prior_peertrust_leader_debt_;
   std::map<std::pair<std::string, uint64_t>, std::vector<int>>
       prior_leader_silent_debt_;
+  std::map<std::pair<std::string, uint64_t>, std::vector<int>>
+      prior_slow_vote_debt_;
   std::map<WindowKey, WindowBuffer> windows_;
   std::map<uint64_t, ReputationCandidate> completed_by_version_;
   std::map<uint64_t, LeaderAccumulatorSnapshot>

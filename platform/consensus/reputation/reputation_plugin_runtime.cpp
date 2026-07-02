@@ -291,6 +291,7 @@ std::string AuditValidatorsJson(const std::vector<ValidatorReputation>& validato
         << ",\"peertrust_debt_delta\":"
         << validator.peertrust_debt_delta
         << ",\"leader_silent_debt\":" << validator.leader_silent_debt
+        << ",\"slow_vote_debt\":" << validator.slow_vote_debt
         << ",\"feedback_count\":" << validator.feedback_count
         << ",\"strong_fault_count\":" << validator.strong_fault_count
         << ",\"penalty_points\":" << validator.penalty_points
@@ -557,6 +558,7 @@ void ReputationPluginRuntime::UpdateActiveWeights(
     if (acc_it != leader_accumulators_by_version_.end()) {
       snapshot.leader_dirichlet_counters = acc_it->second.dirichlet;
       snapshot.leader_silent_debt = acc_it->second.silent_debt;
+      snapshot.slow_vote_debt = acc_it->second.slow_vote_debt;
     }
   }
   active_snapshot_ = std::move(snapshot);
@@ -1235,6 +1237,15 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
         input.prior_leader_silent_debt = buffer->snapshot.leader_silent_debt;
       }
     }
+    if (options_.config.slow_vote_debt_enabled) {
+      auto sv_prior_it = prior_slow_vote_debt_.find(snapshot_key);
+      if (sv_prior_it != prior_slow_vote_debt_.end() &&
+          !sv_prior_it->second.empty()) {
+        input.prior_slow_vote_debt = sv_prior_it->second;
+      } else if (!buffer->snapshot.slow_vote_debt.empty()) {
+        input.prior_slow_vote_debt = buffer->snapshot.slow_vote_debt;
+      }
+    }
   }
 
   ReputationCandidate candidate = ComputeReputationCandidate(input, options_.config);
@@ -1355,6 +1366,25 @@ void ReputationPluginRuntime::FinalizeWindow(const WindowKey& key,
           std::move(leader_silent_debt);
     }
   }
+  if (options_.config.slow_vote_debt_enabled) {
+    std::vector<int> slow_vote_debt;
+    slow_vote_debt.reserve(candidate.validators.size());
+    for (const ValidatorReputation& validator : candidate.validators) {
+      slow_vote_debt.push_back(validator.slow_vote_debt);
+    }
+    if (!slow_vote_debt.empty()) {
+      const auto current_snapshot_key =
+          std::make_pair(buffer->snapshot.weight_root_hex,
+                         buffer->snapshot.weight_version);
+      const auto next_snapshot_key =
+          std::make_pair(candidate.next_weight_root_hex,
+                         candidate.old_weight_version + 1);
+      std::lock_guard<std::mutex> lk(mutex_);
+      prior_slow_vote_debt_[current_snapshot_key] = slow_vote_debt;
+      prior_slow_vote_debt_[next_snapshot_key] =
+          std::move(slow_vote_debt);
+    }
+  }
   WriteAudit(candidate);
   PushCompleted(std::move(candidate));
   computed_window_count_.fetch_add(1);
@@ -1414,6 +1444,7 @@ void ReputationPluginRuntime::PushCompleted(ReputationCandidate candidate) {
       acc.end_view = candidate.end_view;
       acc.dirichlet.reserve(candidate.validators.size());
       acc.silent_debt.reserve(candidate.validators.size());
+      acc.slow_vote_debt.reserve(candidate.validators.size());
       for (const ValidatorReputation& v : candidate.validators) {
         LeaderDirichletCounter counter;
         counter.commit = v.leader_dirichlet_commit;
@@ -1421,6 +1452,7 @@ void ReputationPluginRuntime::PushCompleted(ReputationCandidate candidate) {
         counter.timeout = v.leader_dirichlet_timeout;
         acc.dirichlet.push_back(counter);
         acc.silent_debt.push_back(v.leader_silent_debt);
+        acc.slow_vote_debt.push_back(v.slow_vote_debt);
       }
       leader_accumulators_by_version_[produced_version] = std::move(acc);
     }
@@ -1442,6 +1474,7 @@ void ReputationPluginRuntime::PruneRetainedStateLocked() {
   TrimMapToSize(&prior_leader_dirichlet_counters_, kMaxRetainedSnapshotState);
   TrimMapToSize(&prior_peertrust_leader_debt_, kMaxRetainedSnapshotState);
   TrimMapToSize(&prior_leader_silent_debt_, kMaxRetainedSnapshotState);
+  TrimMapToSize(&prior_slow_vote_debt_, kMaxRetainedSnapshotState);
   TrimMapToSize(&completed_by_version_, kMaxRetainedCompletedCandidates);
   TrimMapToSize(&completed_index_, kMaxRetainedCompletedCandidates);
   TrimMapToSize(&leader_accumulators_by_version_, kMaxRetainedSnapshotState);

@@ -96,6 +96,7 @@ class HotStuff : public common::ProtocolBase {
   bool IsDoubleProposalForExperiment(int view) const;
   bool IsDoubleVoteForExperiment(int view) const;
   bool IsSlowVoteForExperiment(int view) const;
+  bool SlowVoteAttackForExperiment(int view) const;
   void MaybeDelayVoteForExperiment(int view) const;
   bool ShouldUsePeerTrustCliqueForView(int view) const;
   bool IsInvalidQcForExperiment(int view) const;
@@ -152,6 +153,11 @@ class HotStuff : public common::ProtocolBase {
   mutable bool silent_persist_stopped_ = false;  // persist: latched-honest once below floor
   mutable int silent_relapse_phase_ = 0;         // relapse: 0/2 = attack, 1 = recover
   mutable uint64_t silent_leader_slots_ = 0;     // leader-slot counter (burst/degrade)
+  // Slow-vote attack-model state machine (experiment fault injection only).
+  mutable bool slow_vote_attacking_ = false;
+  mutable bool slow_vote_persist_stopped_ = false;
+  mutable int slow_vote_relapse_phase_ = 0;
+  mutable uint64_t slow_vote_slots_ = 0;
   std::unique_ptr<AsyncConsensusVerifier> async_verifier_;
   std::unique_ptr<TdHotstuffReputationAdapter> reputation_adapter_;
   std::unique_ptr<CertifiedWeightUpdatePipeline> weight_update_pipeline_;

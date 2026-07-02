@@ -74,6 +74,11 @@ struct ReputationConfig {
   int leader_silent_debt_recovery = 1;
   int leader_silent_debt_max = 60;
   int leader_silent_debt_trigger = 30;
+  bool slow_vote_debt_enabled = true;
+  int slow_vote_debt_increment = 3;
+  int slow_vote_debt_recovery = 1;
+  int slow_vote_debt_max = 60;
+  int slow_vote_debt_trigger = 30;
 };
 
 
@@ -117,6 +122,7 @@ struct ValidatorReputation {
   int reviewer_overuse_score = 100;
   int peertrust_leader_debt = 0;
   int leader_silent_debt = 0;
+  int slow_vote_debt = 0;
   int peertrust_debt_delta = 0;
   uint64_t feedback_count = 0;
   int reputation_score = 100;
@@ -227,6 +233,7 @@ struct ReputationWindowInput {
   std::vector<VerifiedQcArtifactEvidence> verified_qc_artifact_evidence;
   std::vector<int> prior_peertrust_leader_debt;
   std::vector<int> prior_leader_silent_debt;
+  std::vector<int> prior_slow_vote_debt;
 };
 
 enum class StrongFaultType {
