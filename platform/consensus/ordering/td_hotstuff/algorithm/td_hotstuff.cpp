@@ -419,15 +419,40 @@ bool HotStuff::IsSilentLeaderForExperiment(int view) const {
   return silent_attacking_;
 }
 
+bool HotStuff::StrongFaultOnset(const char* view_env, int view) const {
+  const int target =
+      NonNegativeIntFromEnv("TD_HS_STRONG_FAULT_ATTACK_WEIGHT", 0);
+  if (target > 0) {
+    // Weight-triggered onset: behave honestly until this node's own overall
+    // weight reaches the target level, then latch the Byzantine attack on.
+    if (strong_fault_weight_triggered_) {
+      return true;
+    }
+    int64_t w = -1;
+    if (weight_schedule_ != nullptr) {
+      const std::vector<int64_t>& vw = weight_schedule_->ActiveWeights();
+      if (id_ >= 1 && id_ <= static_cast<int>(vw.size())) {
+        w = vw[id_ - 1];
+      }
+    }
+    if (w >= target) {
+      strong_fault_weight_triggered_ = true;
+      return true;
+    }
+    return false;
+  }
+  return StrongFaultExperimentStartedAtView(view_env, view);
+}
+
 bool HotStuff::IsDoubleProposalForExperiment(int view) const {
-  return StrongFaultExperimentStartedAtView("TD_HS_DOUBLE_PROPOSAL_START_VIEW",
+  return StrongFaultOnset("TD_HS_DOUBLE_PROPOSAL_START_VIEW",
                                             view) &&
          (EnvFlagEnabled("TD_HS_DOUBLE_PROPOSAL") ||
           EnvListContainsId("TD_HS_DOUBLE_PROPOSAL_IDS", id_));
 }
 
 bool HotStuff::IsDoubleVoteForExperiment(int view) const {
-  return StrongFaultExperimentStartedAtView("TD_HS_DOUBLE_VOTE_START_VIEW",
+  return StrongFaultOnset("TD_HS_DOUBLE_VOTE_START_VIEW",
                                             view) &&
          EnvFlagEnabled("TD_HS_DOUBLE_VOTE");
 }
@@ -616,7 +641,7 @@ bool HotStuff::ShouldUsePeerTrustCliqueForView(int view) const {
 }
 
 bool HotStuff::IsInvalidQcForExperiment(int view) const {
-  return StrongFaultExperimentStartedAtView("TD_HS_INVALID_QC_START_VIEW",
+  return StrongFaultOnset("TD_HS_INVALID_QC_START_VIEW",
                                             view) &&
          EnvFlagEnabled("TD_HS_INVALID_QC");
 }

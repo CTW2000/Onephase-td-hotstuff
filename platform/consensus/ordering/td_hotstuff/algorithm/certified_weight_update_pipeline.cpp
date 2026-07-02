@@ -488,15 +488,45 @@ void CertifiedWeightUpdatePipeline::
   BroadcastVote(*conflicting);
 }
 
+bool CertifiedWeightUpdatePipeline::StrongFaultWeightOnsetReached() {
+  const char* raw = std::getenv("TD_HS_STRONG_FAULT_ATTACK_WEIGHT");
+  const int target = (raw != nullptr) ? std::atoi(raw) : 0;
+  if (target <= 0) {
+    return false;
+  }
+  if (strong_fault_weight_triggered_.load(std::memory_order_acquire)) {
+    return true;
+  }
+  if (weight_schedule_ == nullptr) {
+    return false;
+  }
+  const std::vector<int64_t> weights = weight_schedule_->ActiveWeights();
+  if (node_id_ >= 1 && node_id_ <= static_cast<int>(weights.size()) &&
+      weights[node_id_ - 1] >= target) {
+    strong_fault_weight_triggered_.store(true, std::memory_order_release);
+    return true;
+  }
+  return false;
+}
+
 void CertifiedWeightUpdatePipeline::
     MaybeBroadcastSyntheticWeightUpdateVoteEquivocationForExperiment() {
   if (synthetic_weight_update_vote_equivocation_done_.load(
           std::memory_order_acquire)) {
     return;
   }
+  const char* strong_fault_weight_env =
+      std::getenv("TD_HS_STRONG_FAULT_ATTACK_WEIGHT");
+  const bool weight_triggered_mode =
+      strong_fault_weight_env != nullptr &&
+      std::atoi(strong_fault_weight_env) > 0;
   const int current_view = CurrentView();
-  if (current_view <
-      WeightUpdateVoteEquivocationStartViewForExperiment()) {
+  if (weight_triggered_mode) {
+    if (!StrongFaultWeightOnsetReached()) {
+      return;
+    }
+  } else if (current_view <
+             WeightUpdateVoteEquivocationStartViewForExperiment()) {
     return;
   }
   if (!WeightUpdateVoteEquivocationForExperimentEnabled() ||

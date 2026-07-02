@@ -73,6 +73,7 @@ class CertifiedWeightUpdatePipeline {
       const WeightUpdateVote& vote);
   void MaybeBroadcastRemoteCandidateWeightUpdateVoteEquivocationForExperiment(
       const CandidateWeightUpdate& candidate);
+  bool StrongFaultWeightOnsetReached();
 
   const int node_id_;
   const int total_replicas_;
@@ -87,6 +88,7 @@ class CertifiedWeightUpdatePipeline {
   std::mutex experiment_vote_mutex_;
   std::set<std::string> experiment_vote_digests_;
   std::atomic<bool> synthetic_weight_update_vote_equivocation_done_{false};
+  std::atomic<bool> strong_fault_weight_triggered_{false};
   std::atomic<int> next_pending_activation_view_{0};
 };
 

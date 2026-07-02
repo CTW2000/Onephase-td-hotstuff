@@ -94,6 +94,7 @@ class HotStuff : public common::ProtocolBase {
   bool ApplyTimeoutCertLocked(const TimeoutCert& cert);
   bool IsSilentLeaderForExperiment(int view) const;
   bool IsDoubleProposalForExperiment(int view) const;
+  bool StrongFaultOnset(const char* view_env, int view) const;
   bool IsDoubleVoteForExperiment(int view) const;
   bool IsSlowVoteForExperiment(int view) const;
   bool SlowVoteAttackForExperiment(int view) const;
@@ -163,6 +164,8 @@ class HotStuff : public common::ProtocolBase {
   mutable bool peertrust_clique_persist_stopped_ = false;
   mutable int peertrust_clique_relapse_phase_ = 0;
   mutable uint64_t peertrust_clique_slots_ = 0;
+  // Latched once this node begins its weight-triggered strong-fault attack.
+  mutable bool strong_fault_weight_triggered_ = false;
   std::unique_ptr<AsyncConsensusVerifier> async_verifier_;
   std::unique_ptr<TdHotstuffReputationAdapter> reputation_adapter_;
   std::unique_ptr<CertifiedWeightUpdatePipeline> weight_update_pipeline_;
