@@ -315,6 +315,11 @@ std::string SlowVoteModeFromEnv() {
   return (raw != nullptr && *raw != '\0') ? std::string(raw)
                                           : std::string("static");
 }
+std::string PeerTrustCliqueModeFromEnv() {
+  const char* raw = std::getenv("TD_HS_PEERTRUST_CLIQUE_MODE");
+  return (raw != nullptr && *raw != '\0') ? std::string(raw)
+                                          : std::string("static");
+}
 // Deterministic, reproducible per-(view,id) value in [0,1000) for the
 // probability-driven modes — every replica and every rerun agrees.
 int SilentDeterministicPermille(int view, int id) {
@@ -530,8 +535,84 @@ bool HotStuff::ShouldUsePeerTrustCliqueForView(int view) const {
   const int leader = leader_schedule_ != nullptr
                          ? leader_schedule_->LeaderForView(view)
                          : DefaultLeaderForView(view, total_num_);
-  return leader > 0 &&
-         EnvListContainsId("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", leader);
+  if (leader <= 0 ||
+      !EnvListContainsId("TD_HS_PEERTRUST_CLIQUE_TARGET_IDS", leader)) {
+    return false;
+  }
+  const std::string mode = PeerTrustCliqueModeFromEnv();
+  if (mode == "static") {
+    return true;
+  }
+  // Weight-aware modes read the target leader's own activated leader weight,
+  // so an adaptive attacker colludes while its weight is high and reverts to
+  // a fair quorum once the diversity penalty pulls the weight down.
+  int64_t w = -1;
+  if (leader_schedule_ != nullptr) {
+    const std::vector<int64_t>& lw = leader_schedule_->ActiveLeaderWeights();
+    if (leader >= 1 && leader <= static_cast<int>(lw.size())) {
+      w = lw[leader - 1];
+    }
+  }
+  ++peertrust_clique_slots_;
+  if (mode == "probabilistic") {
+    return SilentDeterministicPermille(view, leader) <
+           PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_PROB_PERMILLE", 500);
+  }
+  if (mode == "burst") {
+    const uint64_t on = static_cast<uint64_t>(
+        PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_BURST_ON", 5));
+    const uint64_t off = static_cast<uint64_t>(
+        PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_BURST_OFF", 5));
+    const uint64_t cycle = std::max<uint64_t>(1, on + off);
+    return ((peertrust_clique_slots_ - 1) % cycle) < on;
+  }
+  if (mode == "degrade") {
+    const int step = std::max(
+        1, PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_DEGRADE_STEP", 8));
+    const int p = std::min<int>(
+        1000, static_cast<int>(peertrust_clique_slots_ /
+                               static_cast<uint64_t>(step)) *
+                  100);
+    return SilentDeterministicPermille(view, leader) < p;
+  }
+  if (mode == "persist") {
+    const int64_t stop =
+        PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_PERSIST_STOP", 10);
+    if (!peertrust_clique_persist_stopped_ && w >= 0 && w < stop) {
+      peertrust_clique_persist_stopped_ = true;
+    }
+    return !peertrust_clique_persist_stopped_;
+  }
+  if (mode == "relapse") {
+    const int64_t high =
+        PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_ATTACK_HIGH", 90);
+    const int64_t low =
+        PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_RETREAT_LOW", 25);
+    if (peertrust_clique_relapse_phase_ == 0 && w >= 0 && w <= low) {
+      peertrust_clique_relapse_phase_ = 1;
+    } else if (peertrust_clique_relapse_phase_ == 1 && w >= 0 && w >= high) {
+      peertrust_clique_relapse_phase_ = 2;
+    }
+    return peertrust_clique_relapse_phase_ != 1;
+  }
+  int64_t high;
+  int64_t low;
+  if (mode == "band") {
+    high = PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_BAND_HI", 15);
+    low = PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_BAND_LO", 11);
+  } else {
+    high = PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_ATTACK_HIGH", 90);
+    low = PositiveIntFromEnv("TD_HS_PEERTRUST_CLIQUE_RETREAT_LOW", 25);
+  }
+  if (w < 0) {
+    return true;
+  }
+  if (peertrust_clique_attacking_ && w <= low) {
+    peertrust_clique_attacking_ = false;
+  } else if (!peertrust_clique_attacking_ && w >= high) {
+    peertrust_clique_attacking_ = true;
+  }
+  return peertrust_clique_attacking_;
 }
 
 bool HotStuff::IsInvalidQcForExperiment(int view) const {

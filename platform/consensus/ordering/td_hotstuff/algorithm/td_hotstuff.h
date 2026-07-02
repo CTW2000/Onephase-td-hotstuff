@@ -158,6 +158,11 @@ class HotStuff : public common::ProtocolBase {
   mutable bool slow_vote_persist_stopped_ = false;
   mutable int slow_vote_relapse_phase_ = 0;
   mutable uint64_t slow_vote_slots_ = 0;
+  // PeerTrust-clique attack-model state machine (experiment fault injection).
+  mutable bool peertrust_clique_attacking_ = false;
+  mutable bool peertrust_clique_persist_stopped_ = false;
+  mutable int peertrust_clique_relapse_phase_ = 0;
+  mutable uint64_t peertrust_clique_slots_ = 0;
   std::unique_ptr<AsyncConsensusVerifier> async_verifier_;
   std::unique_ptr<TdHotstuffReputationAdapter> reputation_adapter_;
   std::unique_ptr<CertifiedWeightUpdatePipeline> weight_update_pipeline_;
